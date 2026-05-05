@@ -204,12 +204,13 @@ Default to none. Only add a comment when the *why* is non-obvious — a hidden c
 
 ## Committing — Claude Code Web
 
-This repo is connected to GitHub and a working branch is selected in Claude Code Web. **When the work for a turn is complete, commit and push the changes** — do not leave the user to do it manually:
+This repo is connected to GitHub. **When the work for a turn is complete, commit and push directly to `main`** — do not leave the user to do it manually, and do not open a pull request:
 
+- Commit and push to `main` directly. Do **not** create a feature branch, do **not** open a PR. The workflow here is auto-commit to `main`.
 - Stage only the files you changed (`git add <paths>`); never `git add -A` or `git add .` blindly.
 - Never commit secrets — `.env*`, service-role keys, anything matching `*key*`, `*secret*`, `*token*`. If a tool stages one accidentally, unstage it before committing.
 - Write one commit per logical change. Subject line ≤ 72 chars, imperative mood (`Add livestock CRUD`, not `Added` / `Adds`). If the change needs explanation, add a blank line and a body.
 - Don't amend or force-push. Don't skip hooks (`--no-verify`). If a pre-commit hook fails, fix the underlying issue and create a new commit.
-- After committing, push to the selected branch so the user sees the change in GitHub. If the branch has no upstream, set it with `-u origin <branch>`.
+- After committing, `git pull --rebase origin main` to incorporate any remote changes, then `git push origin main` so the user sees the change in GitHub.
 - If migrations were added, mention them in the commit body so reviewers know to run them.
 - If you couldn't finish (build failing, tests failing, etc.), **don't commit** — surface the blocker to the user instead.
