@@ -13,7 +13,7 @@ export default async function Home() {
   return (
     <div>
       <h2 className="font-heading text-2xl font-semibold">Welcome, {name}</h2>
-      <h1 className="text-5xl font-bold">Insight: Farm Management System</h1>
+      <h1 className="text-3xl font-bold">Insight: Farm Management System</h1>
     </div>
   );
 }
