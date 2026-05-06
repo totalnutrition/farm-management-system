@@ -52,7 +52,7 @@ export function Topbar({
     });
 
   return (
-    <div className="flex h-9 items-center justify-between border-b border-foreground/10 px-2">
+    <div className="sticky top-0 z-10 flex h-10 items-center justify-between border-b border-foreground/10 bg-background/80 px-2 backdrop-blur">
       <div className="flex items-center gap-1">
         <SidebarTrigger />
         {locations.length === 0 ? (
