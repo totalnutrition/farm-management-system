@@ -1,5 +1,6 @@
 export const PathHome = "/";
 export const PathLogin = "/login";
+export const PathLocations = "/locations";
 export const PathAdminUsers = "/admin/users";
 export const PathAdminOrganizations = "/admin/organizations";
 

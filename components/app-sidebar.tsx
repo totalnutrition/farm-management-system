@@ -8,8 +8,8 @@ import { useTheme } from "next-themes"
 import Logo from "@/public/insight-dark.png"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { logout } from "@/app/logout/actions"
-import { PathAdminOrganizations, PathAdminUsers, PathHome, RoleAdmin, RoleSuperAdmin } from "@/lib/misc"
-import { Building03Icon, Moon02Icon, Sun, User, UserGroupIcon } from "@hugeicons/core-free-icons"
+import { PathAdminOrganizations, PathAdminUsers, PathHome, PathLocations, RoleAdmin, RoleSuperAdmin } from "@/lib/misc"
+import { Building03Icon, Moon02Icon, Sun, TractorIcon, User, UserGroupIcon } from "@hugeicons/core-free-icons"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu"
 
@@ -20,6 +20,18 @@ export type SidebarUser = {
 }
 
 const MENU = [
+  {
+    label: "Farm",
+    links: [
+      {
+        name: "Locations",
+        icon: TractorIcon,
+        link: PathLocations,
+        roles: [RoleSuperAdmin, RoleAdmin]
+      }
+    ],
+    roles: [RoleSuperAdmin, RoleAdmin]
+  },
   {
     label: "Administration",
     links: [
