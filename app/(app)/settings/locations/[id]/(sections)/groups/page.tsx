@@ -16,12 +16,11 @@ import { computeCapacityPlan } from "@/lib/capacity-plan";
 import { loadStrategyPresetCards } from "@/lib/group-strategy-presets";
 import { ComingSoon } from "@/components/coming-soon";
 import { getGroups, getHerdProfile } from "../../groups-actions";
-import { HerdProfileForm } from "../../herd-profile-form";
 import { GroupStrategyPicker } from "../../group-strategy-picker";
 import { GroupRuleEditor } from "../../group-rule-editor";
 import { CapacityPlanTable } from "../../capacity-plan-table";
 
-export const metadata = { title: "Location · Groups & rules" };
+export const metadata = { title: "Location · Herd structure" };
 export const dynamic = "force-dynamic";
 
 export default async function LocationGroupsPage({
@@ -46,12 +45,37 @@ export default async function LocationGroupsPage({
   if (!data.manages_livestock) {
     return (
       <ComingSoon
-        title="Groups & rules"
+        title="Herd structure"
         description="Groups apply to locations that manage livestock."
         note="Enable the Livestock module from Locations → Edit."
       />
     );
   }
+
+  // Observed animal counts from the actual roster (not a manual estimate).
+  const { data: animalRows } = await admin
+    .from("animals")
+    .select("sex, status, current_lactation")
+    .eq("location_id", id);
+  const animals = animalRows ?? [];
+  const observedCounts = {
+    lactating: animals.filter(
+      (a) =>
+        a.status === "active" &&
+        (a.current_lactation ?? 0) > 0,
+    ).length,
+    dry: animals.filter(
+      (a) => a.status === "active" && a.current_lactation === null,
+    ).length,
+    heifer: animals.filter(
+      (a) =>
+        a.status === "active" &&
+        a.sex === "female" &&
+        (a.current_lactation ?? 0) === 0,
+    ).length,
+    calf: 0,
+    total: animals.filter((a) => a.status === "active").length,
+  };
 
   const [profile, groups, presets, capDefaults] = await Promise.all([
     getHerdProfile(id),
@@ -93,21 +117,27 @@ export default async function LocationGroupsPage({
   return (
     <div className="flex flex-col gap-6 py-2">
       <header className="flex flex-col gap-1">
-        <h1 className="font-heading text-lg font-medium">Groups &amp; rules</h1>
+        <h1 className="font-heading text-lg font-medium">Herd structure</h1>
         <p className="text-xs text-muted-foreground">
           Logical cohorts that drive ration assignment and milking order.
-          The capacity plan (PR-C.2) derives stalls and bunk-feet from
-          these groups.
+          Animal counts come from the roster — add or import animals to
+          shape these numbers.
         </p>
       </header>
 
       <section className="ring-1 ring-foreground/10 p-4 flex flex-col gap-3">
-        <h2 className="text-sm font-medium">Herd profile</h2>
-        <HerdProfileForm
-          locationId={id}
-          initial={profile}
-          mode="standalone"
-        />
+        <h2 className="text-sm font-medium">Observed herd counts</h2>
+        <p className="text-xs text-muted-foreground">
+          Derived from active animals at this location. Capacity-plan math
+          below uses these numbers.
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 text-xs">
+          <Stat label="Total active" value={observedCounts.total} />
+          <Stat label="Lactating" value={observedCounts.lactating} />
+          <Stat label="Dry" value={observedCounts.dry} />
+          <Stat label="Heifers" value={observedCounts.heifer} />
+          <Stat label="Calves" value={observedCounts.calf} />
+        </div>
       </section>
 
       <section className="ring-1 ring-foreground/10 p-4 flex flex-col gap-3">
@@ -177,13 +207,24 @@ export default async function LocationGroupsPage({
         <header className="flex flex-col gap-0.5">
           <h2 className="text-sm font-medium">Capacity plan</h2>
           <p className="text-xs text-muted-foreground">
-            Computed from herd profile × group rules × organization
+            Computed from observed herd counts × group rules × organization
             stocking defaults. Becomes the target the Barn/Pen steps
             build toward.
           </p>
         </header>
         <CapacityPlanTable plan={capacityPlan} />
       </section>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="ring-1 ring-foreground/10 p-3 flex flex-col gap-0.5">
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <span className="text-lg font-medium tabular-nums">{value}</span>
     </div>
   );
 }

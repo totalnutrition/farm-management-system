@@ -83,9 +83,9 @@ type FormValues = z.infer<typeof formSchema>;
 
 const empty: FormValues = {
   name: "",
-  currency: "USD",
+  currency: "PKR",
   base_unit: "kg",
-  correction: "raw",
+  correction: "ts",
   base_price_per_unit: "" as unknown as number,
   effective_from: new Date().toISOString().slice(0, 10),
   effective_to: "",

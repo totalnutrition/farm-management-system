@@ -14,8 +14,6 @@ import {
   Sun,
   User,
   DashboardSquare01Icon,
-  ClipboardClockIcon,
-  PolyTankIcon,
   WheatIcon,
 } from "@hugeicons/core-free-icons"
 import { CowFaceIcon } from "@/lib/custom-icons"
@@ -58,18 +56,6 @@ const MENU: MenuGroup[] = [
         name: "Animals",
         icon: CowFaceIcon,
         link: "/animals",
-        roles: [RoleSuperAdmin, RoleAdmin],
-      },
-      {
-        name: "Milk recording",
-        icon: ClipboardClockIcon,
-        link: "/milk-recording",
-        roles: [RoleSuperAdmin, RoleAdmin],
-      },
-      {
-        name: "Bulk tank",
-        icon: PolyTankIcon,
-        link: "/bulk-tank",
         roles: [RoleSuperAdmin, RoleAdmin],
       },
       {

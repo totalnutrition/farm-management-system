@@ -10,7 +10,7 @@ import { ComingSoon } from "@/components/coming-soon";
 import { listPricingSchemes } from "../../milk-pricing-actions";
 import { MilkPricingTable } from "../../milk-pricing-table";
 
-export const metadata = { title: "Location · Milk pricing" };
+export const metadata = { title: "Location · Milk sales" };
 export const dynamic = "force-dynamic";
 
 export default async function MilkPricingPage({
@@ -35,8 +35,8 @@ export default async function MilkPricingPage({
   if (!data.manages_livestock) {
     return (
       <ComingSoon
-        title="Milk pricing"
-        description="Pricing applies to locations that manage livestock."
+        title="Milk sales"
+        description="Milk sales contracts apply to locations that manage livestock."
         note="Enable the Livestock module from Locations → Edit."
       />
     );
@@ -57,10 +57,13 @@ export default async function MilkPricingPage({
   return (
     <div className="flex flex-col gap-4 py-2">
       <header className="flex flex-col gap-1">
-        <h1 className="font-heading text-lg font-medium">Milk pricing</h1>
+        <h1 className="font-heading text-lg font-medium">Milk sales</h1>
         <p className="text-xs text-muted-foreground">
-          Effective-dated pricing schemes. Per-cow value reporting and
-          tank-settlement reconciliation read the active scheme.
+          Effective-dated sales contracts. Each scheme captures the
+          processor, correction method, base price, and conditional
+          component / SCC / volume tier bonuses. Per-cow value reporting
+          and tank-settlement reconciliation read the active scheme.
+          Default correction is Total Solids (TS).
         </p>
       </header>
       <MilkPricingTable
