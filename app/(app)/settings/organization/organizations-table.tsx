@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/table";
 import { CommonCurrencies } from "@/lib/settings-resolver";
 import { CommonTimezones } from "@/lib/timezones";
+import { LandAreaUnits } from "@/lib/land-units";
 import {
   createOrganization,
   deleteOrganization,
@@ -62,6 +63,14 @@ export type OrganizationRow = {
   default_currency: string;
   default_units: "metric" | "imperial";
   default_timezone: string;
+  default_land_area_unit:
+    | "hectare"
+    | "acre"
+    | "square_meter"
+    | "square_foot"
+    | "marla"
+    | "kanal"
+    | "murabba";
 };
 
 const formSchema = z.object({
@@ -74,15 +83,25 @@ const formSchema = z.object({
     .max(8, "Too long."),
   default_units: z.enum(["metric", "imperial"]),
   default_timezone: z.string().trim().min(1, "Timezone is required."),
+  default_land_area_unit: z.enum([
+    "hectare",
+    "acre",
+    "square_meter",
+    "square_foot",
+    "marla",
+    "kanal",
+    "murabba",
+  ]),
 });
 type FormValues = z.infer<typeof formSchema>;
 
 const emptyValues: FormValues = {
   name: "",
   address: "",
-  default_currency: "USD",
+  default_currency: "PKR",
   default_units: "metric",
-  default_timezone: "UTC",
+  default_timezone: "Asia/Karachi",
+  default_land_area_unit: "acre",
 };
 
 export function OrganizationsTable({
@@ -142,6 +161,10 @@ export function OrganizationsTable({
                     <span className="capitalize">{r.default_units}</span>
                     <span className="text-muted-foreground"> · </span>
                     <span>{r.default_timezone}</span>
+                    <span className="text-muted-foreground"> · </span>
+                    <span className="capitalize">
+                      {r.default_land_area_unit.replace(/_/g, " ")}
+                    </span>
                   </TableCell>
                   {showActions ? (
                     <TableCell className="text-right">
@@ -285,7 +308,7 @@ function OrganizationFormBody({
                 <FormLabel className="text-xs">Timezone</FormLabel>
                 <FormControl>
                   <Select
-                    value={field.value || "UTC"}
+                    value={field.value || "Asia/Karachi"}
                     onValueChange={field.onChange}
                   >
                     <SelectTrigger>
@@ -300,6 +323,33 @@ function OrganizationFormBody({
                     </SelectContent>
                   </Select>
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="default_land_area_unit"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Land area unit</FormLabel>
+                <FormControl>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LandAreaUnits.map((u) => (
+                        <SelectItem key={u.value} value={u.value}>
+                          {u.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+                <FormDescription className="text-[10px]">
+                  Granular display unit. Storage is always hectares.
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -389,6 +439,7 @@ function EditDialog({
           default_currency: row.default_currency,
           default_units: row.default_units,
           default_timezone: row.default_timezone,
+          default_land_area_unit: row.default_land_area_unit,
         }
       : emptyValues,
   });

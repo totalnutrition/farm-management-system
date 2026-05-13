@@ -77,6 +77,19 @@ const baseSchema = z.object({
     .union([z.literal(""), z.literal("metric"), z.literal("imperial")])
     .optional()
     .default(""),
+  land_area_unit_override: z
+    .union([
+      z.literal(""),
+      z.literal("hectare"),
+      z.literal("acre"),
+      z.literal("square_meter"),
+      z.literal("square_foot"),
+      z.literal("marla"),
+      z.literal("kanal"),
+      z.literal("murabba"),
+    ])
+    .optional()
+    .default(""),
 });
 
 const updateSchema = baseSchema.extend({ id: z.uuid() });
@@ -106,6 +119,7 @@ function toRow(input: z.infer<typeof baseSchema>) {
       ? input.currency_override.toUpperCase()
       : null,
     units_override: input.units_override || null,
+    land_area_unit_override: input.land_area_unit_override || null,
   };
 }
 

@@ -21,9 +21,24 @@ const baseSchema = z.object({
     .trim()
     .min(3, "Currency must be a 3-letter code.")
     .max(8, "Currency code is too long.")
-    .default("USD"),
+    .default("PKR"),
   default_units: z.enum(["metric", "imperial"]).default("metric"),
-  default_timezone: z.string().trim().min(1, "Timezone is required.").default("UTC"),
+  default_timezone: z
+    .string()
+    .trim()
+    .min(1, "Timezone is required.")
+    .default("Asia/Karachi"),
+  default_land_area_unit: z
+    .enum([
+      "hectare",
+      "acre",
+      "square_meter",
+      "square_foot",
+      "marla",
+      "kanal",
+      "murabba",
+    ])
+    .default("acre"),
 });
 
 const updateSchema = baseSchema.extend({
@@ -37,6 +52,7 @@ function toRow(input: z.infer<typeof baseSchema>) {
     default_currency: input.default_currency.toUpperCase(),
     default_units: input.default_units,
     default_timezone: input.default_timezone,
+    default_land_area_unit: input.default_land_area_unit,
   };
 }
 

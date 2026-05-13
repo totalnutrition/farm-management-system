@@ -64,6 +64,7 @@ import {
 } from "@/lib/misc";
 import { CommonTimezones } from "@/lib/timezones";
 import { CommonCurrencies } from "@/lib/settings-resolver";
+import { LandAreaUnits } from "@/lib/land-units";
 import {
   createLocation,
   deleteLocation,
@@ -90,6 +91,15 @@ export type LocationRow = {
   timezone: string | null;
   currency_override: string | null;
   units_override: "metric" | "imperial" | null;
+  land_area_unit_override:
+    | "hectare"
+    | "acre"
+    | "square_meter"
+    | "square_foot"
+    | "marla"
+    | "kanal"
+    | "murabba"
+    | null;
 };
 
 const formSchema = z
@@ -120,6 +130,16 @@ const formSchema = z
     timezone: z.string().trim(),
     currency_override: z.string().trim(),
     units_override: z.union([z.literal(""), z.literal("metric"), z.literal("imperial")]),
+    land_area_unit_override: z.union([
+      z.literal(""),
+      z.literal("hectare"),
+      z.literal("acre"),
+      z.literal("square_meter"),
+      z.literal("square_foot"),
+      z.literal("marla"),
+      z.literal("kanal"),
+      z.literal("murabba"),
+    ]),
   })
   .refine((v) => v.manages_livestock || v.manages_crops, {
     path: ["manages_livestock"],
@@ -145,6 +165,7 @@ const emptyValues: FormValues = {
   timezone: "",
   currency_override: "",
   units_override: "",
+  land_area_unit_override: "",
 };
 
 export function LocationsTable({ rows }: { rows: LocationRow[] }) {
@@ -492,9 +513,30 @@ function LocationFormBody({
                   onChange={field.onChange}
                   inheritLabel="Inherit from organization"
                   options={[
-                    { value: "metric", label: "Metric (kg, L, ha)" },
-                    { value: "imperial", label: "Imperial (lb, gal, ac)" },
+                    { value: "metric", label: "Metric (kg, L)" },
+                    { value: "imperial", label: "Imperial (lb, gal)" },
                   ]}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="land_area_unit_override"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Land area unit</FormLabel>
+              <FormControl>
+                <InheritableSelect
+                  value={field.value}
+                  onChange={field.onChange}
+                  inheritLabel="Inherit from organization"
+                  options={LandAreaUnits.map((u) => ({
+                    value: u.value,
+                    label: u.label,
+                  }))}
                 />
               </FormControl>
               <FormMessage />
@@ -750,6 +792,8 @@ function EditDialog({
           currency_override: row.currency_override ?? "",
           units_override:
             (row.units_override ?? "") as FormValues["units_override"],
+          land_area_unit_override:
+            (row.land_area_unit_override ?? "") as FormValues["land_area_unit_override"],
         }
       : emptyValues,
   });

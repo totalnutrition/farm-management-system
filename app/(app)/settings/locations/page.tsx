@@ -19,7 +19,7 @@ export default async function LocationsPage() {
   let query = admin
     .from("locations")
     .select(
-      "id, organization_id, name, short_code, farm_type, country, province, city, address, latitude, longitude, status, manages_livestock, manages_crops, livestock_area_hectares, arable_area_hectares, timezone, currency_override, units_override",
+      "id, organization_id, name, short_code, farm_type, country, province, city, address, latitude, longitude, status, manages_livestock, manages_crops, livestock_area_hectares, arable_area_hectares, timezone, currency_override, units_override, land_area_unit_override",
     )
     .order("name");
 
