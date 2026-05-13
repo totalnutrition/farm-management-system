@@ -55,7 +55,7 @@ export const LocationSections: LocationSection[] = [
     label: "Recording profile",
     description: "Test-day frequency, milkings/day, recording method.",
     icon: Mic01Icon,
-    shipped: false,
+    shipped: true,
     livestockOnly: true,
   },
   {
