@@ -91,8 +91,8 @@ export const WizardSteps: WizardStep[] = [
   },
   {
     key: SetupStepRecording,
-    label: "Recording profile",
-    description: "Test-day frequency, milkings per day, recording method.",
+    label: "Milk recording setup",
+    description: "How milk gets recorded: test-day frequency, milkings per day, method.",
     shipped: true,
     livestockOnly: true,
   },

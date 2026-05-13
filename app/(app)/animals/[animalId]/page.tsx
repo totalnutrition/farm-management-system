@@ -1,16 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createAdminClient } from "@/lib/supabase-admin";
-import {
-  getOrganizationIdFromUser,
-  getRoleFromUser,
-  requireAnyRole,
-} from "@/lib/supabase-auth";
-import { RoleSuperAdmin } from "@/lib/misc";
+import { getActiveLocation } from "@/lib/locations";
 import {
   getAnimal,
   getAnimalEventCounts,
-} from "../../../animals-actions";
+} from "@/app/(app)/settings/locations/[id]/animals-actions";
+import { NoLocationSelected } from "@/components/no-location-selected";
 
 export const metadata = { title: "Animal" };
 export const dynamic = "force-dynamic";
@@ -18,31 +13,23 @@ export const dynamic = "force-dynamic";
 export default async function AnimalDetailPage({
   params,
 }: {
-  params: Promise<{ id: string; animalId: string }>;
+  params: Promise<{ animalId: string }>;
 }) {
-  const { id, animalId } = await params;
-  const user = await requireAnyRole(["super_admin", "admin"]);
-  const role = getRoleFromUser(user);
-  const orgId = getOrganizationIdFromUser(user);
+  const { animalId } = await params;
+  const active = await getActiveLocation();
+  if (!active) {
+    return <NoLocationSelected title="No location selected" />;
+  }
 
-  const admin = createAdminClient();
-  const { data: loc } = await admin
-    .from("locations")
-    .select("id, organization_id")
-    .eq("id", id)
-    .single();
-  if (!loc) notFound();
-  if (role !== RoleSuperAdmin && loc.organization_id !== orgId) notFound();
-
-  const animal = await getAnimal(id, animalId);
+  const animal = await getAnimal(active.id, animalId);
   if (!animal) notFound();
-  const counts = await getAnimalEventCounts(id, animalId);
+  const counts = await getAnimalEventCounts(active.id, animalId);
 
   return (
-    <div className="flex flex-col gap-4 py-2">
+    <div className="flex flex-col gap-4 py-4">
       <header className="flex flex-col gap-1">
         <Link
-          href={`/settings/locations/${id}/animals`}
+          href="/animals"
           className="text-[10px] uppercase tracking-wide text-muted-foreground hover:underline"
         >
           ← Animals
@@ -94,8 +81,7 @@ export default async function AnimalDetailPage({
       <section className="ring-1 ring-foreground/10 p-4 flex flex-col gap-2">
         <h2 className="text-sm font-medium">Event history</h2>
         <p className="text-xs text-muted-foreground">
-          Counts only. Per-event tables (lactations, milkings, repro, health,
-          calvings, scores, pen moves) get their own UIs in subsequent PRs.
+          Counts only. Per-event tables get their own UIs in subsequent PRs.
         </p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 text-xs">
           <Stat label="Lactations" value={counts.lactations} />

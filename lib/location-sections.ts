@@ -5,16 +5,13 @@ import {
   BarnsIcon,
   GroupLayersIcon,
   DollarCircleIcon,
-  PolyTankIcon,
   ApiIcon,
   Notification02Icon,
   ContactBookIcon,
   Notebook01Icon,
   ShieldUserIcon,
-  WheatIcon,
   DownloadCircle01Icon,
 } from "@hugeicons/core-free-icons";
-import { CowFaceIcon } from "@/lib/custom-icons";
 
 type HugeIcon = typeof Location01Icon;
 
@@ -33,7 +30,6 @@ export type LocationSectionGroup =
   | "overview"
   | "setup"
   | "dairy"
-  | "crops"
   | "infrastructure"
   | "access"
   | "system";
@@ -41,8 +37,7 @@ export type LocationSectionGroup =
 export const LocationSectionGroupLabels: Record<LocationSectionGroup, string | null> = {
   overview: null,
   setup: "Setup",
-  dairy: "Animals & dairy",
-  crops: "Crops",
+  dairy: "Dairy setup",
   infrastructure: "Infrastructure",
   access: "People & access",
   system: "System",
@@ -52,7 +47,6 @@ export const LocationSectionGroupOrder: LocationSectionGroup[] = [
   "overview",
   "setup",
   "dairy",
-  "crops",
   "infrastructure",
   "access",
   "system",
@@ -61,16 +55,12 @@ export const LocationSectionGroupOrder: LocationSectionGroup[] = [
 /**
  * Subnav catalog for /settings/locations/[id]/*.
  *
- * Sections are bucketed into groups so the subnav reads logically:
- *   Overview → Setup → Animals & dairy → Crops → Infrastructure
- *   → People & access → System
- *
- * `shipped` controls whether the entry links into a real page or shows
- * "coming soon" in the destination. Filtering by `livestockOnly` /
- * `cropsOnly` happens in `relevantLocationSections`.
+ * Settings = configuration only. Operational data (Animals, Forage &
+ * crops events, Bulk tank readings, Milk recording) lives at top-level
+ * routes scoped by the active-location switcher and accessed from the
+ * main left sidebar.
  */
 export const LocationSections: LocationSection[] = [
-  // Overview
   {
     slug: "",
     label: "Overview",
@@ -79,8 +69,6 @@ export const LocationSections: LocationSection[] = [
     shipped: true,
     group: "overview",
   },
-
-  // Setup
   {
     slug: "general",
     label: "General",
@@ -91,20 +79,10 @@ export const LocationSections: LocationSection[] = [
   },
   {
     slug: "recording",
-    label: "Recording profile",
-    description: "Test-day frequency, milkings/day, recording method.",
+    label: "Milk recording setup",
+    description:
+      "How milk gets recorded: test-day frequency, milkings per day, method.",
     icon: ClipboardClockIcon,
-    shipped: true,
-    group: "setup",
-    livestockOnly: true,
-  },
-
-  // Animals & dairy
-  {
-    slug: "animals",
-    label: "Animals",
-    description: "Roster of animals at this location.",
-    icon: CowFaceIcon,
     shipped: true,
     group: "dairy",
     livestockOnly: true,
@@ -119,15 +97,6 @@ export const LocationSections: LocationSection[] = [
     livestockOnly: true,
   },
   {
-    slug: "bulk-tank",
-    label: "Bulk milk chiller",
-    description: "Tank readings, diversions, reconciliation.",
-    icon: PolyTankIcon,
-    shipped: true,
-    group: "dairy",
-    livestockOnly: true,
-  },
-  {
     slug: "milk-pricing",
     label: "Milk pricing",
     description: "Pricing schemes with effective dates.",
@@ -136,19 +105,6 @@ export const LocationSections: LocationSection[] = [
     group: "dairy",
     livestockOnly: true,
   },
-
-  // Crops
-  {
-    slug: "crops",
-    label: "Forage & crops",
-    description: "Forage / fodder plans on arable parcels.",
-    icon: WheatIcon,
-    shipped: true,
-    group: "crops",
-    cropsOnly: true,
-  },
-
-  // Infrastructure
   {
     slug: "infrastructure",
     label: "Infrastructure",
@@ -157,8 +113,6 @@ export const LocationSections: LocationSection[] = [
     shipped: true,
     group: "infrastructure",
   },
-
-  // People & access
   {
     slug: "directories",
     label: "Directories",
@@ -175,8 +129,6 @@ export const LocationSections: LocationSection[] = [
     shipped: true,
     group: "access",
   },
-
-  // System
   {
     slug: "notifications",
     label: "Notifications",
