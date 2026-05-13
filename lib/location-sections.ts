@@ -11,6 +11,8 @@ import {
   UserListIcon,
   BookOpen01Icon,
   LockKeyIcon,
+  IdentificationIcon,
+  Plant02Icon,
 } from "@hugeicons/core-free-icons";
 
 type HugeIcon = typeof Location01Icon;
@@ -64,6 +66,22 @@ export const LocationSections: LocationSection[] = [
     description: "Land parcels, barns, pens.",
     icon: Building03Icon,
     shipped: true,
+  },
+  {
+    slug: "animals",
+    label: "Animals",
+    description: "Roster of animals at this location.",
+    icon: IdentificationIcon,
+    shipped: true,
+    livestockOnly: true,
+  },
+  {
+    slug: "crops",
+    label: "Crops",
+    description: "Crop plans on arable parcels.",
+    icon: Plant02Icon,
+    shipped: true,
+    cropsOnly: true,
   },
   {
     slug: "groups",
