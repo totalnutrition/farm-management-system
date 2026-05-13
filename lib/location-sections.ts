@@ -12,6 +12,7 @@ import {
   Notebook01Icon,
   ShieldUserIcon,
   WheatIcon,
+  DownloadCircle01Icon,
 } from "@hugeicons/core-free-icons";
 import { CowFaceIcon } from "@/lib/custom-icons";
 
@@ -23,34 +24,70 @@ export type LocationSection = {
   description: string;
   icon: HugeIcon;
   shipped: boolean;
+  group: LocationSectionGroup;
   livestockOnly?: boolean;
   cropsOnly?: boolean;
 };
 
+export type LocationSectionGroup =
+  | "overview"
+  | "setup"
+  | "dairy"
+  | "crops"
+  | "infrastructure"
+  | "access"
+  | "system";
+
+export const LocationSectionGroupLabels: Record<LocationSectionGroup, string | null> = {
+  overview: null,
+  setup: "Setup",
+  dairy: "Animals & dairy",
+  crops: "Crops",
+  infrastructure: "Infrastructure",
+  access: "People & access",
+  system: "System",
+};
+
+export const LocationSectionGroupOrder: LocationSectionGroup[] = [
+  "overview",
+  "setup",
+  "dairy",
+  "crops",
+  "infrastructure",
+  "access",
+  "system",
+];
+
 /**
  * Subnav catalog for /settings/locations/[id]/*.
  *
- * The empty slug ("") corresponds to the bare /settings/locations/[id]
- * overview route. All other slugs are appended to that path.
+ * Sections are bucketed into groups so the subnav reads logically:
+ *   Overview → Setup → Animals & dairy → Crops → Infrastructure
+ *   → People & access → System
  *
  * `shipped` controls whether the entry links into a real page or shows
- * "coming soon" in the destination. The subnav still lists every section
- * so the eventual IA is visible during the build-out.
+ * "coming soon" in the destination. Filtering by `livestockOnly` /
+ * `cropsOnly` happens in `relevantLocationSections`.
  */
 export const LocationSections: LocationSection[] = [
+  // Overview
   {
     slug: "",
     label: "Overview",
     description: "Status snapshot for this location.",
     icon: Location01Icon,
     shipped: true,
+    group: "overview",
   },
+
+  // Setup
   {
     slug: "general",
     label: "General",
     description: "Identity, modules, areas, timezone, overrides.",
     icon: Settings01Icon,
     shipped: true,
+    group: "setup",
   },
   {
     slug: "recording",
@@ -58,30 +95,19 @@ export const LocationSections: LocationSection[] = [
     description: "Test-day frequency, milkings/day, recording method.",
     icon: ClipboardClockIcon,
     shipped: true,
+    group: "setup",
     livestockOnly: true,
   },
-  {
-    slug: "infrastructure",
-    label: "Infrastructure",
-    description: "Barns, pens, arable parcels.",
-    icon: BarnsIcon,
-    shipped: true,
-  },
+
+  // Animals & dairy
   {
     slug: "animals",
     label: "Animals",
     description: "Roster of animals at this location.",
     icon: CowFaceIcon,
     shipped: true,
+    group: "dairy",
     livestockOnly: true,
-  },
-  {
-    slug: "crops",
-    label: "Forage & crops",
-    description: "Forage / fodder plans on arable parcels.",
-    icon: WheatIcon,
-    shipped: true,
-    cropsOnly: true,
   },
   {
     slug: "groups",
@@ -89,14 +115,7 @@ export const LocationSections: LocationSection[] = [
     description: "Animal groups, rules, capacity plan.",
     icon: GroupLayersIcon,
     shipped: true,
-    livestockOnly: true,
-  },
-  {
-    slug: "milk-pricing",
-    label: "Milk pricing",
-    description: "Pricing schemes with effective dates.",
-    icon: DollarCircleIcon,
-    shipped: true,
+    group: "dairy",
     livestockOnly: true,
   },
   {
@@ -105,35 +124,48 @@ export const LocationSections: LocationSection[] = [
     description: "Tank readings, diversions, reconciliation.",
     icon: PolyTankIcon,
     shipped: true,
+    group: "dairy",
     livestockOnly: true,
   },
   {
-    slug: "integrations",
-    label: "Integrations",
-    description: "API keys, webhooks, import history.",
-    icon: ApiIcon,
-    shipped: false,
+    slug: "milk-pricing",
+    label: "Milk pricing",
+    description: "Pricing schemes with effective dates.",
+    icon: DollarCircleIcon,
+    shipped: true,
+    group: "dairy",
+    livestockOnly: true,
   },
+
+  // Crops
   {
-    slug: "notifications",
-    label: "Notifications",
-    description: "Event-trigger rules for this location.",
-    icon: Notification02Icon,
-    shipped: false,
+    slug: "crops",
+    label: "Forage & crops",
+    description: "Forage / fodder plans on arable parcels.",
+    icon: WheatIcon,
+    shipped: true,
+    group: "crops",
+    cropsOnly: true,
   },
+
+  // Infrastructure
+  {
+    slug: "infrastructure",
+    label: "Infrastructure",
+    description: "Barns, pens, arable parcels.",
+    icon: BarnsIcon,
+    shipped: true,
+    group: "infrastructure",
+  },
+
+  // People & access
   {
     slug: "directories",
     label: "Directories",
     description: "Technicians, veterinarians, hoof trimmers.",
     icon: ContactBookIcon,
     shipped: true,
-  },
-  {
-    slug: "custom-vocabularies",
-    label: "Custom vocabularies",
-    description: "Local additions to organization catalogs.",
-    icon: Notebook01Icon,
-    shipped: false,
+    group: "access",
   },
   {
     slug: "access",
@@ -141,6 +173,41 @@ export const LocationSections: LocationSection[] = [
     description: "Users who can access this location + permissions.",
     icon: ShieldUserIcon,
     shipped: true,
+    group: "access",
+  },
+
+  // System
+  {
+    slug: "notifications",
+    label: "Notifications",
+    description: "Event-trigger rules for this location.",
+    icon: Notification02Icon,
+    shipped: false,
+    group: "system",
+  },
+  {
+    slug: "integrations",
+    label: "Integrations",
+    description: "API keys, webhooks, import history.",
+    icon: ApiIcon,
+    shipped: false,
+    group: "system",
+  },
+  {
+    slug: "import",
+    label: "Data import",
+    description: "Bulk-import animals, lactations, repro, health, etc.",
+    icon: DownloadCircle01Icon,
+    shipped: false,
+    group: "system",
+  },
+  {
+    slug: "custom-vocabularies",
+    label: "Custom vocabularies",
+    description: "Local additions to organization catalogs.",
+    icon: Notebook01Icon,
+    shipped: false,
+    group: "system",
   },
 ];
 

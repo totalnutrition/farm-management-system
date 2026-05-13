@@ -204,7 +204,14 @@ export function LocationsTable({ rows }: { rows: LocationRow[] }) {
             ) : (
               rows.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell>{r.name}</TableCell>
+                  <TableCell>
+                    <Link
+                      href={pathLocationSetup(r.id)}
+                      className="font-medium hover:underline"
+                    >
+                      {r.name}
+                    </Link>
+                  </TableCell>
                   <TableCell className="font-mono text-xs">
                     {r.short_code}
                   </TableCell>

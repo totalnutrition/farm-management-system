@@ -31,7 +31,7 @@ export function LocationSwitcher({
 
   if (locations.length === 0) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground">
+      <div className="ml-auto flex shrink-0 items-center gap-2 px-3 py-1 text-xs text-muted-foreground">
         <HugeiconsIcon icon={Location01Icon} className="size-4" />
         <span>No locations yet</span>
       </div>
@@ -41,9 +41,9 @@ export function LocationSwitcher({
   if (locations.length === 1) {
     const only = locations[0];
     return (
-      <div className="flex items-center gap-2 px-3 py-1 text-sm">
+      <div className="ml-auto flex shrink-0 items-center gap-2 px-3 py-1 text-sm">
         <HugeiconsIcon icon={Location01Icon} className="size-4" />
-        <span className="font-medium">{only.name}</span>
+        <span className="font-medium truncate max-w-[14rem]">{only.name}</span>
         <span className="font-mono text-[10px] text-muted-foreground">
           {only.short_code}
         </span>
@@ -65,7 +65,7 @@ export function LocationSwitcher({
       onValueChange={onChange}
       disabled={isPending}
     >
-      <SelectTrigger className="h-8 min-w-[12rem] gap-2">
+      <SelectTrigger className="ml-auto h-8 w-auto min-w-[12rem] max-w-[20rem] shrink-0 gap-2">
         <HugeiconsIcon icon={Location01Icon} className="size-4" />
         <SelectValue placeholder="Choose location" />
       </SelectTrigger>
