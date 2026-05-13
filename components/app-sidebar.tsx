@@ -7,8 +7,8 @@ import { useTheme } from "next-themes"
 import { FarmInsightLogo } from "./farminsight-logo"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { logout } from "@/app/logout/actions"
-import { PathAdminOrganizations, PathAdminUsers, PathHome, RoleAdmin, RoleSuperAdmin } from "@/lib/misc"
-import { Building03Icon, Moon02Icon, Sun, User, UserGroupIcon } from "@hugeicons/core-free-icons"
+import { PathHome, PathSettings, RoleAdmin, RoleSuperAdmin } from "@/lib/misc"
+import { Moon02Icon, Settings02Icon, Sun, User } from "@hugeicons/core-free-icons"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu"
 
@@ -20,18 +20,12 @@ export type SidebarUser = {
 
 const MENU = [
   {
-    label: "Administration",
+    label: "Workspace",
     links: [
       {
-        name: "User Management",
-        icon: UserGroupIcon,
-        link: PathAdminUsers,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      },
-      {
-        name: "Organizations",
-        icon: Building03Icon,
-        link: PathAdminOrganizations,
+        name: "Settings",
+        icon: Settings02Icon,
+        link: PathSettings,
         roles: [RoleSuperAdmin, RoleAdmin]
       }
     ],

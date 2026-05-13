@@ -9,7 +9,7 @@ import {
   requireAnyRole,
   requireRole,
 } from "@/lib/supabase-auth";
-import { PathAdminOrganizations, RoleSuperAdmin } from "@/lib/misc";
+import { PathSettingsOrganization, RoleSuperAdmin } from "@/lib/misc";
 
 type Result = { error?: string; success?: boolean };
 
@@ -39,7 +39,7 @@ export async function createOrganization(
     .insert({ name, address: address || null });
   if (error) return { error: error.message };
 
-  revalidatePath(PathAdminOrganizations);
+  revalidatePath(PathSettingsOrganization);
   return { success: true };
 }
 
@@ -67,7 +67,7 @@ export async function updateOrganization(
     .eq("id", id);
   if (error) return { error: error.message };
 
-  revalidatePath(PathAdminOrganizations);
+  revalidatePath(PathSettingsOrganization);
   return { success: true };
 }
 
@@ -91,6 +91,6 @@ export async function deleteOrganization(id: string): Promise<Result> {
   const { error } = await admin.from("organizations").delete().eq("id", id);
   if (error) return { error: error.message };
 
-  revalidatePath(PathAdminOrganizations);
+  revalidatePath(PathSettingsOrganization);
   return { success: true };
 }

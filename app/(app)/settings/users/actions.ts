@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireRole, requireUser } from "@/lib/supabase-auth";
 import {
-  PathAdminUsers,
+  PathSettingsUsers,
   RoleAdmin,
   RoleSuperAdmin,
 } from "@/lib/misc";
@@ -90,7 +90,7 @@ export async function createAdminUser(
     return { error: profErr.message };
   }
 
-  revalidatePath(PathAdminUsers);
+  revalidatePath(PathSettingsUsers);
   return { success: true };
 }
 
@@ -129,7 +129,7 @@ export async function updateAdminUser(
     if (oErr) return { error: oErr.message };
   }
 
-  revalidatePath(PathAdminUsers);
+  revalidatePath(PathSettingsUsers);
   return { success: true };
 }
 
@@ -161,7 +161,7 @@ export async function updateMyProfile(
   });
   if (aErr) return { error: aErr.message };
 
-  revalidatePath(PathAdminUsers);
+  revalidatePath(PathSettingsUsers);
   return { success: true };
 }
 
@@ -184,7 +184,7 @@ export async function setAdminUserActive(
   });
   if (aErr) return { error: aErr.message };
 
-  revalidatePath(PathAdminUsers);
+  revalidatePath(PathSettingsUsers);
   return { success: true };
 }
 
@@ -209,6 +209,6 @@ export async function deleteAdminUser(id: string): Promise<Result> {
       .eq("id", profile.organization_id);
   }
 
-  revalidatePath(PathAdminUsers);
+  revalidatePath(PathSettingsUsers);
   return { success: true };
 }
