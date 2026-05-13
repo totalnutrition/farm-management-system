@@ -84,9 +84,9 @@ export default async function LocationGeneralPage({
   const admin = createAdminClient();
   const { data } = await admin
     .from("locations")
-    .select(
-      "id, organization_id, name, short_code, farm_type, country, province, city, address, latitude, longitude, status, manages_livestock, manages_crops, livestock_area_hectares, arable_area_hectares, timezone, currency_override, units_override, land_area_unit_override",
-    )
+    // `*` keeps the page resilient against partially-applied migrations
+    // (0017 adds land_area_unit_override; 0018 unrelated).
+    .select("*")
     .eq("id", id)
     .single();
 
@@ -96,9 +96,7 @@ export default async function LocationGeneralPage({
 
   const { data: orgData } = await admin
     .from("organizations")
-    .select(
-      "id, name, default_currency, default_units, default_timezone, default_land_area_unit",
-    )
+    .select("*")
     .eq("id", loc.organization_id)
     .single();
   const org = orgData
