@@ -84,16 +84,9 @@ export default async function LocationDetailPage({
   const pct = Math.round((completedCount / steps.length) * 100);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 py-2">
       <header className="flex flex-col gap-1">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Link href="/settings/locations" className="hover:underline">
-            Locations
-          </Link>
-          <span>/</span>
-          <span className="font-mono">{loc.short_code}</span>
-        </div>
-        <h2 className="font-heading text-2xl font-medium">{loc.name}</h2>
+        <h1 className="font-heading text-lg font-medium">Overview</h1>
         <p className="text-xs text-muted-foreground">
           {FarmTypeView[loc.farm_type] ?? loc.farm_type}
           {loc.city ? ` · ${loc.city}` : ""}
