@@ -1,11 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image"
 import { Button } from "./ui/button"
 import { useTransition } from "react"
 import { useTheme } from "next-themes"
-import Logo from "@/public/insight-dark.png"
+import { FarmInsightLogo } from "./farminsight-logo"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { logout } from "@/app/logout/actions"
 import { PathAdminOrganizations, PathAdminUsers, PathHome, RoleAdmin, RoleSuperAdmin } from "@/lib/misc"
@@ -43,19 +42,13 @@ const MENU = [
 export function AppSidebar({ user }: { user: SidebarUser }) {
   return (
     <Sidebar>
-      <SidebarHeader className="text-center">
-        <div>
-          <Link href={PathHome}>
-            <Image
-              src={Logo.src}
-              height={Logo.height}
-              width={Logo.width}
-              alt="Logo"
-              className="w-full h-auto pl-2"
-            />
-          </Link>
+      <SidebarHeader>
+        <Link href={PathHome} className="px-2 py-3 text-sidebar-foreground">
+          <FarmInsightLogo />
+        </Link>
+        <div className="px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-sidebar-foreground/80">
+          Farm Management System
         </div>
-        <div className="font-semibold uppercase text-sidebar-foreground">FARM MANAGEMENT SYSTEM</div>
       </SidebarHeader>
       <SidebarContent>
         {

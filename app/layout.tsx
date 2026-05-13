@@ -20,22 +20,20 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    template: '%s | Insight: Farm Managemnt System by Total Nutrition',
-    default: 'Insight: Farm Managemnt System by Total Nutrition',
+    template: '%s | FarmInsight',
+    default: 'FarmInsight — Farm Management System',
   },
-  description: "Insight: Farm Managemnt System",
-  // metadataBase: new URL("https://insight.totalnutrition.pk/"),
+  description: "FarmInsight — Farm Management System",
   openGraph: {
-    title: "Insight: Farm Managemnt System by Total Nutrition",
-    description: "Insight: Farm Managemnt System by Total Nutrition",
-    // url: "https://insight.totalnutrition.pk/",
-    siteName: "Insight",
+    title: "FarmInsight — Farm Management System",
+    description: "FarmInsight — Farm Management System",
+    siteName: "FarmInsight",
     images: [
       {
         url: "/preview.png",
         width: 2048,
         height: 2048,
-        alt: "Insight: Farm Managemnt System",
+        alt: "FarmInsight — Farm Management System",
       },
     ],
     locale: "en_US",
