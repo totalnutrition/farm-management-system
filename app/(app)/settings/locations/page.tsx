@@ -18,9 +18,10 @@ export default async function LocationsPage() {
   const admin = createAdminClient();
   let query = admin
     .from("locations")
-    .select(
-      "id, organization_id, name, short_code, farm_type, country, province, city, address, latitude, longitude, status, manages_livestock, manages_crops, livestock_area_hectares, arable_area_hectares, timezone, currency_override, units_override, land_area_unit_override",
-    )
+    // Use `*` so the page keeps loading even on databases where the
+    // newer override columns (0017/0018) haven't been applied yet.
+    // Missing columns simply come back as undefined.
+    .select("*")
     .order("name");
 
   if (role !== RoleSuperAdmin) {

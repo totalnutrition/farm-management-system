@@ -21,9 +21,7 @@ export default async function OrganizationGeneralPage() {
   const admin = createAdminClient();
   let query = admin
     .from("organizations")
-    .select(
-      "id, name, address, default_currency, default_units, default_timezone, default_land_area_unit, created_at",
-    )
+    .select("*")
     .order("created_at", { ascending: false });
 
   if (role !== RoleSuperAdmin) {

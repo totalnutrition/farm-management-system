@@ -86,11 +86,24 @@ export async function getDairySettings(
 ): Promise<DairySettings> {
   const authz = await authorize(locationId);
   if ("error" in authz) return DairySettingsDefaults;
-  const { data } = await authz.admin
-    .from("location_dairy_settings")
-    .select("*")
-    .eq("location_id", locationId)
-    .maybeSingle();
+  // Wrap in try/catch — if migration 0018 hasn't been applied yet,
+  // the table doesn't exist and we want to render defaults instead of
+  // throwing.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let data: any = null;
+  try {
+    const result = await authz.admin
+      .from("location_dairy_settings")
+      .select("*")
+      .eq("location_id", locationId)
+      .maybeSingle();
+    if (result.error) {
+      return DairySettingsDefaults;
+    }
+    data = result.data;
+  } catch {
+    return DairySettingsDefaults;
+  }
   if (!data) return DairySettingsDefaults;
   return {
     voluntary_waiting_period_days: data.voluntary_waiting_period_days as number,
@@ -135,7 +148,18 @@ export async function upsertDairySettings(
   const { error } = await authz.admin
     .from("location_dairy_settings")
     .upsert(parsed.data, { onConflict: "location_id" });
-  if (error) return { error: error.message };
+  if (error) {
+    if (
+      error.message.includes("location_dairy_settings") ||
+      error.code === "42P01"
+    ) {
+      return {
+        error:
+          "Database migration 0018 hasn't been applied. Run supabase/consolidated/all_migrations_0004_to_0018.sql first.",
+      };
+    }
+    return { error: error.message };
+  }
   revalidatePath(`/settings/locations/${parsed.data.location_id}/reproduction`);
   revalidatePath(`/settings/locations/${parsed.data.location_id}/quality-withdrawal`);
   revalidatePath(`/settings/locations/${parsed.data.location_id}/bulk-tank`);
