@@ -10,7 +10,7 @@ import { ComingSoon } from "@/components/coming-soon";
 import { getRecordingProfile } from "../../recording-actions";
 import { RecordingProfileForm } from "../../recording-form";
 
-export const metadata = { title: "Location · Recording profile" };
+export const metadata = { title: "Location · Milk recording setup" };
 export const dynamic = "force-dynamic";
 
 export default async function LocationRecordingPage({
@@ -36,8 +36,8 @@ export default async function LocationRecordingPage({
   if (!data.manages_livestock) {
     return (
       <ComingSoon
-        title="Recording profile"
-        description="Recording profile applies to locations that manage livestock."
+        title="Milk recording setup"
+        description="Milk recording setup applies to locations that manage livestock."
         note="Enable the Livestock module from Locations → Edit to use this section."
       />
     );
@@ -48,10 +48,12 @@ export default async function LocationRecordingPage({
   return (
     <div className="flex flex-col gap-4 py-2">
       <header className="flex flex-col gap-1">
-        <h1 className="font-heading text-lg font-medium">Recording profile</h1>
+        <h1 className="font-heading text-lg font-medium">Milk recording setup</h1>
         <p className="text-xs text-muted-foreground">
-          How milk is captured at this location. Drives which entry UIs
-          appear and what cardinality downstream events expect.
+          How milk gets recorded at this location. Drives which entry UIs
+          appear and what cardinality downstream events expect. Day-to-day
+          recording entry lives under <strong>Milk recording</strong> in
+          the left sidebar.
         </p>
       </header>
       <section className="ring-1 ring-foreground/10 p-4">

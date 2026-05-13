@@ -8,7 +8,17 @@ import { FarmInsightLogo } from "./farminsight-logo"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { logout } from "@/app/logout/actions"
 import { PathHome, PathSettings, RoleAdmin, RoleSuperAdmin } from "@/lib/misc"
-import { Moon02Icon, Settings02Icon, Sun, User } from "@hugeicons/core-free-icons"
+import {
+  Moon02Icon,
+  Settings02Icon,
+  Sun,
+  User,
+  DashboardSquare01Icon,
+  ClipboardClockIcon,
+  PolyTankIcon,
+  WheatIcon,
+} from "@hugeicons/core-free-icons"
+import { CowFaceIcon } from "@/lib/custom-icons"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu"
 
@@ -18,19 +28,70 @@ export type SidebarUser = {
   role: string | null
 }
 
-const MENU = [
+type HugeIcon = Parameters<typeof HugeiconsIcon>[0]["icon"];
+
+type MenuLink = {
+  name: string
+  icon: HugeIcon
+  link: string
+  roles: string[]
+}
+
+type MenuGroup = {
+  label: string
+  links: MenuLink[]
+  roles: string[]
+}
+
+const MENU: MenuGroup[] = [
+  {
+    label: "Operations",
+    roles: [RoleSuperAdmin, RoleAdmin],
+    links: [
+      {
+        name: "Dashboard",
+        icon: DashboardSquare01Icon,
+        link: PathHome,
+        roles: [RoleSuperAdmin, RoleAdmin],
+      },
+      {
+        name: "Animals",
+        icon: CowFaceIcon,
+        link: "/animals",
+        roles: [RoleSuperAdmin, RoleAdmin],
+      },
+      {
+        name: "Milk recording",
+        icon: ClipboardClockIcon,
+        link: "/milk-recording",
+        roles: [RoleSuperAdmin, RoleAdmin],
+      },
+      {
+        name: "Bulk tank",
+        icon: PolyTankIcon,
+        link: "/bulk-tank",
+        roles: [RoleSuperAdmin, RoleAdmin],
+      },
+      {
+        name: "Forage & crops",
+        icon: WheatIcon,
+        link: "/crops",
+        roles: [RoleSuperAdmin, RoleAdmin],
+      },
+    ],
+  },
   {
     label: "Workspace",
+    roles: [RoleSuperAdmin, RoleAdmin],
     links: [
       {
         name: "Settings",
         icon: Settings02Icon,
         link: PathSettings,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      }
+        roles: [RoleSuperAdmin, RoleAdmin],
+      },
     ],
-    roles: [RoleSuperAdmin, RoleAdmin]
-  }
+  },
 ]
 
 export function AppSidebar({ user }: { user: SidebarUser }) {
@@ -62,7 +123,7 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
                         j.roles.includes(user.role)
                       ) &&
                       <SidebarMenuItem key={j.name}>
-                        <SidebarMenuButton asChild>
+                        <SidebarMenuButton asChild tooltip={j.name}>
                           <Link href={j.link}>
                             <HugeiconsIcon icon={j.icon} />
                             <span>{j.name}</span>

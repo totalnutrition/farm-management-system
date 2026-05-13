@@ -25,7 +25,12 @@ export type LocationRow = {
   latitude: number | null;
   longitude: number | null;
   status: LocationStatus;
+  manages_livestock: boolean;
+  manages_crops: boolean;
 };
+
+const SELECT_COLS =
+  "id, organization_id, name, short_code, farm_type, country, province, city, address, latitude, longitude, status, manages_livestock, manages_crops";
 
 /**
  * Returns the locations the current user is allowed to see. Admins of an
@@ -44,9 +49,7 @@ export async function listAccessibleLocations(): Promise<LocationRow[]> {
   if (role === RoleSuperAdmin) {
     const { data } = await admin
       .from("locations")
-      .select(
-        "id, organization_id, name, short_code, farm_type, country, province, city, address, latitude, longitude, status",
-      )
+      .select(SELECT_COLS)
       .order("name");
     return (data ?? []) as LocationRow[];
   }
@@ -56,9 +59,7 @@ export async function listAccessibleLocations(): Promise<LocationRow[]> {
   if (role === "admin") {
     const { data } = await admin
       .from("locations")
-      .select(
-        "id, organization_id, name, short_code, farm_type, country, province, city, address, latitude, longitude, status",
-      )
+      .select(SELECT_COLS)
       .eq("organization_id", orgId)
       .order("name");
     return (data ?? []) as LocationRow[];
@@ -74,9 +75,7 @@ export async function listAccessibleLocations(): Promise<LocationRow[]> {
 
   const { data } = await admin
     .from("locations")
-    .select(
-      "id, organization_id, name, short_code, farm_type, country, province, city, address, latitude, longitude, status",
-    )
+    .select(SELECT_COLS)
     .in("id", ids)
     .order("name");
   return (data ?? []) as LocationRow[];
