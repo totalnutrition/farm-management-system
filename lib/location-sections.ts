@@ -126,7 +126,7 @@ export const LocationSections: LocationSection[] = [
     label: "Directories",
     description: "Technicians, veterinarians, hoof trimmers.",
     icon: UserListIcon,
-    shipped: false,
+    shipped: true,
   },
   {
     slug: "custom-vocabularies",
