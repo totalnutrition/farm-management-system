@@ -78,7 +78,7 @@ export const LocationSections: LocationSection[] = [
     label: "Milk pricing",
     description: "Pricing schemes with effective dates.",
     icon: DollarCircleIcon,
-    shipped: false,
+    shipped: true,
     livestockOnly: true,
   },
   {
