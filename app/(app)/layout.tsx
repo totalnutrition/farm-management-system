@@ -42,8 +42,8 @@ export default async function AppLayout({
 
   return (
     <SidebarProvider defaultOpen={sidebarDefaultOpen}>
-      <AppSidebar user={{ email: user.email ?? "", name, role }} />
       <TooltipProvider>
+        <AppSidebar user={{ email: user.email ?? "", name, role }} />
         <main className="w-full">
           <div className="flex items-center justify-between gap-2 border-b px-2 py-1">
             <SidebarTrigger />
