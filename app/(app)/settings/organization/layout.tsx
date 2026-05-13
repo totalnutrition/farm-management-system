@@ -1,5 +1,6 @@
 import { SectionSubnav } from "@/components/section-subnav";
 import { OrganizationSections } from "@/lib/organization-sections";
+import { BackToSettingsLink } from "../settings-shell";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +20,11 @@ export default function OrganizationSettingsLayout({
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-[14rem_1fr]">
       <aside className="flex flex-col gap-2">
-        <div className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Organization
+        <div className="px-2 flex flex-col gap-0.5">
+          <BackToSettingsLink />
+          <span className="font-heading text-sm font-semibold">
+            Organization
+          </span>
         </div>
         <SectionSubnav items={items} ariaLabel="Organization settings" />
       </aside>
