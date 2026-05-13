@@ -21,7 +21,9 @@ export default async function OrganizationGeneralPage() {
   const admin = createAdminClient();
   let query = admin
     .from("organizations")
-    .select("id, name, address, created_at")
+    .select(
+      "id, name, address, default_currency, default_units, default_timezone, created_at",
+    )
     .order("created_at", { ascending: false });
 
   if (role !== RoleSuperAdmin) {
@@ -42,6 +44,9 @@ export default async function OrganizationGeneralPage() {
     id: r.id,
     name: r.name,
     address: r.address,
+    default_currency: (r.default_currency as string) ?? "USD",
+    default_units: (r.default_units as "metric" | "imperial") ?? "metric",
+    default_timezone: (r.default_timezone as string) ?? "UTC",
   }));
 
   const canManage = role === RoleSuperAdmin;

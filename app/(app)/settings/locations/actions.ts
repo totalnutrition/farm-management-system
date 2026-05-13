@@ -72,6 +72,11 @@ const baseSchema = z.object({
   livestock_area_hectares: optionalNumberString("Livestock area", 0, 1_000_000),
   arable_area_hectares: optionalNumberString("Arable area", 0, 1_000_000),
   timezone: z.string().trim().optional().default(""),
+  currency_override: z.string().trim().optional().default(""),
+  units_override: z
+    .union([z.literal(""), z.literal("metric"), z.literal("imperial")])
+    .optional()
+    .default(""),
 });
 
 const updateSchema = baseSchema.extend({ id: z.uuid() });
@@ -97,6 +102,10 @@ function toRow(input: z.infer<typeof baseSchema>) {
       ? Number(input.arable_area_hectares)
       : null,
     timezone: input.timezone || null,
+    currency_override: input.currency_override
+      ? input.currency_override.toUpperCase()
+      : null,
+    units_override: input.units_override || null,
   };
 }
 

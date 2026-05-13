@@ -24,6 +24,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -32,6 +33,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -39,6 +47,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { CommonCurrencies } from "@/lib/settings-resolver";
+import { CommonTimezones } from "@/lib/timezones";
 import {
   createOrganization,
   deleteOrganization,
@@ -49,13 +59,31 @@ export type OrganizationRow = {
   id: string;
   name: string;
   address: string | null;
+  default_currency: string;
+  default_units: "metric" | "imperial";
+  default_timezone: string;
 };
 
 const formSchema = z.object({
   name: z.string().trim().min(1, "Name is required."),
   address: z.string().trim(),
+  default_currency: z
+    .string()
+    .trim()
+    .min(3, "Use a 3-letter ISO code.")
+    .max(8, "Too long."),
+  default_units: z.enum(["metric", "imperial"]),
+  default_timezone: z.string().trim().min(1, "Timezone is required."),
 });
 type FormValues = z.infer<typeof formSchema>;
+
+const emptyValues: FormValues = {
+  name: "",
+  address: "",
+  default_currency: "USD",
+  default_units: "metric",
+  default_timezone: "UTC",
+};
 
 export function OrganizationsTable({
   rows,
@@ -70,7 +98,7 @@ export function OrganizationsTable({
   const [deleting, setDeleting] = useState<OrganizationRow | null>(null);
 
   const showActions = canEdit || canManage;
-  const colCount = showActions ? 3 : 2;
+  const colCount = showActions ? 4 : 3;
 
   return (
     <div className="flex flex-col gap-3">
@@ -85,6 +113,7 @@ export function OrganizationsTable({
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Address</TableHead>
+              <TableHead>Defaults</TableHead>
               {showActions ? (
                 <TableHead className="text-right">Actions</TableHead>
               ) : null}
@@ -106,6 +135,13 @@ export function OrganizationsTable({
                   <TableCell>{r.name}</TableCell>
                   <TableCell className="max-w-md whitespace-pre-line">
                     {r.address ?? "—"}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    <span className="font-mono">{r.default_currency}</span>
+                    <span className="text-muted-foreground"> · </span>
+                    <span className="capitalize">{r.default_units}</span>
+                    <span className="text-muted-foreground"> · </span>
+                    <span>{r.default_timezone}</span>
                   </TableCell>
                   {showActions ? (
                     <TableCell className="text-right">
@@ -148,13 +184,139 @@ export function OrganizationsTable({
   );
 }
 
+function OrganizationFormBody({
+  form,
+}: {
+  form: ReturnType<typeof useForm<FormValues>>;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <FormField
+        control={form.control}
+        name="name"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Name</FormLabel>
+            <FormControl>
+              <Input autoComplete="off" {...field} />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name="address"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Address</FormLabel>
+            <FormControl>
+              <Textarea rows={3} {...field} />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <div className="flex flex-col gap-2 border-t pt-3">
+        <h3 className="text-xs font-medium">Defaults</h3>
+        <p className="text-[10px] text-muted-foreground">
+          Locations inherit these unless they set their own value.
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <FormField
+            control={form.control}
+            name="default_currency"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Currency</FormLabel>
+                <FormControl>
+                  <Select
+                    value={field.value || "USD"}
+                    onValueChange={field.onChange}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {CommonCurrencies.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="default_units"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Units</FormLabel>
+                <FormControl>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="metric">Metric (kg, L, ha)</SelectItem>
+                      <SelectItem value="imperial">
+                        Imperial (lb, gal, ac)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+                <FormDescription className="text-[10px]">
+                  Display preference. Storage is always metric.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="default_timezone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Timezone</FormLabel>
+                <FormControl>
+                  <Select
+                    value={field.value || "UTC"}
+                    onValueChange={field.onChange}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {CommonTimezones.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CreateDialog() {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { name: "", address: "" },
+    defaultValues: emptyValues,
   });
 
   const onSubmit = (values: FormValues) => {
@@ -165,7 +327,7 @@ function CreateDialog() {
         return;
       }
       toast.success("Organization created.");
-      form.reset();
+      form.reset(emptyValues);
       setOpen(false);
     });
   };
@@ -175,7 +337,7 @@ function CreateDialog() {
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) form.reset();
+        if (!next) form.reset(emptyValues);
       }}
     >
       <DialogTrigger asChild>
@@ -184,7 +346,7 @@ function CreateDialog() {
           New Organization
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Organization</DialogTitle>
           <DialogDescription>
@@ -196,32 +358,7 @@ function CreateDialog() {
             onSubmit={form.handleSubmit(onSubmit)}
             className="flex flex-col gap-3"
           >
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name</FormLabel>
-                  <FormControl>
-                    <Input autoComplete="off" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="address"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Address</FormLabel>
-                  <FormControl>
-                    <Textarea rows={3} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <OrganizationFormBody form={form} />
             <DialogFooter>
               <Button type="submit" disabled={isPending}>
                 {isPending ? "Creating..." : "Create"}
@@ -246,8 +383,14 @@ function EditDialog({
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     values: row
-      ? { name: row.name, address: row.address ?? "" }
-      : { name: "", address: "" },
+      ? {
+          name: row.name,
+          address: row.address ?? "",
+          default_currency: row.default_currency,
+          default_units: row.default_units,
+          default_timezone: row.default_timezone,
+        }
+      : emptyValues,
   });
 
   if (!row) return null;
@@ -266,7 +409,7 @@ function EditDialog({
 
   return (
     <Dialog open={!!row} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Organization</DialogTitle>
           <DialogDescription>{row.name}</DialogDescription>
@@ -276,32 +419,7 @@ function EditDialog({
             onSubmit={form.handleSubmit(onSubmit)}
             className="flex flex-col gap-3"
           >
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="address"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Address</FormLabel>
-                  <FormControl>
-                    <Textarea rows={3} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <OrganizationFormBody form={form} />
             <DialogFooter>
               <Button type="submit" disabled={isPending}>
                 {isPending ? "Saving..." : "Save"}
