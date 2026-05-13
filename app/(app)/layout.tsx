@@ -34,8 +34,14 @@ export default async function AppLayout({
     getActiveLocation(),
   ]);
 
+  // Sidebar starts collapsed to icon-only; cookie persists user choice
+  // after they toggle it.
+  const cookieStore = await cookies();
+  const sidebarCookie = cookieStore.get("sidebar_state")?.value;
+  const sidebarDefaultOpen = sidebarCookie === "true";
+
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={sidebarDefaultOpen}>
       <AppSidebar user={{ email: user.email ?? "", name, role }} />
       <TooltipProvider>
         <main className="w-full">
