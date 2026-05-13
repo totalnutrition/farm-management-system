@@ -11,6 +11,10 @@ import {
   Notebook01Icon,
   ShieldUserIcon,
   DownloadCircle01Icon,
+  PolyTankIcon,
+  ChartLineData02Icon,
+  MedicalFileIcon,
+  Calendar03Icon,
 } from "@hugeicons/core-free-icons";
 
 type HugeIcon = typeof Location01Icon;
@@ -29,36 +33,45 @@ export type LocationSection = {
 export type LocationSectionGroup =
   | "overview"
   | "setup"
-  | "dairy"
+  | "herd"
+  | "milk"
   | "infrastructure"
   | "access"
+  | "operations"
   | "system";
 
-export const LocationSectionGroupLabels: Record<LocationSectionGroup, string | null> = {
+export const LocationSectionGroupLabels: Record<
+  LocationSectionGroup,
+  string | null
+> = {
   overview: null,
   setup: "Setup",
-  dairy: "Dairy setup",
+  herd: "Herd setup",
+  milk: "Milk & quality",
   infrastructure: "Infrastructure",
   access: "People & access",
+  operations: "Operations",
   system: "System",
 };
 
 export const LocationSectionGroupOrder: LocationSectionGroup[] = [
   "overview",
   "setup",
-  "dairy",
+  "herd",
+  "milk",
   "infrastructure",
   "access",
+  "operations",
   "system",
 ];
 
 /**
  * Subnav catalog for /settings/locations/[id]/*.
  *
- * Settings = configuration only. Operational data (Animals, Forage &
- * crops events, Bulk tank readings, Milk recording) lives at top-level
- * routes scoped by the active-location switcher and accessed from the
- * main left sidebar.
+ * Mirrors Bovisync herd-setup tabs and DC305 SETUP commands. Settings
+ * is configuration only — operational data (Animals roster, Milk
+ * recording entry, Bulk-tank readings, Crop events) lives at top-level
+ * routes off the main sidebar.
  */
 export const LocationSections: LocationSection[] = [
   {
@@ -69,6 +82,7 @@ export const LocationSections: LocationSection[] = [
     shipped: true,
     group: "overview",
   },
+
   {
     slug: "general",
     label: "General",
@@ -77,23 +91,55 @@ export const LocationSections: LocationSection[] = [
     shipped: true,
     group: "setup",
   },
+
+  {
+    slug: "groups",
+    label: "Herd structure",
+    description: "Herd profile, group strategy, rules, capacity plan.",
+    icon: GroupLayersIcon,
+    shipped: true,
+    group: "herd",
+    livestockOnly: true,
+  },
+  {
+    slug: "reproduction",
+    label: "Reproduction",
+    description:
+      "VWP, heat detection, preg-check schedule, dry-off / close-up triggers, KPI targets.",
+    icon: ChartLineData02Icon,
+    shipped: true,
+    group: "herd",
+    livestockOnly: true,
+  },
+  {
+    slug: "health",
+    label: "Health protocols",
+    description:
+      "Vaccination schedule, hoof-trim cadence, treatment protocols.",
+    icon: MedicalFileIcon,
+    shipped: false,
+    group: "herd",
+    livestockOnly: true,
+  },
+
   {
     slug: "recording",
     label: "Milk recording setup",
     description:
-      "How milk gets recorded: test-day frequency, milkings per day, method.",
+      "Test-day frequency, milkings/day, recording method, component sampling.",
     icon: ClipboardClockIcon,
     shipped: true,
-    group: "dairy",
+    group: "milk",
     livestockOnly: true,
   },
   {
-    slug: "groups",
-    label: "Groups & rules",
-    description: "Animal groups, rules, capacity plan.",
-    icon: GroupLayersIcon,
+    slug: "quality-withdrawal",
+    label: "Quality & withdrawal",
+    description:
+      "SCC thresholds, component targets, withdrawal policy, herd-level targets.",
+    icon: ShieldUserIcon,
     shipped: true,
-    group: "dairy",
+    group: "milk",
     livestockOnly: true,
   },
   {
@@ -102,9 +148,19 @@ export const LocationSections: LocationSection[] = [
     description: "Pricing schemes with effective dates.",
     icon: DollarCircleIcon,
     shipped: true,
-    group: "dairy",
+    group: "milk",
     livestockOnly: true,
   },
+  {
+    slug: "bulk-tank-settings",
+    label: "Bulk-tank settings",
+    description: "Reconciliation threshold and pickup cadence.",
+    icon: PolyTankIcon,
+    shipped: true,
+    group: "milk",
+    livestockOnly: true,
+  },
+
   {
     slug: "infrastructure",
     label: "Infrastructure",
@@ -113,6 +169,7 @@ export const LocationSections: LocationSection[] = [
     shipped: true,
     group: "infrastructure",
   },
+
   {
     slug: "directories",
     label: "Directories",
@@ -129,6 +186,17 @@ export const LocationSections: LocationSection[] = [
     shipped: true,
     group: "access",
   },
+
+  {
+    slug: "operations",
+    label: "Operations",
+    description: "Milking shifts, holiday calendar, feed cost.",
+    icon: Calendar03Icon,
+    shipped: false,
+    group: "operations",
+    livestockOnly: true,
+  },
+
   {
     slug: "notifications",
     label: "Notifications",
