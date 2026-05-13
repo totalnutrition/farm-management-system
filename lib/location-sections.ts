@@ -4,7 +4,7 @@ import {
   ClipboardClockIcon,
   BarnsIcon,
   GroupLayersIcon,
-  DollarCircleIcon,
+  Coins01Icon,
   ApiIcon,
   Notification02Icon,
   ContactBookIcon,
@@ -15,6 +15,13 @@ import {
   ChartLineData02Icon,
   MedicalFileIcon,
   Calendar03Icon,
+  TruckIcon,
+  PackageIcon,
+  ChefHatIcon,
+  Restaurant01Icon,
+  TestTubeIcon,
+  ThermometerIcon,
+  AlertCircleIcon,
 } from "@hugeicons/core-free-icons";
 
 type HugeIcon = typeof Location01Icon;
@@ -35,7 +42,9 @@ export type LocationSectionGroup =
   | "setup"
   | "herd"
   | "milk"
+  | "feeding"
   | "infrastructure"
+  | "purchasing"
   | "access"
   | "operations"
   | "system";
@@ -46,10 +55,12 @@ export const LocationSectionGroupLabels: Record<
 > = {
   overview: null,
   setup: "Setup",
-  herd: "Herd setup",
-  milk: "Milk & quality",
+  herd: "Herd",
+  milk: "Milk & sales",
+  feeding: "Feeding",
   infrastructure: "Infrastructure",
-  access: "People & access",
+  purchasing: "Purchasing & people",
+  access: "Access",
   operations: "Operations",
   system: "System",
 };
@@ -59,7 +70,9 @@ export const LocationSectionGroupOrder: LocationSectionGroup[] = [
   "setup",
   "herd",
   "milk",
+  "feeding",
   "infrastructure",
+  "purchasing",
   "access",
   "operations",
   "system",
@@ -68,11 +81,9 @@ export const LocationSectionGroupOrder: LocationSectionGroup[] = [
 /**
  * Subnav catalog for /settings/locations/[id]/*.
  *
- * Organized by dairy operational domain (herd setup, milk & quality,
- * etc.) following standard industry conventions. Settings is
- * configuration only — operational data (Animals roster, Milk
- * recording entry, Bulk-tank readings, Crop events) lives at top-level
- * routes off the main sidebar.
+ * Settings = configuration only. Operational data (per-cow events,
+ * feeding events, lab tests, environmental readings) lives at the
+ * top-level operational routes off the main sidebar.
  */
 export const LocationSections: LocationSection[] = [
   {
@@ -96,7 +107,7 @@ export const LocationSections: LocationSection[] = [
   {
     slug: "groups",
     label: "Herd structure",
-    description: "Herd profile, group strategy, rules, capacity plan.",
+    description: "Group strategy, rules, capacity plan.",
     icon: GroupLayersIcon,
     shipped: true,
     group: "herd",
@@ -106,7 +117,7 @@ export const LocationSections: LocationSection[] = [
     slug: "reproduction",
     label: "Reproduction",
     description:
-      "VWP, heat detection, preg-check schedule, dry-off / close-up triggers, KPI targets.",
+      "VWP, heat detection, preg-check schedule, sync protocols, KPI targets.",
     icon: ChartLineData02Icon,
     shipped: true,
     group: "herd",
@@ -116,7 +127,7 @@ export const LocationSections: LocationSection[] = [
     slug: "health",
     label: "Health protocols",
     description:
-      "Vaccination schedule, hoof-trim cadence, treatment protocols.",
+      "Vaccination schedule, hoof-trim cadence, per-diagnosis treatments.",
     icon: MedicalFileIcon,
     shipped: false,
     group: "herd",
@@ -137,7 +148,7 @@ export const LocationSections: LocationSection[] = [
     slug: "quality-withdrawal",
     label: "Quality & withdrawal",
     description:
-      "SCC thresholds, component targets, withdrawal policy, herd-level targets.",
+      "SCC thresholds, component targets, withdrawal policy, herd targets.",
     icon: ShieldUserIcon,
     shipped: true,
     group: "milk",
@@ -145,9 +156,10 @@ export const LocationSections: LocationSection[] = [
   },
   {
     slug: "milk-pricing",
-    label: "Milk pricing",
-    description: "Pricing schemes with effective dates.",
-    icon: DollarCircleIcon,
+    label: "Milk sales",
+    description:
+      "Sales contracts, effective-dated pricing schemes, component bonuses, SCC tiers.",
+    icon: Coins01Icon,
     shipped: true,
     group: "milk",
     livestockOnly: true,
@@ -163,6 +175,34 @@ export const LocationSections: LocationSection[] = [
   },
 
   {
+    slug: "recipes",
+    label: "TMR recipes",
+    description: "Ration formulations consumed by feeding events.",
+    icon: ChefHatIcon,
+    shipped: false,
+    group: "feeding",
+    livestockOnly: true,
+  },
+  {
+    slug: "feeding-schedule",
+    label: "Feeding schedule",
+    description:
+      "Per-group TMR delivery times, bunk push-up frequency, feed cost.",
+    icon: Restaurant01Icon,
+    shipped: false,
+    group: "feeding",
+    livestockOnly: true,
+  },
+  {
+    slug: "storage",
+    label: "Storage",
+    description: "Silos, bins, freezers. Drives inventory deductions on feed-out.",
+    icon: PackageIcon,
+    shipped: false,
+    group: "feeding",
+  },
+
+  {
     slug: "infrastructure",
     label: "Infrastructure",
     description: "Barns, pens, arable parcels.",
@@ -170,15 +210,40 @@ export const LocationSections: LocationSection[] = [
     shipped: true,
     group: "infrastructure",
   },
+  {
+    slug: "environmental",
+    label: "Environmental",
+    description: "Temperature, humidity, THI. Per-barn or per-location.",
+    icon: ThermometerIcon,
+    shipped: false,
+    group: "infrastructure",
+  },
 
+  {
+    slug: "suppliers",
+    label: "Suppliers",
+    description: "Feed, semen, vet, equipment vendors.",
+    icon: TruckIcon,
+    shipped: false,
+    group: "purchasing",
+  },
+  {
+    slug: "buyers",
+    label: "Buyers",
+    description: "Milk processors, cull / heifer / calf buyers, manure offtake.",
+    icon: ContactBookIcon,
+    shipped: false,
+    group: "purchasing",
+  },
   {
     slug: "directories",
     label: "Directories",
     description: "Technicians, veterinarians, hoof trimmers.",
     icon: ContactBookIcon,
     shipped: true,
-    group: "access",
+    group: "purchasing",
   },
+
   {
     slug: "access",
     label: "Access",
@@ -191,11 +256,20 @@ export const LocationSections: LocationSection[] = [
   {
     slug: "operations",
     label: "Operations",
-    description: "Milking shifts, holiday calendar, feed cost.",
+    description: "Milking shifts, holiday calendar.",
     icon: Calendar03Icon,
     shipped: false,
     group: "operations",
     livestockOnly: true,
+  },
+  {
+    slug: "lab-tests",
+    label: "Lab tests",
+    description:
+      "Milk, feed, soil, water lab result archive. Linked to events and reports.",
+    icon: TestTubeIcon,
+    shipped: false,
+    group: "operations",
   },
 
   {
@@ -209,7 +283,7 @@ export const LocationSections: LocationSection[] = [
   {
     slug: "integrations",
     label: "Integrations",
-    description: "API keys, webhooks, import history.",
+    description: "Parlor, robot, activity-monitor, lab and tag-reader links.",
     icon: ApiIcon,
     shipped: false,
     group: "system",
@@ -219,6 +293,14 @@ export const LocationSections: LocationSection[] = [
     label: "Data import",
     description: "Bulk-import animals, lactations, repro, health, etc.",
     icon: DownloadCircle01Icon,
+    shipped: false,
+    group: "system",
+  },
+  {
+    slug: "alerts",
+    label: "Alerts",
+    description: "Standing alerts the dashboard surfaces.",
+    icon: AlertCircleIcon,
     shipped: false,
     group: "system",
   },
