@@ -135,7 +135,7 @@ export const WizardSteps: WizardStep[] = [
     key: SetupStepBarns,
     label: "Barns",
     description: "Physical barn shells.",
-    shipped: false,
+    shipped: true,
     livestockOnly: true,
   },
   {
