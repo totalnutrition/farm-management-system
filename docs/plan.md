@@ -217,7 +217,7 @@ The wizard branches early on whether the user has existing records to import.
                                 ▼
               ┌──────────────────────────────────┐
               │  Step 8.  Pens                   │
-              │           (DC305 pen-types,      │
+              │           (industry pen-type taxonomy,      │
               │            assigned → group)     │
               └──────────────────────────────────┘
                                 │
@@ -328,7 +328,7 @@ barns
 
 pens
   ├── name, code, barn_id
-  ├── pen_type          (DC305 taxonomy: milking, dry, close_up, far_off, fresh,
+  ├── pen_type          (industry pen-type taxonomy: milking, dry, close_up, far_off, fresh,
   │                       hospital, maternity, AI, bull, heifer, calf)
   ├── side-effect flags (is_DRY, is_HOSP, is_FRESH — write events on entry)
   ├── capacity_head, current_head_count
@@ -336,7 +336,7 @@ pens
   └── is_placeholder    (true for auto-created import pens awaiting reconciliation)
 ```
 
-DC305 rules to enforce as DB CHECK constraints:
+industry pen-type rules to enforce as DB CHECK constraints:
 
 - `is_AI_pen` and `is_BULL_pen` are mutually exclusive.
 - Entering a pen with `is_DRY_pen = true` auto-writes a dry-off event on the animal.
@@ -401,7 +401,7 @@ org_audit_log
 
 ## 5. Import template
 
-**Anchored to ICAR ADE** (international standard) with **DC305 / Bovisync column aliases** as a convenience layer. Vendor-neutral: a paper-records farmer sees the same template as a DC305 migrator.
+**Anchored to ICAR ADE** (international standard) with **established herd-management systems column aliases** as a convenience layer. Vendor-neutral: a paper-records farmer sees the same template as a established herd-management software migrator.
 
 ### 5.1 Three tiers
 
@@ -409,7 +409,7 @@ org_audit_log
 |---|---|---|
 | Snapshot only | `animals.csv` (~38 columns) | Most farms. Paper records or generic software. Bootstraps groups + pens from current state alone. |
 | Snapshot + recent history | + `lactations`, `repro_events`, `health_events`, `pen_moves` | Last ~12 months of events. |
-| Full migration | + `test_days`, `calvings`, `genomics`, `scores`, `transactions`, `milkings`, `bulk_tank_readings` | DC305 / Bovisync exports. Every byte preserved. |
+| Full migration | + `test_days`, `calvings`, `genomics`, `scores`, `transactions`, `milkings`, `bulk_tank_readings` | established herd-management systems exports. Every byte preserved. |
 
 ### 5.2 `animals.csv` — the critical snapshot file
 
@@ -457,19 +457,19 @@ Each one-table-per-event-type. Join key is `Animal ID` (on-farm management numbe
 ### 5.4 Format
 
 - Single **XLSX** with one sheet per file + README + Settings sheet + Vocabularies sheet, with Excel data-validation dropdowns on every controlled-vocab column.
-- Same data also as **ZIP of CSVs** for power users / DC305 exports.
+- Same data also as **ZIP of CSVs** for power users / legacy exports.
 - Both round-trip identically.
 
 ### 5.5 Vocabularies shipped with the template
 
-Breeds (NAAB), Repro event types (DC305 ↔ ICAR cross-walk), Health event types (ICAR), Diagnoses (ICAR Section 7.1 Nordic NKM subset), Routes, Cull reasons (DHIA 9-code + ICAR), Semen types, Calving ease, BCS scale (Edmonson), Locomotion (Sprecher), Country ID formats (ISO 11784/3166-1).
+Breeds (NAAB), Repro event types (industry ↔ ICAR cross-walk), Health event types (ICAR), Diagnoses (ICAR Section 7.1 Nordic NKM subset), Routes, Cull reasons (DHIA 9-code + ICAR), Semen types, Calving ease, BCS scale (Edmonson), Locomotion (Sprecher), Country ID formats (ISO 11784/3166-1).
 
 ### 5.6 Import flow
 
 1. Download template — choose tier + format.
 2. Fill it offline.
 3. Upload — app detects file structure.
-4. Column-mapping step (pre-filled if "Source: DC305 / Bovisync").
+4. Column-mapping step (pre-filled if "Source: established herd-management systems").
 5. Dry-run preview ("Will create 1,247 animals, 4,123 lactations, 18,455 events").
 6. Validation errors shown for review. **Hard-reject** required-field violations; **soft-import** with warning report for non-required issues.
 7. Commit.
@@ -479,7 +479,7 @@ Breeds (NAAB), Repro event types (DC305 ↔ ICAR cross-walk), Health event types
 1. Recipient vs genetic dam are **separate columns** — never collapse.
 2. NAAB sire codes are **strings** (format drifted 7→9 chars with zero-padding).
 3. `withdrawal_milk_end` and `withdrawal_meat_end` are **persisted timestamps**, not computed on read (vet extra-label adjustments would be lost).
-4. DC305 `RPRO=7` is split on import into `transactions.txn_type` (Sale / Death / Euthanized / ...) — don't carry the conflation forward.
+4. the conflated sold/died status code in legacy exports is split on import into `transactions.txn_type` (Sale / Death / Euthanized / ...) — don't carry the conflation forward.
 5. `test_plan` lives **per test-day row**, not per lactation (farms switch mid-lactation).
 6. Twin calves = two rows in `calvings.csv` with the same dam + date.
 7. Freemartin is a real sex code.
@@ -604,11 +604,11 @@ Each row is one PR, opened, merged, deployed before the next starts.
 | PR-B | LOC `/recording` (Recording profile, Step 1.5). | Recording model captured |
 | PR-C | LOC `/groups` Herd profile + Group strategy + Rules + Capacity plan (Steps 3–6). | Logical design complete |
 | PR-D | LOC `/infrastructure` Barns (Step 7) + plan-vs-actual gauge. | Physical barn modeling |
-| PR-E | LOC `/infrastructure` Pens (Step 8) — DC305 pen-type flags + AI/BULL exclusion + group assignment. | Greenfield setup fully functional |
+| PR-E | LOC `/infrastructure` Pens (Step 8) — established herd-management software pen-type flags + AI/BULL exclusion + group assignment. | Greenfield setup fully functional |
 | PR-F.0 | Comprehensive animal-data schema: all event tables (`animals`, `lactations`, `test_days`, `milkings`, `repro_events`, `calvings`, `health_events`, `genomics`, `scores`, `pen_moves`, `transactions`, `bulk_tank_readings`, `milk_diversions`) + vocab tables + RLS + indexes. No UI. | Foundation for import |
 | PR-F.1 | Template generator: download XLSX + ZIP with vocab sheets and validation dropdowns. | Users can fill offline |
 | PR-F.2 | Importer: upload → column-map UI → dry-run preview → commit. Snapshot-driven bootstrap wired into wizard Step 2a. | Migration path works |
-| PR-F.3 | DC305 + Bovisync column-alias presets. | One-click migration |
+| PR-F.3 | established herd-management systems column-alias presets. | One-click migration |
 | PR-G | LOC arable parcels (Step 9). | Crops module visible |
 | PR-L | LOC `/milk-pricing` + pricing reconciliation. | Revenue tracking |
 | PR-M | LOC `/bulk-tank` + reconciliation page + diversion allocation UI. | Tank vs. cow reconciled |
@@ -624,7 +624,7 @@ Each row is one PR, opened, merged, deployed before the next starts.
 **Phase milestones:**
 
 - After **PR-E**: greenfield livestock farms are fully usable.
-- After **PR-F.3**: migration from DC305 / Bovisync / paper / generic software works.
+- After **PR-F.3**: migration from established herd-management systems / paper / generic software works.
 - After **PR-I**: the full product is in place for livestock + crops.
 - After **PR-Q**: enterprise-grade access, notifications, integrations scaffolded.
 - After **PR-K**: automated ingestion live.
@@ -641,14 +641,14 @@ Each row is one PR, opened, merged, deployed before the next starts.
 | 4 | Group library | Single / 2-group / 3-group / 4-group lactating presets + always-on Fresh/Hospital/Maternity + Heifer/Calf splits by herd size |
 | 5 | Default rules | DIM ranges (textbook) + yield percentiles (derived from import) + parity / repro / BCS predicates |
 | 6 | Barn fields | Full Dairyland Initiative / UMN / Cornell set (type, row config, counts, stalls, bunk, ventilation, cow comfort, floor, parlor) |
-| 7 | Pen fields | DC305 taxonomy + side-effect flags (AI/BULL exclusive; DRY/HOSP/FRESH auto-write events) |
+| 7 | Pen fields | industry pen-type taxonomy + side-effect flags (AI/BULL exclusive; DRY/HOSP/FRESH auto-write events) |
 | 8 | Import path | Two paths: greenfield (typed counts) vs migration (animals.csv first → app profiles herd → suggests groups) |
-| 9 | Template anchor | ICAR ADE + DC305 / Bovisync column aliases |
+| 9 | Template anchor | ICAR ADE + established herd-management systems column aliases |
 | 10 | Template tiers | Snapshot-only / + recent history / full migration |
 | 11 | Template format | XLSX (default) and ZIP-of-CSVs (power users) — both round-trip identically |
 | 12 | Snapshot-driven bootstrap | `animals.csv` alone is sufficient to suggest groups + place animals |
 | 13 | Animal data model | `animals` = stable attributes; everything time-bound is an event |
-| 14 | Vendor lock-in | None — template is generic. DC305/Bovisync compatibility is a convenience layer, not a requirement |
+| 14 | Vendor lock-in | None — template is generic. established herd-management systems compatibility is a convenience layer, not a requirement |
 | 15 | Recording profile lives in the wizard | Yes — Step 1.5, mandatory |
 | 16 | Three ingestion paths share one model | Excel / Mobile / API → same `milkings` table, `source` tagged |
 | 17 | Bulk-tank kept separately from individual | Yes — own table + daily reconciliation view |

@@ -1,7 +1,7 @@
 -- =====================================================================
 -- 0018 — Per-location dairy operational settings
 -- =====================================================================
--- Mirrors the DC305 SETUP commands / Bovisync herd-setup tabs. One row
+-- Industry-standard dairy operational config. One row
 -- per location holds the scalar dairy operational config:
 --   - Reproduction (VWP, heat detection, preg check schedule, KPIs)
 --   - Transition (dry-off DCC, close-up DCC, calving alert)

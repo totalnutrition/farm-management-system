@@ -961,7 +961,7 @@ create policy barns_write on public.barns for all
 -- ------------------------------------------------------------------
 
 -- =====================================================================
--- 0010 — Pens (DC305 pen-type taxonomy)
+-- 0010 — Pens (industry-standard pen-type taxonomy)
 -- =====================================================================
 
 do $$
@@ -984,7 +984,7 @@ create table if not exists public.pens (
   pen_code text,
   type pen_type not null default 'milking',
   capacity_head int,
-  -- DC305 side-effect flags
+  -- Pen-type side-effect flags
   is_AI_pen boolean not null default false,
   is_BULL_pen boolean not null default false,
   is_DRY_pen boolean not null default false,
@@ -2098,7 +2098,7 @@ alter table public.organizations
 -- =====================================================================
 -- 0018 — Per-location dairy operational settings
 -- =====================================================================
--- Mirrors the DC305 SETUP commands / Bovisync herd-setup tabs. One row
+-- Industry-standard dairy operational config. One row
 -- per location holds the scalar dairy operational config:
 --   - Reproduction (VWP, heat detection, preg check schedule, KPIs)
 --   - Transition (dry-off DCC, close-up DCC, calving alert)

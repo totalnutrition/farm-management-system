@@ -68,8 +68,9 @@ export const LocationSectionGroupOrder: LocationSectionGroup[] = [
 /**
  * Subnav catalog for /settings/locations/[id]/*.
  *
- * Mirrors Bovisync herd-setup tabs and DC305 SETUP commands. Settings
- * is configuration only — operational data (Animals roster, Milk
+ * Organized by dairy operational domain (herd setup, milk & quality,
+ * etc.) following standard industry conventions. Settings is
+ * configuration only — operational data (Animals roster, Milk
  * recording entry, Bulk-tank readings, Crop events) lives at top-level
  * routes off the main sidebar.
  */
