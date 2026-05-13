@@ -1,5 +1,6 @@
 import {
   Building03Icon,
+  Location01Icon,
   UserCircleIcon,
   UserGroupIcon,
 } from "@hugeicons/core-free-icons";
@@ -7,6 +8,7 @@ import {
 type HugeIcon = typeof Building03Icon;
 import {
   PathSettingsAccount,
+  PathSettingsLocations,
   PathSettingsOrganization,
   PathSettingsUsers,
   RoleAdmin,
@@ -58,6 +60,14 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         href: PathSettingsOrganization,
         description: "Name, address, and contact details.",
         icon: Building03Icon,
+        roles: [RoleSuperAdmin, RoleAdmin],
+      },
+      {
+        slug: "locations",
+        label: "Locations",
+        href: PathSettingsLocations,
+        description: "Farms and sites under this organization.",
+        icon: Location01Icon,
         roles: [RoleSuperAdmin, RoleAdmin],
       },
       {

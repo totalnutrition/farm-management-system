@@ -4,8 +4,13 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { LocationSwitcher } from "@/components/location-switcher";
 import { createClient } from "@/lib/supabase-server";
 import { PathLogin } from "@/lib/misc";
+import {
+  getActiveLocation,
+  listAccessibleLocations,
+} from "@/lib/locations";
 import type { UserRole } from "@/lib/supabase-auth";
 
 export default async function AppLayout({
@@ -24,12 +29,27 @@ export default async function AppLayout({
     null;
   const role = (user.app_metadata?.role as UserRole | undefined) ?? null;
 
+  const [locations, active] = await Promise.all([
+    listAccessibleLocations(),
+    getActiveLocation(),
+  ]);
+
   return (
     <SidebarProvider>
       <AppSidebar user={{ email: user.email ?? "", name, role }} />
       <TooltipProvider>
         <main className="w-full">
-          <SidebarTrigger />
+          <div className="flex items-center justify-between gap-2 border-b px-2 py-1">
+            <SidebarTrigger />
+            <LocationSwitcher
+              locations={locations.map((l) => ({
+                id: l.id,
+                name: l.name,
+                short_code: l.short_code,
+              }))}
+              activeId={active?.id ?? null}
+            />
+          </div>
           <section className="px-2">{children}</section>
         </main>
       </TooltipProvider>
