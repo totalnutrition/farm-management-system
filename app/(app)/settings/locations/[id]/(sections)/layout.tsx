@@ -12,6 +12,7 @@ import {
   relevantLocationSections,
 } from "@/lib/location-sections";
 import { SectionSubnav } from "@/components/section-subnav";
+import { BackToSettingsLink } from "../../../settings-shell";
 
 export const dynamic = "force-dynamic";
 
@@ -54,13 +55,14 @@ export default async function LocationSectionsLayout({
     <div className="grid grid-cols-1 gap-6 md:grid-cols-[14rem_1fr]">
       <aside className="flex flex-col gap-2">
         <div className="px-2 flex flex-col gap-0.5">
+          <BackToSettingsLink />
           <Link
             href="/settings/locations"
             className="text-[10px] uppercase tracking-wide text-muted-foreground hover:underline"
           >
             ← Locations
           </Link>
-          <span className="text-xs font-medium">{data.name}</span>
+          <span className="text-xs font-medium mt-1">{data.name}</span>
           <span className="font-mono text-[10px] text-muted-foreground">
             {data.short_code}
           </span>
