@@ -107,14 +107,14 @@ export const WizardSteps: WizardStep[] = [
     key: SetupStepHerdProfile,
     label: "Herd profile",
     description: "Target counts by class.",
-    shipped: false,
+    shipped: true,
     livestockOnly: true,
   },
   {
     key: SetupStepGroupStrategy,
     label: "Group strategy",
     description: "Pick a preset that matches your herd size.",
-    shipped: false,
+    shipped: true,
     livestockOnly: true,
   },
   {

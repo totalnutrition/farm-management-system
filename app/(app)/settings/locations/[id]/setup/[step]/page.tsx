@@ -9,15 +9,25 @@ import {
 import {
   FarmTypeView,
   RoleSuperAdmin,
+  SetupStepGroupStrategy,
+  SetupStepHerdProfile,
   SetupStepIdentity,
   SetupStepRecording,
   WizardSteps,
   nextWizardStep,
   type SetupStep,
 } from "@/lib/misc";
+import { suggestStrategySlug } from "@/lib/herd-profile";
+import { loadStrategyPresetCards } from "@/lib/group-strategy-presets";
 import { WizardShell, type WizardLocation } from "../wizard-shell";
 import { getRecordingProfile } from "../../recording-actions";
 import { RecordingProfileForm } from "../../recording-form";
+import {
+  getGroups,
+  getHerdProfile,
+} from "../../groups-actions";
+import { HerdProfileForm } from "../../herd-profile-form";
+import { GroupStrategyPicker } from "../../group-strategy-picker";
 
 type LocationRow = {
   id: string;
@@ -99,6 +109,51 @@ export default async function SetupStepPage({
         <RecordingProfileForm
           locationId={id}
           initial={profile}
+          mode="wizard"
+          nextStep={next}
+        />
+      </WizardShell>
+    );
+  }
+
+  if (step === SetupStepHerdProfile && loc.manages_livestock) {
+    const profile = await getHerdProfile(id);
+    return (
+      <WizardShell
+        location={wizardLoc}
+        currentStep={step as SetupStep}
+        hideShellNext
+      >
+        <HerdProfileForm
+          locationId={id}
+          initial={profile}
+          mode="wizard"
+          nextStep={next}
+        />
+      </WizardShell>
+    );
+  }
+
+  if (step === SetupStepGroupStrategy && loc.manages_livestock) {
+    const [profile, groups, presets] = await Promise.all([
+      getHerdProfile(id),
+      getGroups(id),
+      loadStrategyPresetCards(orgId),
+    ]);
+    const suggestedSlug = suggestStrategySlug(profile.target_lactating_count);
+    const currentSlug =
+      groups.find((g) => g.preset_slug)?.preset_slug ?? null;
+    return (
+      <WizardShell
+        location={wizardLoc}
+        currentStep={step as SetupStep}
+        hideShellNext
+      >
+        <GroupStrategyPicker
+          locationId={id}
+          presets={presets}
+          suggestedSlug={suggestedSlug}
+          currentSlug={currentSlug}
           mode="wizard"
           nextStep={next}
         />

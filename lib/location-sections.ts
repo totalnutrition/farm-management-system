@@ -70,7 +70,7 @@ export const LocationSections: LocationSection[] = [
     label: "Groups & rules",
     description: "Group strategy, rules, capacity plan.",
     icon: UserGroupIcon,
-    shipped: false,
+    shipped: true,
     livestockOnly: true,
   },
   {
