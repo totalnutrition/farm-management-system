@@ -142,7 +142,7 @@ export const WizardSteps: WizardStep[] = [
     key: SetupStepPens,
     label: "Pens",
     description: "Pens inside barns, assigned to groups.",
-    shipped: false,
+    shipped: true,
     livestockOnly: true,
   },
   {

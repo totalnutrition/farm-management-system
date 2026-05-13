@@ -15,6 +15,8 @@ import { ComingSoon } from "@/components/coming-soon";
 import { listBarns } from "../../barns-actions";
 import { BarnsTable } from "../../barns-table";
 import { getGroups, getHerdProfile } from "../../groups-actions";
+import { listPens } from "../../pens-actions";
+import { PensTable } from "../../pens-table";
 
 export const metadata = { title: "Location · Infrastructure" };
 export const dynamic = "force-dynamic";
@@ -48,10 +50,11 @@ export default async function LocationInfrastructurePage({
     );
   }
 
-  const [profile, groups, barns, capDefaults] = await Promise.all([
+  const [profile, groups, barns, pens, capDefaults] = await Promise.all([
     getHerdProfile(id),
     getGroups(id),
     listBarns(id),
+    listPens(id),
     admin
       .from("org_capacity_defaults")
       .select("*")
@@ -96,11 +99,14 @@ export default async function LocationInfrastructurePage({
           planTotalStalls={plan.totals.pen_capacity}
         />
       </section>
-      <section className="ring-1 ring-foreground/10 p-4 flex flex-col gap-2">
+      <section className="ring-1 ring-foreground/10 p-4 flex flex-col gap-3">
         <h2 className="text-sm font-medium">Pens</h2>
-        <p className="text-xs text-muted-foreground">
-          Pens are inside barns. The Pens table ships in PR-E.
-        </p>
+        <PensTable
+          locationId={id}
+          rows={pens}
+          barns={barns.map((b) => ({ id: b.id, name: b.name }))}
+          groups={groups.map((g) => ({ id: g.id, label: g.label }))}
+        />
       </section>
     </div>
   );

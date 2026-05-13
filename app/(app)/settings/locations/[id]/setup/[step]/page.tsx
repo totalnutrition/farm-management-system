@@ -32,9 +32,11 @@ import { computeCapacityPlan } from "@/lib/capacity-plan";
 import { loadStrategyPresetCards } from "@/lib/group-strategy-presets";
 import { GroupRuleEditor } from "../../group-rule-editor";
 import { CapacityPlanTable } from "../../capacity-plan-table";
-import { SetupStepBarns } from "@/lib/misc";
+import { SetupStepBarns, SetupStepPens } from "@/lib/misc";
 import { listBarns } from "../../barns-actions";
 import { BarnsTable } from "../../barns-table";
+import { listPens } from "../../pens-actions";
+import { PensTable } from "../../pens-table";
 import { WizardShell, type WizardLocation } from "../wizard-shell";
 import { getRecordingProfile } from "../../recording-actions";
 import { RecordingProfileForm } from "../../recording-form";
@@ -266,6 +268,24 @@ export default async function SetupStepPage({
           locationId={id}
           rows={barns}
           planTotalStalls={plan.totals.pen_capacity}
+        />
+      </WizardShell>
+    );
+  }
+
+  if (step === SetupStepPens && loc.manages_livestock) {
+    const [barns, pens, groups] = await Promise.all([
+      listBarns(id),
+      listPens(id),
+      getGroups(id),
+    ]);
+    return (
+      <WizardShell location={wizardLoc} currentStep={step as SetupStep}>
+        <PensTable
+          locationId={id}
+          rows={pens}
+          barns={barns.map((b) => ({ id: b.id, name: b.name }))}
+          groups={groups.map((g) => ({ id: g.id, label: g.label }))}
         />
       </WizardShell>
     );
