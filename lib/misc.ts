@@ -73,7 +73,7 @@ export type SetupStep =
   | typeof SetupStepArableParcels
   | typeof SetupStepDone;
 
-type WizardStep = {
+export type WizardStep = {
   key: SetupStep;
   label: string;
   description: string;
@@ -93,7 +93,7 @@ export const WizardSteps: WizardStep[] = [
     key: SetupStepRecording,
     label: "Recording profile",
     description: "Test-day frequency, milkings per day, recording method.",
-    shipped: false,
+    shipped: true,
     livestockOnly: true,
   },
   {
@@ -165,6 +165,35 @@ export function pathLocationSetup(id: string): string {
 
 export function pathLocationSetupStep(id: string, step: SetupStep): string {
   return `${PathSettingsLocations}/${id}/setup/${step}`;
+}
+
+/**
+ * Filters WizardSteps to the ones that apply to a location given its
+ * livestock/crops modules.
+ */
+export function relevantWizardSteps(opts: {
+  manages_livestock: boolean;
+  manages_crops: boolean;
+}): WizardStep[] {
+  return WizardSteps.filter((s) => {
+    if (s.livestockOnly && !opts.manages_livestock) return false;
+    if (s.cropsOnly && !opts.manages_crops) return false;
+    return true;
+  });
+}
+
+/**
+ * Computes the step that follows `currentStep` for a location. Returns
+ * `SetupStepDone` when `currentStep` is the last relevant step.
+ */
+export function nextWizardStep(
+  opts: { manages_livestock: boolean; manages_crops: boolean },
+  currentStep: SetupStep,
+): SetupStep {
+  const steps = relevantWizardSteps(opts);
+  const idx = steps.findIndex((s) => s.key === currentStep);
+  if (idx === -1 || idx === steps.length - 1) return SetupStepDone;
+  return steps[idx + 1].key;
 }
 
 // ---------- Units ----------

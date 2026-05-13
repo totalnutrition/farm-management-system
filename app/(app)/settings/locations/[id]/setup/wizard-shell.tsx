@@ -52,10 +52,12 @@ function nextStep(
 export function WizardShell({
   location,
   currentStep,
+  hideShellNext = false,
   children,
 }: {
   location: WizardLocation;
   currentStep: SetupStep;
+  hideShellNext?: boolean;
   children: React.ReactNode;
 }) {
   const steps = relevantSteps(location);
@@ -210,26 +212,30 @@ export function WizardShell({
             ) : null}
           </div>
           <div className="flex gap-2">
-            {currentStep !== SetupStepIdentity && !current?.shipped ? null : (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={isPending}
-                onClick={onNext}
-              >
-                Skip this step
-              </Button>
+            {hideShellNext ? null : (
+              <>
+                {currentStep !== SetupStepIdentity && !current?.shipped ? null : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={onNext}
+                  >
+                    Skip this step
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={isPending}
+                  onClick={onNext}
+                >
+                  {next === SetupStepDone ? "Finish" : "Next"}
+                  <HugeiconsIcon icon={ArrowRight01Icon} />
+                </Button>
+              </>
             )}
-            <Button
-              type="button"
-              size="sm"
-              disabled={isPending}
-              onClick={onNext}
-            >
-              {next === SetupStepDone ? "Finish" : "Next"}
-              <HugeiconsIcon icon={ArrowRight01Icon} />
-            </Button>
           </div>
         </footer>
       </main>

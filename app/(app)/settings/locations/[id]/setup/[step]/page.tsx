@@ -10,11 +10,14 @@ import {
   FarmTypeView,
   RoleSuperAdmin,
   SetupStepIdentity,
+  SetupStepRecording,
   WizardSteps,
-  pathLocationDetail,
+  nextWizardStep,
   type SetupStep,
 } from "@/lib/misc";
 import { WizardShell, type WizardLocation } from "../wizard-shell";
+import { getRecordingProfile } from "../../recording-actions";
+import { RecordingProfileForm } from "../../recording-form";
 
 type LocationRow = {
   id: string;
@@ -74,6 +77,34 @@ export default async function SetupStepPage({
     manages_crops: loc.manages_crops,
     setup_step: loc.setup_step,
   };
+
+  // Determine the step's "next" so step pages with their own submit
+  // know where to advance to.
+  const next = nextWizardStep(
+    {
+      manages_livestock: loc.manages_livestock,
+      manages_crops: loc.manages_crops,
+    },
+    step as SetupStep,
+  );
+
+  if (step === SetupStepRecording && loc.manages_livestock) {
+    const profile = await getRecordingProfile(id);
+    return (
+      <WizardShell
+        location={wizardLoc}
+        currentStep={step as SetupStep}
+        hideShellNext
+      >
+        <RecordingProfileForm
+          locationId={id}
+          initial={profile}
+          mode="wizard"
+          nextStep={next}
+        />
+      </WizardShell>
+    );
+  }
 
   return (
     <WizardShell location={wizardLoc} currentStep={step as SetupStep}>
