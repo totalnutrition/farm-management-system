@@ -42,18 +42,22 @@ export async function OperationalPlaceholder({
   return (
     <div className="flex flex-col gap-4 py-4">
       <ComingSoon title={title} description={description} note={note} />
-      <p className="text-xs text-muted-foreground text-center">
-        For now, log per-animal from the{" "}
-        <Link href="/animals" className="underline underline-offset-2">
-          Animals roster
-        </Link>{" "}
-        — open a cow and use her detail page&apos;s event log.
-      </p>
-      <div className="flex justify-center">
-        <Button asChild size="sm" variant="outline">
-          <Link href="/animals">Open Animals</Link>
-        </Button>
-      </div>
+      {livestockOnly ? (
+        <>
+          <p className="text-xs text-muted-foreground text-center">
+            For now, log per-animal from the{" "}
+            <Link href="/animals" className="underline underline-offset-2">
+              Animals roster
+            </Link>{" "}
+            — open a cow and use her detail page&apos;s event log.
+          </p>
+          <div className="flex justify-center">
+            <Button asChild size="sm" variant="outline">
+              <Link href="/animals">Open Animals</Link>
+            </Button>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
