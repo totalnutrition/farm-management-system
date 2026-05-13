@@ -9,16 +9,29 @@ import {
 import {
   FarmTypeView,
   RoleSuperAdmin,
+  SetupStepCapacityPlan,
   SetupStepGroupStrategy,
   SetupStepHerdProfile,
   SetupStepIdentity,
   SetupStepRecording,
+  SetupStepRules,
   WizardSteps,
   nextWizardStep,
   type SetupStep,
 } from "@/lib/misc";
-import { suggestStrategySlug } from "@/lib/herd-profile";
+import {
+  GroupClassView,
+  describePredicates,
+  suggestStrategySlug,
+} from "@/lib/herd-profile";
+import {
+  CapacityDefaultsFallback,
+  type CapacityDefaults,
+} from "@/lib/capacity-defaults";
+import { computeCapacityPlan } from "@/lib/capacity-plan";
 import { loadStrategyPresetCards } from "@/lib/group-strategy-presets";
+import { GroupRuleEditor } from "../../group-rule-editor";
+import { CapacityPlanTable } from "../../capacity-plan-table";
 import { WizardShell, type WizardLocation } from "../wizard-shell";
 import { getRecordingProfile } from "../../recording-actions";
 import { RecordingProfileForm } from "../../recording-form";
@@ -157,6 +170,104 @@ export default async function SetupStepPage({
           mode="wizard"
           nextStep={next}
         />
+      </WizardShell>
+    );
+  }
+
+  if (step === SetupStepRules && loc.manages_livestock) {
+    const groups = await getGroups(id);
+    return (
+      <WizardShell location={wizardLoc} currentStep={step as SetupStep}>
+        <div className="flex flex-col gap-3">
+          <p className="text-xs text-muted-foreground">
+            Review and tweak the rule predicates assigned to each group.
+            Defaults come from the preset you picked in the last step.
+            Use Next to continue once they look right.
+          </p>
+          {groups.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No groups yet — go back and pick a strategy.
+            </p>
+          ) : (
+            <div className="ring-1 ring-foreground/10 overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-foreground/5">
+                  <tr className="text-left">
+                    <th className="px-3 py-2 font-medium">Label</th>
+                    <th className="px-3 py-2 font-medium">Class</th>
+                    <th className="px-3 py-2 font-medium">Rule</th>
+                    <th className="px-3 py-2 font-medium text-right">Edit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groups.map((g) => (
+                    <tr key={g.id} className="border-t border-foreground/10">
+                      <td className="px-3 py-2 font-medium">{g.label}</td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {GroupClassView[g.group_class] ?? g.group_class}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-[10px]">
+                        {describePredicates(g.rule_predicates)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <GroupRuleEditor
+                          group={{
+                            id: g.id,
+                            label: g.label,
+                            rule_predicates: g.rule_predicates,
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </WizardShell>
+    );
+  }
+
+  if (step === SetupStepCapacityPlan && loc.manages_livestock) {
+    const [profile, groups] = await Promise.all([
+      getHerdProfile(id),
+      getGroups(id),
+    ]);
+    const { data: capDefaults } = await admin
+      .from("org_capacity_defaults")
+      .select(
+        "fresh_stocking_pct, high_stocking_pct, mid_stocking_pct, low_stocking_pct, dry_close_stocking_pct, dry_far_stocking_pct, fresh_bunk_in, high_bunk_in, mid_bunk_in, low_bunk_in, dry_close_bunk_in, dry_far_bunk_in",
+      )
+      .eq("organization_id", orgId ?? "00000000-0000-0000-0000-000000000000")
+      .maybeSingle();
+    const defaults: CapacityDefaults = capDefaults
+      ? {
+          fresh_stocking_pct: Number(capDefaults.fresh_stocking_pct),
+          high_stocking_pct: Number(capDefaults.high_stocking_pct),
+          mid_stocking_pct: Number(capDefaults.mid_stocking_pct),
+          low_stocking_pct: Number(capDefaults.low_stocking_pct),
+          dry_close_stocking_pct: Number(capDefaults.dry_close_stocking_pct),
+          dry_far_stocking_pct: Number(capDefaults.dry_far_stocking_pct),
+          fresh_bunk_in: Number(capDefaults.fresh_bunk_in),
+          high_bunk_in: Number(capDefaults.high_bunk_in),
+          mid_bunk_in: Number(capDefaults.mid_bunk_in),
+          low_bunk_in: Number(capDefaults.low_bunk_in),
+          dry_close_bunk_in: Number(capDefaults.dry_close_bunk_in),
+          dry_far_bunk_in: Number(capDefaults.dry_far_bunk_in),
+        }
+      : CapacityDefaultsFallback;
+    const plan = computeCapacityPlan(profile, groups, defaults);
+    return (
+      <WizardShell location={wizardLoc} currentStep={step as SetupStep}>
+        <div className="flex flex-col gap-3">
+          <p className="text-xs text-muted-foreground">
+            Computed from your herd profile × group rules × organization
+            stocking defaults. The Barn and Pen steps build toward these
+            numbers.
+          </p>
+          <CapacityPlanTable plan={plan} />
+        </div>
       </WizardShell>
     );
   }
