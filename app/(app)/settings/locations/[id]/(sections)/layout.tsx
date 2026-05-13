@@ -8,6 +8,8 @@ import {
 } from "@/lib/supabase-auth";
 import { RoleSuperAdmin } from "@/lib/misc";
 import {
+  LocationSectionGroupLabels,
+  LocationSectionGroupOrder,
   pathForLocationSection,
   relevantLocationSections,
 } from "@/lib/location-sections";
@@ -49,6 +51,12 @@ export default async function LocationSectionsLayout({
     description: s.description,
     icon: s.icon,
     shipped: s.shipped,
+    group: s.group,
+  }));
+
+  const navGroups = LocationSectionGroupOrder.map((key) => ({
+    key,
+    label: LocationSectionGroupLabels[key],
   }));
 
   return (
@@ -67,7 +75,11 @@ export default async function LocationSectionsLayout({
             {data.short_code}
           </span>
         </div>
-        <SectionSubnav items={items} ariaLabel="Location settings" />
+        <SectionSubnav
+          items={items}
+          ariaLabel="Location settings"
+          groups={navGroups}
+        />
       </aside>
       <main className="flex flex-col gap-4">{children}</main>
     </div>
