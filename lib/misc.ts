@@ -121,14 +121,14 @@ export const WizardSteps: WizardStep[] = [
     key: SetupStepRules,
     label: "Rules per group",
     description: "DIM, yield, parity, repro predicates.",
-    shipped: false,
+    shipped: true,
     livestockOnly: true,
   },
   {
     key: SetupStepCapacityPlan,
     label: "Capacity plan",
     description: "Computed stalls and bunk-feet per group.",
-    shipped: false,
+    shipped: true,
     livestockOnly: true,
   },
   {
