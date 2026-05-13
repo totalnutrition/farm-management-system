@@ -41,6 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -75,6 +76,17 @@ const statusOptions = [
   { value: "reference", label: "Reference only" },
 ] as const;
 
+const lifeStageOptions = [
+  { value: "calf", label: "Calf (pre-weaning)" },
+  { value: "weaned_heifer", label: "Weaned heifer" },
+  { value: "breeding_heifer", label: "Breeding heifer (open)" },
+  { value: "bred_heifer", label: "Bred heifer (pregnant)" },
+  { value: "lactating", label: "Lactating cow" },
+  { value: "dry", label: "Dry cow" },
+  { value: "bull", label: "Bull" },
+  { value: "other", label: "Other" },
+] as const;
+
 const originOptions = [
   { value: "born_on_farm", label: "Born on farm" },
   { value: "purchased", label: "Purchased" },
@@ -104,6 +116,14 @@ const formSchema = z.object({
   sire_name: z.string(),
   dam_tag_external: z.string(),
   notes: z.string(),
+  life_stage: z.enum(
+    lifeStageOptions.map((s) => s.value) as [string, ...string[]],
+  ),
+  is_pregnant: z.boolean(),
+  last_breeding_date: z.string(),
+  last_breeding_sire_naab: z.string(),
+  preg_check_date: z.string(),
+  days_pregnant: z.union([z.number(), z.literal("")]),
 });
 type FormValues = z.infer<typeof formSchema>;
 
@@ -130,6 +150,12 @@ const empty: FormValues = {
   sire_name: "",
   dam_tag_external: "",
   notes: "",
+  life_stage: "breeding_heifer",
+  is_pregnant: false,
+  last_breeding_date: "",
+  last_breeding_sire_naab: "",
+  preg_check_date: "",
+  days_pregnant: "" as unknown as number,
 };
 
 function toSubmit(locationId: string, values: FormValues) {
@@ -168,6 +194,21 @@ function toSubmit(locationId: string, values: FormValues) {
     sire_name: values.sire_name || null,
     dam_tag_external: values.dam_tag_external || null,
     notes: values.notes || null,
+    life_stage: values.life_stage as
+      | "calf"
+      | "weaned_heifer"
+      | "breeding_heifer"
+      | "bred_heifer"
+      | "lactating"
+      | "dry"
+      | "bull"
+      | "other",
+    is_pregnant: values.is_pregnant,
+    last_breeding_date: values.last_breeding_date || null,
+    last_breeding_sire_naab: values.last_breeding_sire_naab || null,
+    preg_check_date: values.preg_check_date || null,
+    days_pregnant:
+      typeof values.days_pregnant === "number" ? values.days_pregnant : null,
   };
 }
 
@@ -716,6 +757,120 @@ function AnimalFormBody({
         />
       </fieldset>
 
+      <fieldset className="grid grid-cols-2 gap-3 sm:grid-cols-3 border-t pt-3">
+        <FormField
+          control={form.control}
+          name="life_stage"
+          render={({ field }) => (
+            <FormItem className="sm:col-span-3">
+              <FormLabel>Life stage</FormLabel>
+              <FormControl>
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {lifeStageOptions.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="is_pregnant"
+          render={({ field }) => (
+            <FormItem className="sm:col-span-3 flex flex-row items-center justify-between gap-3 ring-1 ring-foreground/10 p-3">
+              <div className="flex flex-col gap-0.5">
+                <FormLabel className="font-normal">Currently pregnant</FormLabel>
+                <span className="text-[10px] text-muted-foreground">
+                  Toggling on captures last breeding + preg-check as repro events.
+                </span>
+              </div>
+              <FormControl>
+                <Switch
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+        {form.watch("is_pregnant") ? (
+          <>
+            <FormField
+              control={form.control}
+              name="last_breeding_date"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Last breeding date</FormLabel>
+                  <FormControl>
+                    <Input type="date" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="last_breeding_sire_naab"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Breeding sire NAAB</FormLabel>
+                  <FormControl>
+                    <Input placeholder="014HO07419" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="days_pregnant"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Days pregnant (today)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      value={field.value === "" || field.value === undefined ? "" : (field.value as number)}
+                      onChange={(e) =>
+                        field.onChange(
+                          e.target.value === ""
+                            ? ""
+                            : Number(e.target.value),
+                        )
+                      }
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="preg_check_date"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Preg check date</FormLabel>
+                  <FormControl>
+                    <Input type="date" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </>
+        ) : null}
+      </fieldset>
+
       <FormField
         control={form.control}
         name="notes"
@@ -837,6 +992,8 @@ function EditDialog({
           sire_name: row.sire_name ?? "",
           dam_tag_external: row.dam_tag_external ?? "",
           notes: row.notes ?? "",
+          life_stage:
+            (row.life_stage as FormValues["life_stage"]) ?? "other",
         } as FormValues)
       : empty,
   });

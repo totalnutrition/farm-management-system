@@ -7,6 +7,7 @@ import { listPens } from "@/app/(app)/settings/locations/[id]/pens-actions";
 import { getGroups } from "@/app/(app)/settings/locations/[id]/groups-actions";
 import { AnimalsTable } from "@/app/(app)/settings/locations/[id]/animals-table";
 import { NoLocationSelected } from "@/components/no-location-selected";
+import { AnimalsToolbar } from "./animals-toolbar";
 
 export const metadata = { title: "Animals" };
 export const dynamic = "force-dynamic";
@@ -66,12 +67,20 @@ export default async function AnimalsPage({
 
   return (
     <div className="flex flex-col gap-4 py-4">
-      <header className="flex flex-col gap-1">
-        <h1 className="font-heading text-lg font-medium">Animals</h1>
-        <p className="text-xs text-muted-foreground">
-          Roster at {active.name}. Use the top-right switcher to change
-          location.
-        </p>
+      <header className="flex flex-col gap-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <h1 className="font-heading text-lg font-medium">Animals</h1>
+            <p className="text-xs text-muted-foreground">
+              Roster at {active.name}. Use the top-right switcher to change
+              location.
+            </p>
+          </div>
+          <AnimalsToolbar
+            locationId={active.id}
+            hasNoAnimals={rows.length === 0}
+          />
+        </div>
       </header>
       <AnimalsTable
         locationId={active.id}
