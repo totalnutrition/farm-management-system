@@ -37,8 +37,11 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <Link href={PathHome} className="px-2 py-3 text-sidebar-foreground">
-          <FarmInsightLogo />
+        <Link
+          href={PathHome}
+          className="px-2 py-3 text-sidebar-foreground group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center"
+        >
+          <FarmInsightLogo collapsible />
         </Link>
       </SidebarHeader>
       <SidebarContent>
@@ -75,7 +78,7 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
         }
       </SidebarContent>
       <SidebarFooter>
-        <div className={`flex flex-row justify-between items-center`}>
+        <div className="flex flex-row justify-between items-center gap-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0">
           <ThemeToggle />
           <UserMenu user={user} />
         </div>

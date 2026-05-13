@@ -4,7 +4,6 @@ import {
   ClipboardClockIcon,
   BarnsIcon,
   GroupLayersIcon,
-  HorseIcon,
   DollarCircleIcon,
   PolyTankIcon,
   ApiIcon,
@@ -14,6 +13,7 @@ import {
   ShieldUserIcon,
   WheatIcon,
 } from "@hugeicons/core-free-icons";
+import { CowFaceIcon } from "@/lib/custom-icons";
 
 type HugeIcon = typeof Location01Icon;
 
@@ -71,7 +71,7 @@ export const LocationSections: LocationSection[] = [
     slug: "animals",
     label: "Animals",
     description: "Roster of animals at this location.",
-    icon: HorseIcon,
+    icon: CowFaceIcon,
     shipped: true,
     livestockOnly: true,
   },
