@@ -32,6 +32,9 @@ import { computeCapacityPlan } from "@/lib/capacity-plan";
 import { loadStrategyPresetCards } from "@/lib/group-strategy-presets";
 import { GroupRuleEditor } from "../../group-rule-editor";
 import { CapacityPlanTable } from "../../capacity-plan-table";
+import { SetupStepBarns } from "@/lib/misc";
+import { listBarns } from "../../barns-actions";
+import { BarnsTable } from "../../barns-table";
 import { WizardShell, type WizardLocation } from "../wizard-shell";
 import { getRecordingProfile } from "../../recording-actions";
 import { RecordingProfileForm } from "../../recording-form";
@@ -225,6 +228,45 @@ export default async function SetupStepPage({
             </div>
           )}
         </div>
+      </WizardShell>
+    );
+  }
+
+  if (step === SetupStepBarns && loc.manages_livestock) {
+    const [profile, groups, barns] = await Promise.all([
+      getHerdProfile(id),
+      getGroups(id),
+      listBarns(id),
+    ]);
+    const { data: capDefaults } = await admin
+      .from("org_capacity_defaults")
+      .select("*")
+      .eq("organization_id", orgId ?? "00000000-0000-0000-0000-000000000000")
+      .maybeSingle();
+    const defaults: CapacityDefaults = capDefaults
+      ? {
+          fresh_stocking_pct: Number(capDefaults.fresh_stocking_pct),
+          high_stocking_pct: Number(capDefaults.high_stocking_pct),
+          mid_stocking_pct: Number(capDefaults.mid_stocking_pct),
+          low_stocking_pct: Number(capDefaults.low_stocking_pct),
+          dry_close_stocking_pct: Number(capDefaults.dry_close_stocking_pct),
+          dry_far_stocking_pct: Number(capDefaults.dry_far_stocking_pct),
+          fresh_bunk_in: Number(capDefaults.fresh_bunk_in),
+          high_bunk_in: Number(capDefaults.high_bunk_in),
+          mid_bunk_in: Number(capDefaults.mid_bunk_in),
+          low_bunk_in: Number(capDefaults.low_bunk_in),
+          dry_close_bunk_in: Number(capDefaults.dry_close_bunk_in),
+          dry_far_bunk_in: Number(capDefaults.dry_far_bunk_in),
+        }
+      : CapacityDefaultsFallback;
+    const plan = computeCapacityPlan(profile, groups, defaults);
+    return (
+      <WizardShell location={wizardLoc} currentStep={step as SetupStep}>
+        <BarnsTable
+          locationId={id}
+          rows={barns}
+          planTotalStalls={plan.totals.pen_capacity}
+        />
       </WizardShell>
     );
   }

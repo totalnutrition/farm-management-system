@@ -63,7 +63,7 @@ export const LocationSections: LocationSection[] = [
     label: "Infrastructure",
     description: "Land parcels, barns, pens.",
     icon: Building03Icon,
-    shipped: false,
+    shipped: true,
   },
   {
     slug: "groups",
