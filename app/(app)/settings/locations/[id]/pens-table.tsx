@@ -363,7 +363,7 @@ function PenFormBody({
         />
       </div>
       <div className="border-t pt-3 flex flex-col gap-1.5">
-        <p className="text-xs font-medium">DC305 side-effect flags</p>
+        <p className="text-xs font-medium">Pen-type side-effect flags</p>
         <p className="text-[10px] text-muted-foreground">
           Entering these pens auto-writes events on the animal. AI and BULL
           are mutually exclusive.

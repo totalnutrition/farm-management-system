@@ -63,7 +63,7 @@ export async function listPens(locationId: string): Promise<Pen[]> {
 
 function validate(input: z.infer<typeof baseSchema>): string | null {
   if (input.is_AI_pen && input.is_BULL_pen) {
-    return "AI and Bull pens are mutually exclusive (DC305 rule).";
+    return "AI and Bull pens are mutually exclusive.";
   }
   return null;
 }

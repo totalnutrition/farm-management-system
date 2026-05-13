@@ -48,8 +48,8 @@ export default async function LocationReproductionPage({
         <h1 className="font-heading text-lg font-medium">Reproduction</h1>
         <p className="text-xs text-muted-foreground">
           Voluntary waiting period, heat detection, pregnancy-check schedule,
-          dry-off / close-up triggers, and KPI targets. Mirrors the DC305
-          SETUP\REPRO command and Bovisync&apos;s Reproduction tab.
+          dry-off and close-up triggers, and reproductive KPI targets. These
+          policies drive automatic event suggestions and dashboards.
         </p>
       </header>
       <section className="ring-1 ring-foreground/10 p-4">
