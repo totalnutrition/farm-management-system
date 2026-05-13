@@ -34,11 +34,22 @@ export type AnimalRow = {
   sire_name: string | null;
   dam_tag_external: string | null;
   notes: string | null;
+  life_stage: string | null;
 };
 
 const sexEnum = z.enum(["female", "male", "freemartin", "castrated"]);
 const statusEnum = z.enum(["active", "sold", "dead", "culled", "reference"]);
 const originEnum = z.enum(["born_on_farm", "purchased", "imported", "leased", "other"]);
+const lifeStageEnum = z.enum([
+  "calf",
+  "weaned_heifer",
+  "breeding_heifer",
+  "bred_heifer",
+  "lactating",
+  "dry",
+  "bull",
+  "other",
+]);
 
 const baseSchema = z.object({
   location_id: z.uuid(),
@@ -62,6 +73,14 @@ const baseSchema = z.object({
   sire_name: z.string().trim().nullable(),
   dam_tag_external: z.string().trim().nullable(),
   notes: z.string().trim().nullable(),
+  life_stage: lifeStageEnum,
+  // Optional pregnancy snapshot — when provided, a repro_events row is
+  // inserted alongside the animal so the system knows she's bred.
+  is_pregnant: z.boolean().optional().default(false),
+  last_breeding_date: z.string().nullable().optional(),
+  last_breeding_sire_naab: z.string().trim().nullable().optional(),
+  preg_check_date: z.string().nullable().optional(),
+  days_pregnant: z.number().int().min(0).max(310).nullable().optional(),
 });
 
 const updateSchema = baseSchema.extend({ id: z.uuid() });
@@ -92,7 +111,7 @@ export async function listAnimals(
   let q = authz.admin
     .from("animals")
     .select(
-      "id, animal_id, name, official_id, registration_number, breed_code, sex, birth_date, status, status_date, origin, source_farm, entry_date, current_pen_id, current_group_id, current_lactation, last_calving_date, sire_naab, sire_name, dam_tag_external, notes",
+      "*",
     )
     .eq("location_id", locationId)
     .order("animal_id");
@@ -110,7 +129,7 @@ export async function getAnimal(
   const { data } = await authz.admin
     .from("animals")
     .select(
-      "id, animal_id, name, official_id, registration_number, breed_code, sex, birth_date, status, status_date, origin, source_farm, entry_date, current_pen_id, current_group_id, current_lactation, last_calving_date, sire_naab, sire_name, dam_tag_external, notes",
+      "*",
     )
     .eq("location_id", locationId)
     .eq("id", id)
@@ -141,7 +160,46 @@ function toRow(input: z.infer<typeof baseSchema>) {
     sire_name: input.sire_name || null,
     dam_tag_external: input.dam_tag_external || null,
     notes: input.notes || null,
+    life_stage: input.life_stage,
   };
+}
+
+async function insertPregnancySnapshot(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any,
+  animalId: string,
+  input: z.infer<typeof baseSchema>,
+) {
+  if (!input.is_pregnant) return;
+  const events: Record<string, unknown>[] = [];
+  if (input.last_breeding_date) {
+    events.push({
+      animal_id: animalId,
+      event_date: input.last_breeding_date,
+      event_type: "breeding",
+      sire_naab: input.last_breeding_sire_naab || null,
+      source: "import_snapshot",
+    });
+  }
+  if (input.preg_check_date || input.days_pregnant) {
+    events.push({
+      animal_id: animalId,
+      event_date:
+        input.preg_check_date ||
+        new Date().toISOString().slice(0, 10),
+      event_type: "preg_check",
+      result: "Pregnant",
+      days_pregnant: input.days_pregnant ?? null,
+      source: "import_snapshot",
+    });
+  }
+  if (events.length > 0) {
+    try {
+      await admin.from("repro_events").insert(events);
+    } catch {
+      // schema not present yet — skip silently
+    }
+  }
 }
 
 export async function createAnimal(
@@ -158,8 +216,11 @@ export async function createAnimal(
     .select("id")
     .single();
   if (error) return { error: error.message };
+  const newId = data?.id as string;
+  await insertPregnancySnapshot(authz.admin, newId, parsed.data);
   revalidatePath(`/settings/locations/${parsed.data.location_id}/animals`);
-  return { success: true, id: data?.id as string };
+  revalidatePath(`/animals`);
+  return { success: true, id: newId };
 }
 
 export async function updateAnimal(
@@ -249,4 +310,149 @@ export async function getAnimalEventCounts(
     scores: results[6],
     pen_moves: results[7],
   };
+}
+
+// ---------------------------------------------------------------------
+// Sample-data generator — admin-only seeder for testing
+// ---------------------------------------------------------------------
+
+type SampleStage =
+  | "calf"
+  | "weaned_heifer"
+  | "breeding_heifer"
+  | "bred_heifer"
+  | "lactating"
+  | "dry";
+
+function daysAgo(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+function pick<T>(arr: readonly T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function buildSampleAnimal(
+  locationId: string,
+  index: number,
+  stage: SampleStage,
+): Record<string, unknown> {
+  const sireNaabs = ["014HO07419", "029HO19831", "551HO03734", "200HO11314"];
+  const breeds = ["HO", "JE", "BS"];
+
+  const animal_id = `S${String(1000 + index)}`;
+  const base = {
+    location_id: locationId,
+    animal_id,
+    name: null,
+    official_id: null,
+    registration_number: null,
+    breed_code: pick(breeds),
+    sex: "female" as const,
+    status: "active" as const,
+    status_date: null,
+    origin: "born_on_farm" as const,
+    source_farm: null,
+    current_pen_id: null,
+    current_group_id: null,
+    sire_naab: pick(sireNaabs),
+    sire_name: null,
+    dam_tag_external: null,
+    notes: "Sample animal — generated for testing",
+    life_stage: stage,
+  };
+
+  switch (stage) {
+    case "calf": {
+      const ageDays = 30 + Math.floor(Math.random() * 60);
+      return {
+        ...base,
+        birth_date: daysAgo(ageDays),
+        entry_date: daysAgo(ageDays),
+        current_lactation: 0,
+        last_calving_date: null,
+      };
+    }
+    case "weaned_heifer": {
+      const ageMonths = 4 + Math.floor(Math.random() * 6);
+      return {
+        ...base,
+        birth_date: daysAgo(ageMonths * 30),
+        entry_date: daysAgo(ageMonths * 30),
+        current_lactation: 0,
+        last_calving_date: null,
+      };
+    }
+    case "breeding_heifer": {
+      const ageMonths = 13 + Math.floor(Math.random() * 6);
+      return {
+        ...base,
+        birth_date: daysAgo(ageMonths * 30),
+        entry_date: daysAgo(ageMonths * 30),
+        current_lactation: 0,
+        last_calving_date: null,
+      };
+    }
+    case "bred_heifer": {
+      const ageMonths = 18 + Math.floor(Math.random() * 4);
+      return {
+        ...base,
+        birth_date: daysAgo(ageMonths * 30),
+        entry_date: daysAgo(ageMonths * 30),
+        current_lactation: 0,
+        last_calving_date: null,
+      };
+    }
+    case "lactating": {
+      const ageYears = 2 + Math.floor(Math.random() * 5);
+      const parity = 1 + Math.floor(Math.random() * 4);
+      const dim = 15 + Math.floor(Math.random() * 280);
+      return {
+        ...base,
+        birth_date: daysAgo(ageYears * 365),
+        entry_date: daysAgo(ageYears * 365),
+        current_lactation: parity,
+        last_calving_date: daysAgo(dim),
+      };
+    }
+    case "dry": {
+      const ageYears = 3 + Math.floor(Math.random() * 4);
+      const parity = 2 + Math.floor(Math.random() * 4);
+      // dried off ~30 days ago, was milking before that
+      return {
+        ...base,
+        birth_date: daysAgo(ageYears * 365),
+        entry_date: daysAgo(ageYears * 365),
+        current_lactation: parity,
+        last_calving_date: null,
+      };
+    }
+  }
+}
+
+export async function generateSampleAnimals(locationId: string): Promise<Result> {
+  const authz = await authorize(locationId);
+  if ("error" in authz) return { error: authz.error };
+
+  // 20 animals split as a real dairy might look:
+  // 12 lactating, 3 dry, 3 heifers (bred + breeding), 2 calves
+  const stages: SampleStage[] = [
+    ...Array(12).fill("lactating"),
+    ...Array(3).fill("dry"),
+    "bred_heifer",
+    "bred_heifer",
+    "breeding_heifer",
+    "calf",
+    "weaned_heifer",
+  ];
+
+  const rows = stages.map((s, i) => buildSampleAnimal(locationId, i, s));
+  const { error } = await authz.admin.from("animals").insert(rows);
+  if (error) return { error: error.message };
+  revalidatePath(`/animals`);
+  revalidatePath(`/settings/locations/${locationId}/animals`);
+  revalidatePath(`/`);
+  return { success: true };
 }

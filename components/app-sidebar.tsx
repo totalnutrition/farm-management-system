@@ -15,6 +15,15 @@ import {
   User,
   DashboardSquare01Icon,
   WheatIcon,
+  AlertCircleIcon,
+  ChartLineData02Icon,
+  ClipboardClockIcon,
+  MedicalFileIcon,
+  TruckIcon,
+  TaskDaily01Icon,
+  Calendar03Icon,
+  PackageIcon,
+  Notebook01Icon,
 } from "@hugeicons/core-free-icons"
 import { CowFaceIcon } from "@/lib/custom-icons"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
@@ -26,7 +35,7 @@ export type SidebarUser = {
   role: string | null
 }
 
-type HugeIcon = Parameters<typeof HugeiconsIcon>[0]["icon"];
+type HugeIcon = Parameters<typeof HugeiconsIcon>[0]["icon"]
 
 type MenuLink = {
   name: string
@@ -41,41 +50,72 @@ type MenuGroup = {
   roles: string[]
 }
 
+const ROLES = [RoleSuperAdmin, RoleAdmin]
+
 const MENU: MenuGroup[] = [
   {
     label: "Operations",
-    roles: [RoleSuperAdmin, RoleAdmin],
+    roles: ROLES,
     links: [
-      {
-        name: "Dashboard",
-        icon: DashboardSquare01Icon,
-        link: PathHome,
-        roles: [RoleSuperAdmin, RoleAdmin],
-      },
-      {
-        name: "Animals",
-        icon: CowFaceIcon,
-        link: "/animals",
-        roles: [RoleSuperAdmin, RoleAdmin],
-      },
-      {
-        name: "Forage & crops",
-        icon: WheatIcon,
-        link: "/crops",
-        roles: [RoleSuperAdmin, RoleAdmin],
-      },
+      { name: "Dashboard",    icon: DashboardSquare01Icon, link: "/",            roles: ROLES },
+      { name: "Hot list",     icon: AlertCircleIcon,        link: "/hot-list",    roles: ROLES },
+      { name: "Animals",      icon: CowFaceIcon,            link: "/animals",     roles: ROLES },
+    ],
+  },
+  {
+    label: "Reproduction",
+    roles: ROLES,
+    links: [
+      { name: "Heats",        icon: ChartLineData02Icon,    link: "/heats",       roles: ROLES },
+      { name: "Breedings",    icon: ChartLineData02Icon,    link: "/breedings",   roles: ROLES },
+      { name: "Preg checks",  icon: ChartLineData02Icon,    link: "/preg-checks", roles: ROLES },
+      { name: "Calvings",     icon: ChartLineData02Icon,    link: "/calvings",    roles: ROLES },
+    ],
+  },
+  {
+    label: "Health",
+    roles: ROLES,
+    links: [
+      { name: "Health events", icon: MedicalFileIcon,       link: "/health",      roles: ROLES },
+      { name: "Withdrawals",  icon: AlertCircleIcon,        link: "/withdrawals", roles: ROLES },
+    ],
+  },
+  {
+    label: "Milk",
+    roles: ROLES,
+    links: [
+      { name: "Milk recording", icon: ClipboardClockIcon,   link: "/milk-recording", roles: ROLES },
+      { name: "Test days",    icon: TaskDaily01Icon,        link: "/test-days",    roles: ROLES },
+    ],
+  },
+  {
+    label: "Movements",
+    roles: ROLES,
+    links: [
+      { name: "Pen moves",    icon: TruckIcon,              link: "/pen-moves",   roles: ROLES },
+      { name: "Transactions", icon: PackageIcon,            link: "/transactions",roles: ROLES },
+    ],
+  },
+  {
+    label: "Crops",
+    roles: ROLES,
+    links: [
+      { name: "Forage & crops", icon: WheatIcon,            link: "/crops",       roles: ROLES },
+    ],
+  },
+  {
+    label: "Reports",
+    roles: ROLES,
+    links: [
+      { name: "Reports",      icon: Notebook01Icon,         link: "/reports",     roles: ROLES },
+      { name: "Calendar",     icon: Calendar03Icon,         link: "/calendar",    roles: ROLES },
     ],
   },
   {
     label: "Workspace",
-    roles: [RoleSuperAdmin, RoleAdmin],
+    roles: ROLES,
     links: [
-      {
-        name: "Settings",
-        icon: Settings02Icon,
-        link: PathSettings,
-        roles: [RoleSuperAdmin, RoleAdmin],
-      },
+      { name: "Settings",     icon: Settings02Icon,         link: PathSettings,   roles: ROLES },
     ],
   },
 ]
@@ -92,22 +132,14 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
         </Link>
       </SidebarHeader>
       <SidebarContent>
-        {
-          MENU.map((i) =>
-            (
-              user.role &&
-              i.roles.includes(user.role)
-            ) &&
+        {MENU.map((i) =>
+          user.role && i.roles.includes(user.role) && (
             <SidebarGroup key={i.label}>
               <SidebarGroupLabel>{i.label}</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {
-                    i.links.map((j) =>
-                      (
-                        user.role &&
-                        j.roles.includes(user.role)
-                      ) &&
+                  {i.links.map((j) =>
+                    user.role && j.roles.includes(user.role) && (
                       <SidebarMenuItem key={j.name}>
                         <SidebarMenuButton asChild tooltip={j.name}>
                           <Link href={j.link}>
@@ -116,13 +148,13 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
-                    )
-                  }
+                    ),
+                  )}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
-          )
-        }
+          ),
+        )}
       </SidebarContent>
       <SidebarFooter>
         <div className="flex flex-row justify-between items-center gap-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0">
