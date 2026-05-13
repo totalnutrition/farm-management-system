@@ -46,9 +46,6 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
         <Link href={PathHome} className="px-2 py-3 text-sidebar-foreground">
           <FarmInsightLogo />
         </Link>
-        <div className="px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-sidebar-foreground/80">
-          Farm Management System
-        </div>
       </SidebarHeader>
       <SidebarContent>
         {
