@@ -22,7 +22,7 @@ export default async function OrganizationGeneralPage() {
   let query = admin
     .from("organizations")
     .select(
-      "id, name, address, default_currency, default_units, default_timezone, created_at",
+      "id, name, address, default_currency, default_units, default_timezone, default_land_area_unit, created_at",
     )
     .order("created_at", { ascending: false });
 
@@ -44,9 +44,12 @@ export default async function OrganizationGeneralPage() {
     id: r.id,
     name: r.name,
     address: r.address,
-    default_currency: (r.default_currency as string) ?? "USD",
+    default_currency: (r.default_currency as string) ?? "PKR",
     default_units: (r.default_units as "metric" | "imperial") ?? "metric",
-    default_timezone: (r.default_timezone as string) ?? "UTC",
+    default_timezone: (r.default_timezone as string) ?? "Asia/Karachi",
+    default_land_area_unit:
+      (r.default_land_area_unit as OrganizationRow["default_land_area_unit"]) ??
+      "acre",
   }));
 
   const canManage = role === RoleSuperAdmin;

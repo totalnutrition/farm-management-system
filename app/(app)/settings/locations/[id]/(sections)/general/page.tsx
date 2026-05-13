@@ -13,6 +13,7 @@ import {
   type SettingSource,
   type Units,
 } from "@/lib/settings-resolver";
+import { formatArea, landUnitLabel, type LandAreaUnit } from "@/lib/land-units";
 
 type LocationRow = {
   id: string;
@@ -34,6 +35,7 @@ type LocationRow = {
   timezone: string | null;
   currency_override: string | null;
   units_override: Units | null;
+  land_area_unit_override: LandAreaUnit | null;
 };
 
 type OrgRow = {
@@ -42,6 +44,7 @@ type OrgRow = {
   default_currency: string;
   default_units: Units;
   default_timezone: string;
+  default_land_area_unit: LandAreaUnit;
 };
 
 export const metadata = { title: "Location · General" };
@@ -82,7 +85,7 @@ export default async function LocationGeneralPage({
   const { data } = await admin
     .from("locations")
     .select(
-      "id, organization_id, name, short_code, farm_type, country, province, city, address, latitude, longitude, status, manages_livestock, manages_crops, livestock_area_hectares, arable_area_hectares, timezone, currency_override, units_override",
+      "id, organization_id, name, short_code, farm_type, country, province, city, address, latitude, longitude, status, manages_livestock, manages_crops, livestock_area_hectares, arable_area_hectares, timezone, currency_override, units_override, land_area_unit_override",
     )
     .eq("id", id)
     .single();
@@ -93,17 +96,21 @@ export default async function LocationGeneralPage({
 
   const { data: orgData } = await admin
     .from("organizations")
-    .select("id, name, default_currency, default_units, default_timezone")
+    .select(
+      "id, name, default_currency, default_units, default_timezone, default_land_area_unit",
+    )
     .eq("id", loc.organization_id)
     .single();
   const org = orgData
     ? ({
         id: orgData.id as string,
         name: orgData.name as string,
-        default_currency: (orgData.default_currency as string) ?? "USD",
-        default_units:
-          (orgData.default_units as Units) ?? "metric",
-        default_timezone: (orgData.default_timezone as string) ?? "UTC",
+        default_currency: (orgData.default_currency as string) ?? "PKR",
+        default_units: (orgData.default_units as Units) ?? "metric",
+        default_timezone:
+          (orgData.default_timezone as string) ?? "Asia/Karachi",
+        default_land_area_unit:
+          (orgData.default_land_area_unit as LandAreaUnit) ?? "acre",
       } satisfies OrgRow)
     : null;
 
@@ -112,9 +119,12 @@ export default async function LocationGeneralPage({
       currency_override: loc.currency_override,
       units_override: loc.units_override,
       timezone: loc.timezone,
+      land_area_unit_override: loc.land_area_unit_override,
     },
     org,
   );
+
+  const areaUnit = resolved.land_area_unit.value;
 
   return (
     <div className="flex flex-col gap-4 py-2">
@@ -163,14 +173,14 @@ export default async function LocationGeneralPage({
         <div className="text-muted-foreground">Livestock module</div>
         <div>
           {loc.manages_livestock
-            ? `Enabled · ${loc.livestock_area_hectares ?? "—"} ha`
+            ? `Enabled · ${formatArea(loc.livestock_area_hectares, areaUnit)}`
             : "Disabled"}
         </div>
 
         <div className="text-muted-foreground">Crops module</div>
         <div>
           {loc.manages_crops
-            ? `Enabled · ${loc.arable_area_hectares ?? "—"} ha`
+            ? `Enabled · ${formatArea(loc.arable_area_hectares, areaUnit)}`
             : "Disabled"}
         </div>
       </section>
@@ -200,6 +210,12 @@ export default async function LocationGeneralPage({
           <dd>{resolved.timezone.value}</dd>
           <dd>
             <SourceBadge source={resolved.timezone.source} />
+          </dd>
+
+          <dt className="text-muted-foreground">Land area unit</dt>
+          <dd>{landUnitLabel(resolved.land_area_unit.value)}</dd>
+          <dd>
+            <SourceBadge source={resolved.land_area_unit.source} />
           </dd>
         </dl>
       </section>
