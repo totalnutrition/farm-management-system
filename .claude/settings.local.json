@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "mcp__9a74ae53-1441-4095-b3b7-606cfdbd8a80__list_deployments"
     ]
   }
 }
