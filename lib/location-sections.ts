@@ -122,7 +122,7 @@ export const LocationSections: LocationSection[] = [
     label: "Access",
     description: "Users who can access this location + permissions.",
     icon: LockKeyIcon,
-    shipped: false,
+    shipped: true,
   },
 ];
 
