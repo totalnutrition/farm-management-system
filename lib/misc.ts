@@ -149,7 +149,7 @@ export const WizardSteps: WizardStep[] = [
     key: SetupStepArableParcels,
     label: "Arable parcels",
     description: "Crop fields.",
-    shipped: false,
+    shipped: true,
     cropsOnly: true,
   },
 ];

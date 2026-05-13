@@ -17,6 +17,8 @@ import { BarnsTable } from "../../barns-table";
 import { getGroups, getHerdProfile } from "../../groups-actions";
 import { listPens } from "../../pens-actions";
 import { PensTable } from "../../pens-table";
+import { listArableParcels } from "../../arable-parcels-actions";
+import { ArableParcelsTable } from "../../arable-parcels-table";
 
 export const metadata = { title: "Location · Infrastructure" };
 export const dynamic = "force-dynamic";
@@ -34,13 +36,15 @@ export default async function LocationInfrastructurePage({
   const admin = createAdminClient();
   const { data } = await admin
     .from("locations")
-    .select("id, organization_id, manages_livestock")
+    .select(
+      "id, organization_id, manages_livestock, manages_crops, arable_area_hectares",
+    )
     .eq("id", id)
     .single();
   if (!data) notFound();
   if (role !== RoleSuperAdmin && data.organization_id !== orgId) notFound();
 
-  if (!data.manages_livestock) {
+  if (!data.manages_livestock && !data.manages_crops) {
     return (
       <ComingSoon
         title="Infrastructure"
@@ -108,6 +112,20 @@ export default async function LocationInfrastructurePage({
           groups={groups.map((g) => ({ id: g.id, label: g.label }))}
         />
       </section>
+      {data.manages_crops ? (
+        <section className="ring-1 ring-foreground/10 p-4 flex flex-col gap-3">
+          <h2 className="text-sm font-medium">Arable parcels</h2>
+          <ArableParcelsTable
+            locationId={id}
+            rows={await listArableParcels(id)}
+            plannedTotalHectares={
+              data.arable_area_hectares !== null
+                ? Number(data.arable_area_hectares)
+                : null
+            }
+          />
+        </section>
+      ) : null}
     </div>
   );
 }
