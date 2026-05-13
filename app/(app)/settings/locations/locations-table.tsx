@@ -63,6 +63,7 @@ import {
   pathLocationSetup,
 } from "@/lib/misc";
 import { CommonTimezones } from "@/lib/timezones";
+import { CommonCurrencies } from "@/lib/settings-resolver";
 import {
   createLocation,
   deleteLocation,
@@ -87,6 +88,8 @@ export type LocationRow = {
   livestock_area_hectares: number | null;
   arable_area_hectares: number | null;
   timezone: string | null;
+  currency_override: string | null;
+  units_override: "metric" | "imperial" | null;
 };
 
 const formSchema = z
@@ -115,6 +118,8 @@ const formSchema = z
     livestock_area_hectares: z.string().trim(),
     arable_area_hectares: z.string().trim(),
     timezone: z.string().trim(),
+    currency_override: z.string().trim(),
+    units_override: z.union([z.literal(""), z.literal("metric"), z.literal("imperial")]),
   })
   .refine((v) => v.manages_livestock || v.manages_crops, {
     path: ["manages_livestock"],
@@ -138,6 +143,8 @@ const emptyValues: FormValues = {
   livestock_area_hectares: "",
   arable_area_hectares: "",
   timezone: "",
+  currency_override: "",
+  units_override: "",
 };
 
 export function LocationsTable({ rows }: { rows: LocationRow[] }) {
@@ -287,22 +294,43 @@ function StatusField({
   );
 }
 
-function TimezoneField({
+// Radix Select rejects "" as a value, so we round-trip null/empty through
+// a sentinel constant.
+const INHERIT_SENTINEL = "__inherit__";
+
+function fromSentinel(v: string): string {
+  return v === INHERIT_SENTINEL ? "" : v;
+}
+function toSentinel(v: string): string {
+  return v === "" ? INHERIT_SENTINEL : v;
+}
+
+function InheritableSelect({
   value,
   onChange,
+  inheritLabel,
+  options,
 }: {
   value: string;
   onChange: (v: string) => void;
+  inheritLabel: string;
+  options: { value: string; label: string }[];
 }) {
   return (
-    <Select value={value || "UTC"} onValueChange={onChange}>
+    <Select
+      value={toSentinel(value)}
+      onValueChange={(v) => onChange(fromSentinel(v))}
+    >
       <SelectTrigger>
-        <SelectValue placeholder="Timezone" />
+        <SelectValue />
       </SelectTrigger>
       <SelectContent className="max-h-72">
-        {CommonTimezones.map((t) => (
-          <SelectItem key={t.value} value={t.value}>
-            {t.label}
+        <SelectItem value={INHERIT_SENTINEL}>
+          <span className="italic text-muted-foreground">{inheritLabel}</span>
+        </SelectItem>
+        {options.map((o) => (
+          <SelectItem key={o.value} value={o.value}>
+            {o.label}
           </SelectItem>
         ))}
       </SelectContent>
@@ -423,7 +451,51 @@ function LocationFormBody({
             <FormItem>
               <FormLabel>Timezone</FormLabel>
               <FormControl>
-                <TimezoneField value={field.value} onChange={field.onChange} />
+                <InheritableSelect
+                  value={field.value}
+                  onChange={field.onChange}
+                  inheritLabel="Inherit from organization"
+                  options={CommonTimezones}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="currency_override"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Currency</FormLabel>
+              <FormControl>
+                <InheritableSelect
+                  value={field.value}
+                  onChange={field.onChange}
+                  inheritLabel="Inherit from organization"
+                  options={CommonCurrencies}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="units_override"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Units</FormLabel>
+              <FormControl>
+                <InheritableSelect
+                  value={field.value}
+                  onChange={field.onChange}
+                  inheritLabel="Inherit from organization"
+                  options={[
+                    { value: "metric", label: "Metric (kg, L, ha)" },
+                    { value: "imperial", label: "Imperial (lb, gal, ac)" },
+                  ]}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -675,6 +747,9 @@ function EditDialog({
             row.livestock_area_hectares?.toString() ?? "",
           arable_area_hectares: row.arable_area_hectares?.toString() ?? "",
           timezone: row.timezone ?? "",
+          currency_override: row.currency_override ?? "",
+          units_override:
+            (row.units_override ?? "") as FormValues["units_override"],
         }
       : emptyValues,
   });

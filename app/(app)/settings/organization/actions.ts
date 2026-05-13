@@ -16,11 +16,29 @@ type Result = { error?: string; success?: boolean };
 const baseSchema = z.object({
   name: z.string().trim().min(1, "Name is required."),
   address: z.string().trim(),
+  default_currency: z
+    .string()
+    .trim()
+    .min(3, "Currency must be a 3-letter code.")
+    .max(8, "Currency code is too long.")
+    .default("USD"),
+  default_units: z.enum(["metric", "imperial"]).default("metric"),
+  default_timezone: z.string().trim().min(1, "Timezone is required.").default("UTC"),
 });
 
 const updateSchema = baseSchema.extend({
   id: z.uuid(),
 });
+
+function toRow(input: z.infer<typeof baseSchema>) {
+  return {
+    name: input.name,
+    address: input.address || null,
+    default_currency: input.default_currency.toUpperCase(),
+    default_units: input.default_units,
+    default_timezone: input.default_timezone,
+  };
+}
 
 export async function createOrganization(
   input: z.infer<typeof baseSchema>,
@@ -31,12 +49,11 @@ export async function createOrganization(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  const { name, address } = parsed.data;
 
   const admin = createAdminClient();
   const { error } = await admin
     .from("organizations")
-    .insert({ name, address: address || null });
+    .insert(toRow(parsed.data));
   if (error) return { error: error.message };
 
   revalidatePath(PathSettingsOrganization);
@@ -52,7 +69,7 @@ export async function updateOrganization(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  const { id, name, address } = parsed.data;
+  const { id } = parsed.data;
 
   if (getRoleFromUser(user) !== RoleSuperAdmin) {
     if (getOrganizationIdFromUser(user) !== id) {
@@ -63,7 +80,7 @@ export async function updateOrganization(
   const admin = createAdminClient();
   const { error } = await admin
     .from("organizations")
-    .update({ name, address: address || null })
+    .update(toRow(parsed.data))
     .eq("id", id);
   if (error) return { error: error.message };
 
