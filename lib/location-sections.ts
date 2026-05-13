@@ -86,7 +86,7 @@ export const LocationSections: LocationSection[] = [
     label: "Bulk tank",
     description: "Reconciliation threshold and diversion buckets.",
     icon: MilkBottleIcon,
-    shipped: false,
+    shipped: true,
     livestockOnly: true,
   },
   {
