@@ -35,7 +35,7 @@ const MENU = [
 
 export function AppSidebar({ user }: { user: SidebarUser }) {
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarHeader>
         <Link href={PathHome} className="px-2 py-3 text-sidebar-foreground">
           <FarmInsightLogo />
