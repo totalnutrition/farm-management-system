@@ -51,7 +51,7 @@ export const OrganizationSections: OrganizationSection[] = [
       "Group strategies, pricing schemes, capacity defaults.",
     href: `${PathSettingsOrganization}/presets`,
     icon: Layout01Icon,
-    shipped: false,
+    shipped: true,
   },
   {
     slug: "billing",
