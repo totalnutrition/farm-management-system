@@ -1,5 +1,5 @@
 -- =====================================================================
--- 0010 — Pens (DC305 pen-type taxonomy)
+-- 0010 — Pens (industry-standard pen-type taxonomy)
 -- =====================================================================
 
 do $$
@@ -22,7 +22,7 @@ create table if not exists public.pens (
   pen_code text,
   type pen_type not null default 'milking',
   capacity_head int,
-  -- DC305 side-effect flags
+  -- Pen-type side-effect flags
   is_AI_pen boolean not null default false,
   is_BULL_pen boolean not null default false,
   is_DRY_pen boolean not null default false,
