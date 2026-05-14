@@ -37,6 +37,9 @@ import {
   quickAddPen,
   deleteBarnQuick,
   mergeBarnsQuick,
+  updatePenInline,
+  deletePenInline,
+  reorderPen,
 } from "./actions";
 import { Input } from "@/components/ui/input";
 import { Form } from "@/components/ui/form";
@@ -72,6 +75,12 @@ export type PenLite = {
   id: string;
   name: string;
   capacity_head: number | null;
+  bunk_running_ft: number | null;
+  length_ft: number | null;
+  width_ft: number | null;
+  barn_id: string | null;
+  side: "left" | "right" | null;
+  position_index: number;
   current_count: number;
   suggested_count: number;
 };
@@ -131,15 +140,87 @@ export function PenMovesClient({
           , then come back to stripe them across pens.
         </div>
       ) : (
-        blocks.map((b) => (
-          <GroupBlockCard
-            key={b.group_id}
-            block={b}
-            locationId={locationId}
-            barns={barns}
-          />
-        ))
+        <GroupBlocksList blocks={blocks} locationId={locationId} barns={barns} />
       )}
+    </div>
+  );
+}
+
+function GroupBlocksList({
+  blocks,
+  locationId,
+  barns,
+}: {
+  blocks: GroupBlock[];
+  locationId: string;
+  barns: Barn[];
+}) {
+  const [showUngated, setShowUngated] = useState(false);
+  const ready = blocks.filter((b) => b.pens.length > 0);
+  const ungated = blocks.filter((b) => b.pens.length === 0);
+  const ungatedCowCount = ungated.reduce((s, b) => s + b.animals.length, 0);
+
+  return (
+    <div className="flex flex-col gap-4">
+      {ready.map((b) => (
+        <GroupBlockCard
+          key={b.group_id}
+          block={b}
+          locationId={locationId}
+          barns={barns}
+        />
+      ))}
+
+      {ungated.length > 0 ? (
+        <section className="ring-1 ring-amber-500/40 bg-amber-500/5 flex flex-col">
+          <header className="px-3 py-2 flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-0.5">
+              <h3 className="text-sm font-medium">
+                {ungated.length} group{ungated.length === 1 ? "" : "s"} still need pens
+              </h3>
+              <p className="text-[10px] text-muted-foreground">
+                {ungatedCowCount} cow{ungatedCowCount === 1 ? "" : "s"} unassigned.
+                Expand to declare pens inline.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setShowUngated((v) => !v)}
+            >
+              {showUngated ? "Collapse" : `Show ${ungated.length}`}
+            </Button>
+          </header>
+          {showUngated ? (
+            <div className="flex flex-col gap-2 px-3 pb-3 pt-1">
+              {ungated.map((b) => (
+                <GroupBlockCard
+                  key={b.group_id}
+                  block={b}
+                  locationId={locationId}
+                  barns={barns}
+                />
+              ))}
+            </div>
+          ) : (
+            <ul className="px-3 pb-3 pt-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1 text-xs">
+              {ungated.map((b) => (
+                <li
+                  key={b.group_id}
+                  className="flex items-baseline justify-between gap-2"
+                >
+                  <span className="font-medium">{b.group_label}</span>
+                  <span className="text-[10px] text-muted-foreground tabular-nums">
+                    {b.animals.length} cow{b.animals.length === 1 ? "" : "s"}
+                    {b.target_pen_cap > 0 ? ` · ~${b.target_pen_cap} cap` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -303,7 +384,12 @@ function GroupBlockCard({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-foreground/10">
         {block.pens.map((p) => (
-          <PenTile key={p.id} pen={p} />
+          <PenTile
+            key={p.id}
+            pen={p}
+            locationId={locationId}
+            barns={barns}
+          />
         ))}
       </div>
       <div className="px-3 py-2 border-t border-foreground/10">
@@ -576,7 +662,19 @@ function AddPenInline({
   );
 }
 
-function PenTile({ pen }: { pen: PenLite }) {
+function PenTile({
+  pen,
+  locationId,
+  barns,
+}: {
+  pen: PenLite;
+  locationId: string;
+  barns: Barn[];
+}) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [busy, startTransition] = useTransition();
+
   const cap = pen.capacity_head;
   const sugg = pen.suggested_count;
   let tone = "text-muted-foreground";
@@ -594,9 +692,86 @@ function PenTile({ pen }: { pen: PenLite }) {
       badge = `${Math.round(pct)}%`;
     }
   }
+
+  const move = (direction: "up" | "down") => {
+    startTransition(async () => {
+      const r = await reorderPen({ pen_id: pen.id, direction });
+      if (r.error) {
+        toast.error(r.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  const onDelete = () => {
+    if (
+      !confirm(
+        `Delete "${pen.name}"? ${pen.current_count > 0 ? `${pen.current_count} cow(s) are still in this pen and must be moved first.` : "This cannot be undone."}`,
+      )
+    )
+      return;
+    startTransition(async () => {
+      const r = await deletePenInline({ pen_id: pen.id });
+      if (r.error) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(`"${pen.name}" deleted.`);
+      router.refresh();
+    });
+  };
+
   return (
-    <div className="bg-background p-3 flex flex-col gap-0.5">
-      <span className="text-xs font-medium">{pen.name}</span>
+    <div className="bg-background p-3 flex flex-col gap-1">
+      <div className="flex items-start justify-between gap-1">
+        <span className="text-xs font-medium truncate" title={pen.name}>
+          {pen.name}
+        </span>
+        <div className="flex items-center gap-0.5 -mt-1 -mr-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0 text-[11px]"
+            onClick={() => move("up")}
+            disabled={busy}
+            title="Move earlier in barn"
+          >
+            ↑
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0 text-[11px]"
+            onClick={() => move("down")}
+            disabled={busy}
+            title="Move later in barn"
+          >
+            ↓
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 px-1.5 text-[10px]"
+            onClick={() => setEditing(true)}
+          >
+            Edit
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 px-1.5 text-[10px] text-destructive"
+            onClick={onDelete}
+            disabled={busy}
+          >
+            ×
+          </Button>
+        </div>
+      </div>
       <span className="text-[10px] text-muted-foreground tabular-nums">
         cap {cap ?? "—"} · current {pen.current_count}
       </span>
@@ -604,7 +779,208 @@ function PenTile({ pen }: { pen: PenLite }) {
         suggested {sugg}
         {badge ? ` · ${badge}` : ""}
       </span>
+      <PenEditDialog
+        open={editing}
+        onOpenChange={(o) => !o && setEditing(false)}
+        pen={pen}
+        locationId={locationId}
+        barns={barns}
+      />
     </div>
+  );
+}
+
+function PenEditDialog({
+  open,
+  onOpenChange,
+  pen,
+  locationId,
+  barns,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  pen: PenLite;
+  locationId: string;
+  barns: Barn[];
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        {open ? (
+          <PenEditBody
+            pen={pen}
+            locationId={locationId}
+            barns={barns}
+            onClose={() => onOpenChange(false)}
+          />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PenEditBody({
+  pen,
+  locationId,
+  barns,
+  onClose,
+}: {
+  pen: PenLite;
+  locationId: string;
+  barns: Barn[];
+  onClose: () => void;
+}) {
+  void locationId;
+  const router = useRouter();
+  const [name, setName] = useState(pen.name);
+  const [cap, setCap] = useState<string>(
+    pen.capacity_head !== null ? String(pen.capacity_head) : "",
+  );
+  const [lengthFt, setLengthFt] = useState<string>(
+    pen.length_ft !== null ? String(pen.length_ft) : "",
+  );
+  const [widthFt, setWidthFt] = useState<string>(
+    pen.width_ft !== null ? String(pen.width_ft) : "",
+  );
+  const [bunkFt, setBunkFt] = useState<string>(
+    pen.bunk_running_ft !== null ? String(pen.bunk_running_ft) : "",
+  );
+  const [barnId, setBarnId] = useState<string>(pen.barn_id ?? "");
+  const [side, setSide] = useState<"left" | "right" | "none">(
+    pen.side ?? "none",
+  );
+  const [busy, startTransition] = useTransition();
+
+  const onSubmit = () => {
+    if (!name.trim()) {
+      toast.error("Name required.");
+      return;
+    }
+    startTransition(async () => {
+      const r = await updatePenInline({
+        id: pen.id,
+        name: name.trim(),
+        capacity_head: cap ? Number(cap) : null,
+        length_ft: lengthFt ? Number(lengthFt) : null,
+        width_ft: widthFt ? Number(widthFt) : null,
+        bunk_running_ft: bunkFt ? Number(bunkFt) : null,
+        barn_id: barnId || null,
+        side: side === "none" ? null : side,
+      });
+      if (r.error) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success("Pen updated.");
+      onClose();
+      router.refresh();
+    });
+  };
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Edit pen</DialogTitle>
+        <DialogDescription>
+          {pen.current_count > 0
+            ? `${pen.current_count} cow(s) currently live in this pen — changes apply immediately.`
+            : "Empty pen — change anything safely."}
+        </DialogDescription>
+      </DialogHeader>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2 flex flex-col gap-1">
+          <label className="text-[10px] text-muted-foreground">Name</label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] text-muted-foreground">Capacity (head)</label>
+          <Input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            value={cap}
+            onChange={(e) => setCap(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] text-muted-foreground">Bunk running ft</label>
+          <Input
+            type="number"
+            step="any"
+            min={0}
+            value={bunkFt}
+            onChange={(e) => setBunkFt(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] text-muted-foreground">Length (ft)</label>
+          <Input
+            type="number"
+            step="any"
+            min={0}
+            value={lengthFt}
+            onChange={(e) => setLengthFt(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] text-muted-foreground">Width (ft)</label>
+          <Input
+            type="number"
+            step="any"
+            min={0}
+            value={widthFt}
+            onChange={(e) => setWidthFt(e.target.value)}
+          />
+        </div>
+        {barns.length > 1 ? (
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-muted-foreground">Barn</label>
+            <Select
+              value={barnId || "__none"}
+              onValueChange={(v) => setBarnId(v === "__none" ? "" : v)}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">— no barn —</SelectItem>
+                {barns.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] text-muted-foreground">
+            Side (double-side barn)
+          </label>
+          <Select
+            value={side}
+            onValueChange={(v) => setSide(v as "left" | "right" | "none")}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">— unspecified —</SelectItem>
+              <SelectItem value="left">Left of feed alley</SelectItem>
+              <SelectItem value="right">Right of feed alley</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="button" onClick={onSubmit} disabled={busy}>
+          {busy ? "Saving…" : "Save"}
+        </Button>
+      </DialogFooter>
+    </>
   );
 }
 

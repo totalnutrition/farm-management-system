@@ -241,6 +241,12 @@ export default async function PenMovesPage() {
       id: p.id,
       name: p.name,
       capacity_head: p.capacity_head,
+      bunk_running_ft: p.bunk_running_ft,
+      length_ft: p.length_ft,
+      width_ft: p.width_ft,
+      barn_id: p.barn_id,
+      side: p.side,
+      position_index: p.position_index,
       current_count: currentByPen.get(p.id) ?? 0,
       suggested_count: suggestedByPen.get(p.id) ?? 0,
     }));
