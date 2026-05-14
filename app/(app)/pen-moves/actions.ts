@@ -160,6 +160,135 @@ export async function quickAddPen(input: NewPenInput): Promise<Result> {
 }
 
 // ---------------------------------------------------------------------
+// Inline pen edit / delete / reorder — focused server actions that
+// only accept the fields a /pen-moves user can touch.
+// ---------------------------------------------------------------------
+
+const updatePenInlineSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().min(1, "Name required.").max(120),
+  capacity_head: z.number().int().min(0).max(100_000).nullable().optional(),
+  bunk_running_ft: z.number().min(0).max(10_000).nullable().optional(),
+  length_ft: z.number().min(0).max(10_000).nullable().optional(),
+  width_ft: z.number().min(0).max(10_000).nullable().optional(),
+  barn_id: z.string().uuid().nullable().optional(),
+  side: z.enum(["left", "right"]).nullable().optional(),
+});
+export type UpdatePenInlineInput = z.infer<typeof updatePenInlineSchema>;
+
+export async function updatePenInline(
+  input: UpdatePenInlineInput,
+): Promise<Result> {
+  await requireAnyRole([RoleSuperAdmin, RoleAdmin]);
+  const parsed = updatePenInlineSchema.safeParse(input);
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const admin = createAdminClient();
+  const { id, ...rest } = parsed.data;
+  const update: Record<string, unknown> = { name: rest.name };
+  if (rest.capacity_head !== undefined) update.capacity_head = rest.capacity_head;
+  if (rest.bunk_running_ft !== undefined) update.bunk_running_ft = rest.bunk_running_ft;
+  if (rest.length_ft !== undefined) update.length_ft = rest.length_ft;
+  if (rest.width_ft !== undefined) update.width_ft = rest.width_ft;
+  if (rest.barn_id !== undefined) update.barn_id = rest.barn_id;
+  if (rest.side !== undefined) update.side = rest.side;
+
+  const { error } = await admin.from("pens").update(update).eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/pen-moves");
+  return { success: true };
+}
+
+export async function deletePenInline(input: {
+  pen_id: string;
+}): Promise<Result> {
+  await requireAnyRole([RoleSuperAdmin, RoleAdmin]);
+  const parsed = z.object({ pen_id: z.string().uuid() }).safeParse(input);
+  if (!parsed.success) return { error: "Invalid input." };
+
+  const admin = createAdminClient();
+
+  // Refuse if cows still live in this pen — user must move them first.
+  const { count } = await admin
+    .from("animals")
+    .select("id", { count: "exact", head: true })
+    .eq("current_pen_id", parsed.data.pen_id);
+  if ((count ?? 0) > 0) {
+    return {
+      error: `${count} cow(s) still in this pen. Move them first.`,
+    };
+  }
+
+  const { error } = await admin
+    .from("pens")
+    .delete()
+    .eq("id", parsed.data.pen_id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/pen-moves");
+  return { success: true };
+}
+
+/**
+ * Swap a pen's position_index with its neighbour on the same barn + side.
+ * 'up' means swap with the previous sibling, 'down' with the next.
+ */
+export async function reorderPen(input: {
+  pen_id: string;
+  direction: "up" | "down";
+}): Promise<Result> {
+  await requireAnyRole([RoleSuperAdmin, RoleAdmin]);
+  const parsed = z
+    .object({
+      pen_id: z.string().uuid(),
+      direction: z.enum(["up", "down"]),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { error: "Invalid input." };
+
+  const admin = createAdminClient();
+  const { data: target } = await admin
+    .from("pens")
+    .select("id, barn_id, side, position_index")
+    .eq("id", parsed.data.pen_id)
+    .maybeSingle();
+  if (!target) return { error: "Pen not found." };
+
+  type Row = { id: string; position_index: number };
+  const ascending = parsed.data.direction === "down";
+
+  let q = admin
+    .from("pens")
+    .select("id, position_index")
+    .eq("barn_id", target.barn_id as string)
+    .order("position_index", { ascending })
+    .limit(1);
+  q = ascending
+    ? q.gt("position_index", target.position_index)
+    : q.lt("position_index", target.position_index);
+  q = target.side === null
+    ? q.is("side", null)
+    : q.eq("side", target.side as string);
+
+  const { data: neighbour } = (await q.maybeSingle()) as { data: Row | null };
+  if (!neighbour) return { success: true }; // already at boundary
+
+  await admin
+    .from("pens")
+    .update({ position_index: neighbour.position_index })
+    .eq("id", target.id);
+  await admin
+    .from("pens")
+    .update({ position_index: target.position_index })
+    .eq("id", neighbour.id);
+
+  revalidatePath("/pen-moves");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------
 // Inline barn delete / merge — declared on /pen-moves alongside Settings →
 // Infrastructure. Create / update are handled by the canonical
 // createBarn / updateBarn in settings/locations/[id]/barns-actions.ts

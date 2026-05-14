@@ -88,6 +88,7 @@ export async function createPen(input: z.infer<typeof baseSchema>): Promise<Resu
   });
   if (error) return { error: error.message };
   revalidatePath(`/settings/locations/${parsed.data.location_id}/infrastructure`);
+  revalidatePath("/pen-moves");
   return { success: true };
 }
 
@@ -109,6 +110,7 @@ export async function updatePen(input: z.infer<typeof updateSchema>): Promise<Re
     .eq("id", id);
   if (error) return { error: error.message };
   revalidatePath(`/settings/locations/${parsed.data.location_id}/infrastructure`);
+  revalidatePath("/pen-moves");
   return { success: true };
 }
 
@@ -121,6 +123,7 @@ export async function deletePen(input: {
   const { error } = await authz.admin.from("pens").delete().eq("id", input.id);
   if (error) return { error: error.message };
   revalidatePath(`/settings/locations/${input.location_id}/infrastructure`);
+  revalidatePath("/pen-moves");
   return { success: true };
 }
 
