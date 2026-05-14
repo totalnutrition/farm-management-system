@@ -541,11 +541,54 @@ export async function generateSampleAnimals(
   revalidatePath(`/reproduction`);
   revalidatePath(`/group-moves`);
 
-  // Seed realistic milkings for lactating cows so the dashboard, milk
-  // hub and (later) production-based group splits have signal.
-  // Lactation curve: peak ~25 kg around 60-80 DIM, declining ~0.05
-  // kg/day after peak, scaled by parity (multip 1.15×, primip 0.90×).
-  // 3 most-recent days × 2 sessions (AM=1, PM=2) per lactating cow.
+  // Seed realistic milkings for lactating cows. Cadence follows the
+  // location's recording_profile.milkings_per_day so the data shape
+  // matches how the farm actually records milk.
+  //   1x       → 1 session at 06:00, 100 % of daily kg
+  //   2x       → AM 06:00 (55 %) + PM 18:00 (45 %)
+  //   3x       → 06:00 / 14:00 / 22:00, 35 / 35 / 30 % split
+  //   robotic  → 2-4 milkings/day per cow at random times, equal share
+  const { data: profile } = await authz.admin
+    .from("recording_profiles")
+    .select("milkings_per_day")
+    .eq("location_id", locationId)
+    .maybeSingle();
+  const mpd = ((profile?.milkings_per_day as string | null) ?? "2x") as
+    | "1x"
+    | "2x"
+    | "3x"
+    | "robotic";
+
+  type Session = { session: number | null; hour: number; minute: number; share: number };
+  function sessionsForDay(): Session[] {
+    if (mpd === "1x") return [{ session: 1, hour: 6, minute: 0, share: 1.0 }];
+    if (mpd === "3x")
+      return [
+        { session: 1, hour: 6, minute: 0, share: 0.35 },
+        { session: 2, hour: 14, minute: 0, share: 0.35 },
+        { session: 3, hour: 22, minute: 0, share: 0.30 },
+      ];
+    if (mpd === "robotic") {
+      // 2-4 milkings; random hours in (00..23); share is daily_kg / n.
+      const n = 2 + Math.floor(Math.random() * 3); // 2,3,4
+      const hours = Array.from(
+        { length: n },
+        () => Math.floor(Math.random() * 24),
+      ).sort((a, b) => a - b);
+      return hours.map((h, i) => ({
+        session: i + 1,
+        hour: h,
+        minute: Math.floor(Math.random() * 60),
+        share: 1 / n,
+      }));
+    }
+    // 2x default
+    return [
+      { session: 1, hour: 6, minute: 0, share: 0.55 },
+      { session: 2, hour: 18, minute: 0, share: 0.45 },
+    ];
+  }
+
   const lactating = inserted.filter((a) => a.stage === "lactating");
   if (lactating.length > 0) {
     const { data: cowMeta } = await authz.admin
@@ -560,9 +603,12 @@ export async function generateSampleAnimals(
       const parity = (c.current_lactation as number | null) ?? 1;
       const dim = Math.floor((today.getTime() - new Date(last).getTime()) / 86400000);
       const parityMul = parity === 1 ? 0.9 : 1.15;
-      // Simple Wood-style curve. Peak ~25 kg at 60 DIM, then declines.
+      // Wood-style curve. Peak ~25 kg at 60 DIM. 3x and robotic farms
+      // typically yield 8-12 % more daily kg due to bag relief — bump
+      // the peak modestly.
+      const peakBoost = mpd === "3x" ? 1.10 : mpd === "robotic" ? 1.12 : 1.0;
       const peakDim = 60;
-      const peakKg = 25 * parityMul;
+      const peakKg = 25 * parityMul * peakBoost;
       const dailyKg =
         dim < peakDim
           ? peakKg * (dim / peakDim) ** 0.6
@@ -572,20 +618,17 @@ export async function generateSampleAnimals(
       for (let dayOffset = 0; dayOffset < 3; dayOffset++) {
         const d = new Date(today);
         d.setDate(d.getDate() - dayOffset);
-        // AM at 06:00, PM at 18:00
-        for (const [session, hour] of [
-          [1, 6],
-          [2, 18],
-        ] as const) {
+        // Build sessions per day (robotic randomizes daily).
+        const sessions = sessionsForDay();
+        for (const s of sessions) {
           const at = new Date(d);
-          at.setHours(hour, 0, 0, 0);
-          const split = session === 1 ? 0.55 : 0.45;
+          at.setHours(s.hour, s.minute, 0, 0);
           milkings.push({
             animal_id: c.id as string,
             location_id: locationId,
             milking_at: at.toISOString(),
-            milking_session: session,
-            yield_kg: Number((totalKg * split).toFixed(2)),
+            milking_session: s.session,
+            yield_kg: Number((totalKg * s.share).toFixed(2)),
           });
         }
       }
