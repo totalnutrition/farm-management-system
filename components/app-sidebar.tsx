@@ -26,8 +26,6 @@ import {
   Notebook01Icon,
   SpermIcon,
   CookBookIcon,
-  NaturalFoodIcon,
-  DeleteThrowIcon,
   AlarmClockIcon,
   ReceiptDollarIcon,
   Building02Icon,
@@ -90,7 +88,6 @@ const MENU: MenuGroup[] = [
     roles: ROLES,
     links: [
       { name: "Health",        icon: MedicalFileIcon,       link: "/health",         roles: ROLES },
-      { name: "Withdrawals",   icon: AlertCircleIcon,       link: "/withdrawals",    roles: ROLES },
     ],
   },
   {
@@ -105,9 +102,7 @@ const MENU: MenuGroup[] = [
     label: "Feed & Nutrition",
     roles: ROLES,
     links: [
-      { name: "Feeds",         icon: NaturalFoodIcon,       link: "/feeds",          roles: ROLES },
       { name: "Feeding",       icon: CookBookIcon,          link: "/feeding",        roles: ROLES },
-      { name: "Refusals",      icon: DeleteThrowIcon,       link: "/refusals",       roles: ROLES },
     ],
   },
   {
