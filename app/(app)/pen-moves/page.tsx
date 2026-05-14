@@ -17,12 +17,12 @@ import {
   type SplitAnimal,
   type SplitPen,
 } from "@/lib/pen-rules";
+import type { Barn } from "@/lib/barns";
 import {
   PenMovesClient,
   type GroupBlock,
   type AnimalLite,
   type PenLite,
-  type BarnLite,
   type PenForVisualizer,
 } from "./pen-moves-client";
 
@@ -74,15 +74,8 @@ export default async function PenMovesPage() {
     position_index: number;
     side: "left" | "right" | null;
   };
-  type B = {
-    id: string;
-    location_id: string;
-    name: string;
-    length_ft: number | null;
-    width_ft: number | null;
-    layout: string | null;
-    alley_width_ft: number | null;
-  };
+  // Barn rows — selected via "*" so the inline barn-edit form on
+  // /pen-moves can hydrate every structure / facility field.
   type G = {
     id: string;
     label: string;
@@ -112,10 +105,10 @@ export default async function PenMovesPage() {
       .then(({ data }) => (data ?? []) as P[]),
     admin
       .from("barns")
-      .select("id, location_id, name, length_ft, width_ft, layout, alley_width_ft")
+      .select("*")
       .eq("location_id", active.id)
       .order("name")
-      .then(({ data }) => (data ?? []) as B[]),
+      .then(({ data }) => (data ?? []) as Barn[]),
     admin
       .from("location_groups")
       .select("id, label, display_order, group_slug, group_class, rule_predicates")
@@ -279,14 +272,7 @@ export default async function PenMovesPage() {
 
   const groupLabelById = new Map(groupRows.map((g) => [g.id, g.label] as const));
 
-  const barns: BarnLite[] = barnRows.map((b) => ({
-    id: b.id,
-    name: b.name,
-    length_ft: b.length_ft,
-    width_ft: b.width_ft,
-    layout: b.layout ?? "double_side",
-    alley_width_ft: b.alley_width_ft,
-  }));
+  const barns: Barn[] = barnRows;
   const pensForViz: PenForVisualizer[] = penRows.map((p) => ({
     id: p.id,
     barn_id: p.barn_id,
