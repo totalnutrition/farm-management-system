@@ -432,27 +432,113 @@ function buildSampleAnimal(
   }
 }
 
-export async function generateSampleAnimals(locationId: string): Promise<Result> {
+export async function generateSampleAnimals(
+  locationId: string,
+  count = 20,
+): Promise<Result & { generated?: number; preg_events?: number }> {
   const authz = await authorize(locationId);
   if ("error" in authz) return { error: authz.error };
 
-  // 20 animals split as a real dairy might look:
-  // 12 lactating, 3 dry, 3 heifers (bred + breeding), 2 calves
-  const stages: SampleStage[] = [
-    ...Array(12).fill("lactating"),
-    ...Array(3).fill("dry"),
-    "bred_heifer",
-    "bred_heifer",
-    "breeding_heifer",
-    "calf",
-    "weaned_heifer",
-  ];
+  if (count < 1 || count > 5000) {
+    return { error: "Count must be between 1 and 5000." };
+  }
 
-  const rows = stages.map((s, i) => buildSampleAnimal(locationId, i, s));
-  const { error } = await authz.admin.from("animals").insert(rows);
-  if (error) return { error: error.message };
+  // Start animal_ids after the largest existing S#### at this location.
+  const { data: existing } = await authz.admin
+    .from("animals")
+    .select("animal_id")
+    .eq("location_id", locationId)
+    .like("animal_id", "S%");
+  let maxN = 999;
+  for (const r of existing ?? []) {
+    const m = /^S(\d+)$/.exec((r.animal_id as string) ?? "");
+    if (m) {
+      const n = Number(m[1]);
+      if (n > maxN) maxN = n;
+    }
+  }
+  const startIndex = maxN - 999; // legacy seeder started at S1000 (index 0)
+
+  // Distribution that mirrors a real Holstein herd:
+  //   65 % lactating      (≈ 50 % of them pregnant)
+  //    8 % dry            (≈ 70 % close-up, 30 % far-off, all pregnant)
+  //    8 % bred heifers   (all pregnant)
+  //    7 % breeding heifers
+  //    7 % weaned heifers
+  //    5 % calves
+  const stages: SampleStage[] = [];
+  const lactCount = Math.round(count * 0.65);
+  const dryCount = Math.round(count * 0.08);
+  const bredHeiferCount = Math.round(count * 0.08);
+  const breedingHeiferCount = Math.round(count * 0.07);
+  const weanedCount = Math.round(count * 0.07);
+  const calfCount = count - lactCount - dryCount - bredHeiferCount - breedingHeiferCount - weanedCount;
+  for (let i = 0; i < lactCount; i++) stages.push("lactating");
+  for (let i = 0; i < dryCount; i++) stages.push("dry");
+  for (let i = 0; i < bredHeiferCount; i++) stages.push("bred_heifer");
+  for (let i = 0; i < breedingHeiferCount; i++) stages.push("breeding_heifer");
+  for (let i = 0; i < weanedCount; i++) stages.push("weaned_heifer");
+  for (let i = 0; i < Math.max(0, calfCount); i++) stages.push("calf");
+  // Shuffle so animal_ids don't cluster by stage.
+  for (let i = stages.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [stages[i], stages[j]] = [stages[j], stages[i]];
+  }
+
+  const rows = stages.map((s, i) => buildSampleAnimal(locationId, startIndex + i, s));
+
+  // Insert in batches of 200 to stay well under PostgREST limits.
+  const inserted: { id: string; stage: SampleStage }[] = [];
+  for (let i = 0; i < rows.length; i += 200) {
+    const batch = rows.slice(i, i + 200);
+    const { data, error } = await authz.admin
+      .from("animals")
+      .insert(batch)
+      .select("id, life_stage");
+    if (error) return { error: error.message };
+    for (let k = 0; k < (data?.length ?? 0); k++) {
+      inserted.push({ id: data![k].id as string, stage: stages[i + k] });
+    }
+  }
+
+  // Generate preg-check events so the rule engine + reproduction hub
+  // see realistic pregnancy state:
+  //   ~50 % of lactating cows  → pregnant, days_pregnant 30-220
+  //   100 % of bred heifers    → pregnant, days_pregnant 60-270
+  //   100 % of dry cows        → pregnant, days_pregnant 220-270
+  const pregEvents: Record<string, unknown>[] = [];
+  for (const a of inserted) {
+    let dp: number | null = null;
+    if (a.stage === "lactating" && Math.random() < 0.5) {
+      dp = 30 + Math.floor(Math.random() * 190);
+    } else if (a.stage === "bred_heifer") {
+      dp = 60 + Math.floor(Math.random() * 210);
+    } else if (a.stage === "dry") {
+      dp = 220 + Math.floor(Math.random() * 50);
+    }
+    if (dp === null) continue;
+    pregEvents.push({
+      animal_id: a.id,
+      event_date: daysAgo(Math.floor(Math.random() * 14)),
+      event_type: "preg_check",
+      result: "pregnant",
+      preg_check_method: pick(["palpation", "ultrasound", "blood test"]),
+      days_pregnant: dp,
+      notes: "Sample preg check — generated for testing",
+    });
+  }
+  if (pregEvents.length > 0) {
+    for (let i = 0; i < pregEvents.length; i += 200) {
+      const batch = pregEvents.slice(i, i + 200);
+      const { error } = await authz.admin.from("repro_events").insert(batch);
+      if (error) return { error: error.message };
+    }
+  }
+
   revalidatePath(`/animals`);
   revalidatePath(`/settings/locations/${locationId}/animals`);
   revalidatePath(`/`);
-  return { success: true };
+  revalidatePath(`/reproduction`);
+  revalidatePath(`/group-moves`);
+  return { success: true, generated: rows.length, preg_events: pregEvents.length };
 }

@@ -109,14 +109,18 @@ export function AnimalsToolbar({
     URL.revokeObjectURL(url);
   };
 
-  const onGenerate = () => {
+  const onGenerate = (n: number) => {
+    if (n >= 100 && !confirm(`Generate ${n} sample animals + preg-check events? This can take a few seconds.`)) return;
     startTransition(async () => {
-      const result = await generateSampleAnimals(locationId);
+      const result = await generateSampleAnimals(locationId, n);
       if (result.error) {
         toast.error(result.error);
         return;
       }
-      toast.success("20 sample animals generated.");
+      const preg = result.preg_events ?? 0;
+      toast.success(
+        `${result.generated ?? n} animals generated${preg > 0 ? ` · ${preg} preg checks` : ""}.`,
+      );
       router.refresh();
     });
   };
@@ -129,13 +133,23 @@ export function AnimalsToolbar({
             type="button"
             variant="outline"
             size="sm"
-            onClick={onGenerate}
+            onClick={() => onGenerate(20)}
             disabled={isPending}
           >
             <HugeiconsIcon icon={Sparkles} />
             {isPending ? "Generating..." : "Generate 20 sample animals"}
           </Button>
         ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onGenerate(500)}
+          disabled={isPending}
+        >
+          <HugeiconsIcon icon={Sparkles} />
+          {isPending ? "Generating..." : "Generate 500 animals"}
+        </Button>
         <Button
           type="button"
           variant="outline"
