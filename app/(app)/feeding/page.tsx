@@ -6,6 +6,7 @@ import {
   type GroupOption,
   type PenOption,
   type FeedOption,
+  type RecipeOption,
 } from "./feeding-client";
 import { type RefusalRow, type FeedEventOption } from "@/app/(app)/refusals/refusals-client";
 import { FeedingHub, type DailyAggregate } from "./feeding-hub";
@@ -36,6 +37,22 @@ export default async function FeedingPage() {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayStartIso = todayStart.toISOString();
+
+  // Recipes table may not be migrated yet — wrap in try/catch.
+  let recipes: RecipeOption[] = [];
+  try {
+    const { data, error } = await admin
+      .from("tmr_recipes")
+      .select("id, name")
+      .eq("location_id", active.id)
+      .eq("is_active", true)
+      .order("name");
+    if (!error && data) {
+      recipes = data.map((r) => ({ id: r.id as string, name: r.name as string }));
+    }
+  } catch {
+    recipes = [];
+  }
 
   const [evRows, refRows, groupRows, penRows, feedRows] = await Promise.all([
     admin
@@ -198,6 +215,7 @@ export default async function FeedingPage() {
         groups={groups}
         pens={pens}
         feeds={feeds}
+        recipes={recipes}
         feedEventOptions={feedEventOptions}
         todayAggregates={todayAggregates}
       />

@@ -100,6 +100,7 @@ const MENU: MenuGroup[] = [
     roles: ROLES,
     links: [
       { name: "Feeding",       icon: CookBookIcon,          link: "/feeding",        roles: ROLES },
+      { name: "Recipes",       icon: Notebook01Icon,        link: "/recipes",        roles: ROLES },
     ],
   },
   {

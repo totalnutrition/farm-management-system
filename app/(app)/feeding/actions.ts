@@ -13,6 +13,7 @@ const inputSchema = z.object({
   group_id: z.string().uuid().nullable().optional(),
   pen_id: z.string().uuid().nullable().optional(),
   feed_material_id: z.string().uuid(),
+  recipe_id: z.string().uuid().nullable().optional(),
   as_fed_kg: z.number().positive("Must be > 0"),
   dm_pct_override: z.number().min(0).max(100).nullable().optional(),
   occurred_at: z.string().min(1, "Date is required."),
@@ -73,9 +74,11 @@ export async function createFeedingEvent(input: FeedingInput): Promise<Result> {
   const dmPct = parsed.data.dm_pct_override ?? stock.dm_pct;
   const dmKg = dmPct !== null && dmPct !== undefined ? (parsed.data.as_fed_kg * dmPct) / 100 : null;
 
-  const { data: ev, error: evErr } = await admin
-    .from("feed_events")
-    .insert({
+  // recipe_id may not be a column yet (migration 0022 lands later);
+  // try with it, then fall back to without if the column is missing.
+  let evId: string | null = null;
+  {
+    const baseRow = {
       location_id: parsed.data.location_id,
       group_id: parsed.data.group_id ?? null,
       pen_id: parsed.data.pen_id ?? null,
@@ -85,10 +88,30 @@ export async function createFeedingEvent(input: FeedingInput): Promise<Result> {
       occurred_at: parsed.data.occurred_at,
       operator_user_id: user.id,
       note: parsed.data.note ?? null,
-    })
-    .select("id")
-    .single();
-  if (evErr) return { error: evErr.message };
+    };
+    const withRecipe = parsed.data.recipe_id
+      ? { ...baseRow, recipe_id: parsed.data.recipe_id }
+      : baseRow;
+    const { data, error } = await admin
+      .from("feed_events")
+      .insert(withRecipe)
+      .select("id")
+      .single();
+    if (error && parsed.data.recipe_id) {
+      const fallback = await admin
+        .from("feed_events")
+        .insert(baseRow)
+        .select("id")
+        .single();
+      if (fallback.error) return { error: fallback.error.message };
+      evId = fallback.data!.id as string;
+    } else if (error) {
+      return { error: error.message };
+    } else {
+      evId = data!.id as string;
+    }
+  }
+  const ev = { id: evId };
 
   const { error: mvErr } = await admin.from("stock_movements").insert({
     stock_item_id: stock.id,

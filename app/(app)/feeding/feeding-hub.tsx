@@ -4,7 +4,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CookBookIcon, DeleteThrowIcon, NaturalFoodIcon } from "@hugeicons/core-free-icons";
 
-import { FeedingClient, type FeedingEvent, type GroupOption, type PenOption, type FeedOption } from "./feeding-client";
+import { FeedingClient, type FeedingEvent, type GroupOption, type PenOption, type FeedOption, type RecipeOption } from "./feeding-client";
 import { RefusalsClient, type RefusalRow, type FeedEventOption } from "@/app/(app)/refusals/refusals-client";
 
 const TABS = [
@@ -31,6 +31,7 @@ export function FeedingHub({
   groups,
   pens,
   feeds,
+  recipes,
   feedEventOptions,
   todayAggregates,
 }: {
@@ -40,6 +41,7 @@ export function FeedingHub({
   groups: GroupOption[];
   pens: PenOption[];
   feeds: FeedOption[];
+  recipes: RecipeOption[];
   feedEventOptions: FeedEventOption[];
   todayAggregates: DailyAggregate[];
 }) {
@@ -80,6 +82,7 @@ export function FeedingHub({
           groups={groups}
           pens={pens}
           feeds={feeds}
+          recipes={recipes}
         />
       ) : null}
       {active === "refusals" ? (

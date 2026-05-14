@@ -55,6 +55,7 @@ export type FeedingEvent = {
 export type GroupOption = { id: string; label: string };
 export type PenOption = { id: string; name: string };
 export type FeedOption = { id: string; name: string; dm_pct: number | null };
+export type RecipeOption = { id: string; name: string };
 
 const NONE = "__none__";
 
@@ -62,6 +63,7 @@ const formSchema = z.object({
   group_id: z.string(),
   pen_id: z.string(),
   feed_material_id: z.string().min(1, "Pick a feed material."),
+  recipe_id: z.string(),
   as_fed_kg: z.number().positive("Must be > 0"),
   occurred_at: z.string().min(1, "Required."),
   note: z.string().optional(),
@@ -80,12 +82,14 @@ export function FeedingClient({
   groups,
   pens,
   feeds,
+  recipes = [],
 }: {
   locationId: string;
   events: FeedingEvent[];
   groups: GroupOption[];
   pens: PenOption[];
   feeds: FeedOption[];
+  recipes?: RecipeOption[];
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -116,6 +120,7 @@ export function FeedingClient({
         groups={groups}
         pens={pens}
         feeds={feeds}
+        recipes={recipes}
       />
     </>
   );
@@ -209,6 +214,7 @@ function AddFeedingDialog({
   groups,
   pens,
   feeds,
+  recipes,
 }: {
   open: boolean;
   onOpenChange: (b: boolean) => void;
@@ -216,6 +222,7 @@ function AddFeedingDialog({
   groups: GroupOption[];
   pens: PenOption[];
   feeds: FeedOption[];
+  recipes: RecipeOption[];
 }) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -225,6 +232,7 @@ function AddFeedingDialog({
       group_id: NONE,
       pen_id: NONE,
       feed_material_id: feeds[0]?.id ?? "",
+      recipe_id: NONE,
       as_fed_kg: 0,
       occurred_at: nowLocalIso(),
       note: "",
@@ -238,6 +246,7 @@ function AddFeedingDialog({
         group_id: v.group_id === NONE ? null : v.group_id,
         pen_id: v.pen_id === NONE ? null : v.pen_id,
         feed_material_id: v.feed_material_id,
+        recipe_id: v.recipe_id === NONE ? null : v.recipe_id,
         as_fed_kg: v.as_fed_kg,
         occurred_at: new Date(v.occurred_at).toISOString(),
         note: v.note ?? null,
@@ -251,6 +260,7 @@ function AddFeedingDialog({
         group_id: NONE,
         pen_id: NONE,
         feed_material_id: feeds[0]?.id ?? "",
+        recipe_id: NONE,
         as_fed_kg: 0,
         occurred_at: nowLocalIso(),
         note: "",
@@ -347,6 +357,32 @@ function AddFeedingDialog({
                   </FormItem>
                 )}
               />
+              {recipes.length > 0 ? (
+                <FormField
+                  control={form.control}
+                  name="recipe_id"
+                  render={({ field }) => (
+                    <FormItem className="col-span-2">
+                      <FormLabel>Recipe (optional)</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value={NONE}>— none —</SelectItem>
+                          {recipes.map((r) => (
+                            <SelectItem key={r.id} value={r.id}>
+                              {r.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+              ) : null}
               <FormField
                 control={form.control}
                 name="as_fed_kg"
