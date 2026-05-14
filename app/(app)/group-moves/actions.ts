@@ -55,6 +55,13 @@ const overrideSchema = z.object({
   animal_id: z.string().uuid(),
   current_group_id: z.string().uuid().nullable(),
   suggested_group_id: z.string().uuid(),
+  /**
+   * Where the cow should actually go. NULL = keep her where she is
+   * (classic "override"). Anything else moves her to that group with
+   * the override reason recorded on both the move row and the
+   * animal's last_group_override_reason.
+   */
+  target_group_id: z.string().uuid().nullable().optional(),
   reason: z.string().min(1, "Reason required.").max(500),
   rule_explanation: z.string().max(500).nullable().optional(),
 });
@@ -68,11 +75,17 @@ export async function overrideMove(input: OverrideInput): Promise<Result> {
   const admin = createAdminClient();
   const now = new Date().toISOString();
 
+  // target = explicit target if given, else stay in current group
+  const targetGroupId =
+    parsed.data.target_group_id !== undefined
+      ? parsed.data.target_group_id
+      : parsed.data.current_group_id;
+
   const { error: mvErr } = await admin.from("group_moves").insert({
     animal_id: parsed.data.animal_id,
     occurred_at: now,
     from_group_id: parsed.data.current_group_id,
-    to_group_id: parsed.data.current_group_id,
+    to_group_id: targetGroupId,
     suggested_group_id: parsed.data.suggested_group_id,
     decision: "overridden",
     reason: parsed.data.reason,
@@ -81,16 +94,24 @@ export async function overrideMove(input: OverrideInput): Promise<Result> {
   });
   if (mvErr) return { error: mvErr.message };
 
+  // If the target differs from current, also move the cow.
+  const movedTo = targetGroupId !== parsed.data.current_group_id
+    ? targetGroupId
+    : undefined;
+  const animalPatch: Record<string, unknown> = {
+    last_group_decision_at: now,
+    last_group_override_reason: parsed.data.reason,
+  };
+  if (movedTo !== undefined) animalPatch.current_group_id = movedTo;
+
   const { error: aErr } = await admin
     .from("animals")
-    .update({
-      last_group_decision_at: now,
-      last_group_override_reason: parsed.data.reason,
-    })
+    .update(animalPatch)
     .eq("id", parsed.data.animal_id);
   if (aErr) return { error: aErr.message };
 
   revalidatePath("/group-moves");
+  revalidatePath("/animals");
   return { success: true };
 }
 

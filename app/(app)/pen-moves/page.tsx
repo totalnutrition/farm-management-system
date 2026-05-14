@@ -101,7 +101,7 @@ export default async function PenMovesPage() {
   for (const g of groupRows) {
     const animals = animalsByGroup.get(g.id) ?? [];
     const pens = pensByGroup.get(g.id) ?? [];
-    if (pens.length === 0 || animals.length === 0) continue;
+    if (animals.length === 0 && pens.length === 0) continue;
 
     const splitInput: SplitAnimal[] = animals.map((a) => ({
       id: a.id,
@@ -158,6 +158,9 @@ export default async function PenMovesPage() {
     });
   }
 
+  const groupsWithoutPens = blocks.filter((b) => b.pens.length === 0).length;
+  const totalUnassignedPen = animalRows.filter((a) => !a.current_pen_id).length;
+
   return (
     <div className="flex flex-col gap-4 py-4">
       <header className="flex flex-col gap-1">
@@ -166,10 +169,18 @@ export default async function PenMovesPage() {
           {active.name} · suggested pen assignments per group, computed from
           parity + DIM and pen capacity. Caution badges flag over- /
           under-stocked pens but don&apos;t block the assignment.
+          {groupsWithoutPens > 0 ? (
+            <span className="block text-amber-600 dark:text-amber-400 mt-1">
+              {groupsWithoutPens} group{groupsWithoutPens === 1 ? "" : "s"}{" "}
+              with cows but no pens declared yet ({totalUnassignedPen} cow
+              {totalUnassignedPen === 1 ? "" : "s"} ungated). Use the
+              &quot;Add pen&quot; link in each section below.
+            </span>
+          ) : null}
         </p>
       </header>
 
-      <PenMovesClient blocks={blocks} />
+      <PenMovesClient blocks={blocks} locationId={active.id} />
     </div>
   );
 }
