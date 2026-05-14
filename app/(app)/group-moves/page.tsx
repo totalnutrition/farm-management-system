@@ -178,6 +178,22 @@ export default async function GroupMovesPage() {
       rule_explanation: (r.rule_explanation as string | null) ?? null,
     }));
 
+  // Check whether we have any milk-yield data — if not, the engine is
+  // grouping on DIM/parity alone and the user should know production
+  // splits (high vs low yielders within the same DIM window) aren't
+  // available until milkings or test-days are recorded.
+  const [{ count: milkingsCount }, { count: testDaysCount }] = await Promise.all([
+    admin
+      .from("milkings")
+      .select("id", { count: "exact", head: true })
+      .eq("location_id", active.id),
+    admin
+      .from("test_days")
+      .select("id", { count: "exact", head: true })
+      .in("animal_id", animalRows.map((a) => a.id)),
+  ]);
+  const hasProductionData = (milkingsCount ?? 0) + (testDaysCount ?? 0) > 0;
+
   void factsHash;
 
   return (
@@ -191,6 +207,18 @@ export default async function GroupMovesPage() {
           suggestion until her facts change.
         </p>
       </header>
+
+      <section className="ring-1 ring-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
+        <span className="font-medium">Heads-up:</span>{" "}
+        <span className="text-muted-foreground">
+          suggestions use rule predicates (DIM / parity / age / dry /
+          pregnancy). Production-level splits — High / Mid / Low based on
+          daily yield within the same DIM window — need milk data, and
+          {hasProductionData
+            ? " your roster currently has some recorded but the default rules don't use it. Customize group rules in Settings → Groups to add daily-milk thresholds."
+            : " your roster has none recorded yet. Log milkings or test-day results from the Milk hub so the engine can refine its decisions."}
+        </span>
+      </section>
 
       <GroupMovesClient pending={pending} history={history} />
     </div>

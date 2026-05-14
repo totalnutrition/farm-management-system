@@ -8,8 +8,10 @@ import {
   DownloadCircle01Icon,
   Sparkles,
   Upload01Icon,
+  Delete02Icon,
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -18,7 +20,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { generateSampleAnimals } from "@/app/(app)/settings/locations/[id]/animals-actions";
+import {
+  deleteAllAnimals,
+  generateSampleAnimals,
+} from "@/app/(app)/settings/locations/[id]/animals-actions";
 
 const TEMPLATE_COLUMNS = [
   "animal_id",
@@ -90,8 +95,28 @@ export function AnimalsToolbar({
   hasNoAnimals: boolean;
 }) {
   const [importOpen, setImportOpen] = useState(false);
+  const [wipeOpen, setWipeOpen] = useState(false);
+  const [wipeConfirm, setWipeConfirm] = useState("");
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+
+  const onWipe = () => {
+    if (wipeConfirm !== "DELETE ALL") {
+      toast.error('Type "DELETE ALL" exactly to confirm.');
+      return;
+    }
+    startTransition(async () => {
+      const r = await deleteAllAnimals(locationId);
+      if (r.error) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(`Deleted ${r.deleted ?? 0} animals + all linked events.`);
+      setWipeOpen(false);
+      setWipeConfirm("");
+      router.refresh();
+    });
+  };
 
   const downloadTemplate = () => {
     const header = TEMPLATE_COLUMNS.join(",");
@@ -159,6 +184,19 @@ export function AnimalsToolbar({
           <HugeiconsIcon icon={Upload01Icon} />
           Bulk import
         </Button>
+        {!hasNoAnimals ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setWipeOpen(true)}
+            disabled={isPending}
+            className="text-destructive hover:text-destructive"
+          >
+            <HugeiconsIcon icon={Delete02Icon} />
+            Delete all
+          </Button>
+        ) : null}
       </div>
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
@@ -205,6 +243,46 @@ export function AnimalsToolbar({
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setImportOpen(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={wipeOpen}
+        onOpenChange={(o) => {
+          setWipeOpen(o);
+          if (!o) setWipeConfirm("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Delete all animals?</DialogTitle>
+            <DialogDescription>
+              Wipes every animal at this location plus all linked events
+              (repro events, calvings, health events, milkings, test-days,
+              pen moves, group moves). Foreign-key cascade — no undo. Type{" "}
+              <span className="font-mono font-medium">DELETE ALL</span> to
+              confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={wipeConfirm}
+            onChange={(e) => setWipeConfirm(e.target.value)}
+            placeholder="DELETE ALL"
+            autoFocus
+          />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setWipeOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={onWipe}
+              disabled={isPending || wipeConfirm !== "DELETE ALL"}
+            >
+              {isPending ? "Deleting…" : "Delete everything"}
             </Button>
           </DialogFooter>
         </DialogContent>
