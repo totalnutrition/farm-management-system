@@ -24,6 +24,8 @@ export type Pen = {
   pen_code: string | null;
   type: string;
   capacity_head: number | null;
+  bunk_running_ft: number | null;
+  stocking_target_pct: number | null;
   is_AI_pen: boolean;
   is_BULL_pen: boolean;
   is_DRY_pen: boolean;

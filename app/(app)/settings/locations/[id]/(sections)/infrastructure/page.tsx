@@ -54,7 +54,7 @@ export default async function LocationInfrastructurePage({
     );
   }
 
-  const [profile, groups, barns, pens, capDefaults] = await Promise.all([
+  const [profile, groups, barns, pens, capDefaults, animalGroupRows] = await Promise.all([
     getHerdProfile(id),
     getGroups(id),
     listBarns(id),
@@ -65,7 +65,19 @@ export default async function LocationInfrastructurePage({
       .eq("organization_id", orgId ?? "00000000-0000-0000-0000-000000000000")
       .maybeSingle()
       .then(({ data }) => data),
+    admin
+      .from("animals")
+      .select("current_group_id")
+      .eq("location_id", id)
+      .eq("status", "active")
+      .then(({ data }) => (data ?? []) as { current_group_id: string | null }[]),
   ]);
+
+  const headcountByGroup: Record<string, number> = {};
+  for (const a of animalGroupRows) {
+    if (!a.current_group_id) continue;
+    headcountByGroup[a.current_group_id] = (headcountByGroup[a.current_group_id] ?? 0) + 1;
+  }
 
   const defaults: CapacityDefaults = capDefaults
     ? {
@@ -110,6 +122,7 @@ export default async function LocationInfrastructurePage({
           rows={pens}
           barns={barns.map((b) => ({ id: b.id, name: b.name }))}
           groups={groups.map((g) => ({ id: g.id, label: g.label }))}
+          headcountByGroup={headcountByGroup}
         />
       </section>
       {data.manages_crops ? (

@@ -39,14 +39,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { PenTypeView, PenTypes, type Pen } from "@/lib/pens";
 import { createPen, deletePen, updatePen } from "./pens-actions";
 
@@ -60,6 +52,8 @@ const formSchema = z.object({
   barn_id: z.string(),
   group_id: z.string(),
   capacity_head: z.union([z.number(), z.literal("")]),
+  bunk_running_ft: z.union([z.number(), z.literal("")]),
+  stocking_target_pct: z.union([z.number(), z.literal("")]),
   is_AI_pen: z.boolean(),
   is_BULL_pen: z.boolean(),
   is_DRY_pen: z.boolean(),
@@ -76,6 +70,8 @@ const empty: FormValues = {
   barn_id: "",
   group_id: "",
   capacity_head: "" as unknown as number,
+  bunk_running_ft: "" as unknown as number,
+  stocking_target_pct: "" as unknown as number,
   is_AI_pen: false,
   is_BULL_pen: false,
   is_DRY_pen: false,
@@ -93,6 +89,10 @@ function toSubmit(locationId: string, values: FormValues) {
     barn_id: values.barn_id || null,
     group_id: values.group_id || null,
     capacity_head: typeof values.capacity_head === "number" ? values.capacity_head : null,
+    bunk_running_ft:
+      typeof values.bunk_running_ft === "number" ? values.bunk_running_ft : null,
+    stocking_target_pct:
+      typeof values.stocking_target_pct === "number" ? values.stocking_target_pct : null,
     is_AI_pen: values.is_AI_pen,
     is_BULL_pen: values.is_BULL_pen,
     is_DRY_pen: values.is_DRY_pen,
@@ -107,101 +107,82 @@ export function PensTable({
   rows,
   barns,
   groups,
+  headcountByGroup = {},
 }: {
   locationId: string;
   rows: Pen[];
   barns: BarnLite[];
   groups: GroupLite[];
+  headcountByGroup?: Record<string, number>;
 }) {
   const [editing, setEditing] = useState<Pen | null>(null);
   const [deleting, setDeleting] = useState<Pen | null>(null);
+  const [createDefaultGroupId, setCreateDefaultGroupId] = useState<string | null>(null);
 
   const barnLabel = (id: string | null) =>
     barns.find((b) => b.id === id)?.name ?? "—";
-  const groupLabel = (id: string | null) =>
-    groups.find((g) => g.id === id)?.label ?? "—";
+
+  // Group pens by group_id, then a final "Unassigned" bucket.
+  const byGroup = new Map<string, Pen[]>();
+  for (const p of rows) {
+    const key = p.group_id ?? "__none__";
+    const arr = byGroup.get(key) ?? [];
+    arr.push(p);
+    byGroup.set(key, arr);
+  }
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex justify-end">
-        <CreateDialog locationId={locationId} barns={barns} groups={groups} />
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">
+          Pens are grouped by their assigned group. Capacity is your
+          declared head + bunk-feet — over- and under-stocking are
+          shown as cautions, never blocked.
+        </p>
+        <CreateDialog
+          locationId={locationId}
+          barns={barns}
+          groups={groups}
+          defaultGroupId={createDefaultGroupId}
+          onAfter={() => setCreateDefaultGroupId(null)}
+        />
       </div>
-      <div className="ring-1 ring-foreground/10 overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Barn</TableHead>
-              <TableHead>Group</TableHead>
-              <TableHead className="text-right">Cap</TableHead>
-              <TableHead>Flags</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground">
-                  No pens yet.
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell>
-                    <span className="font-medium">{p.name}</span>
-                    {p.is_placeholder ? (
-                      <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">
-                        placeholder
-                      </span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>{PenTypeView[p.type] ?? p.type}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {barnLabel(p.barn_id)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {groupLabel(p.group_id)}
-                  </TableCell>
-                  <TableCell className="text-right">{p.capacity_head ?? "—"}</TableCell>
-                  <TableCell className="text-[10px]">
-                    {[
-                      p.is_AI_pen ? "AI" : null,
-                      p.is_BULL_pen ? "BULL" : null,
-                      p.is_DRY_pen ? "DRY" : null,
-                      p.is_HOSP_pen ? "HOSP" : null,
-                      p.is_FRESH_pen ? "FRESH" : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ") || "—"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setEditing(p)}
-                      >
-                        <HugeiconsIcon icon={PencilEdit02Icon} />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => setDeleting(p)}
-                      >
-                        <HugeiconsIcon icon={Delete02Icon} />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+
+      {groups.length === 0 && rows.length === 0 ? (
+        <div className="ring-1 ring-foreground/10 p-3 text-xs text-muted-foreground">
+          No groups yet — set up the herd-structure plan first under
+          Groups, then add pens here.
+        </div>
+      ) : null}
+
+      {groups.map((g) => {
+        const groupPens = byGroup.get(g.id) ?? [];
+        const headcount = headcountByGroup[g.id] ?? 0;
+        return (
+          <GroupSection
+            key={g.id}
+            group={g}
+            pens={groupPens}
+            headcount={headcount}
+            barnLabel={barnLabel}
+            onAdd={() => setCreateDefaultGroupId(g.id)}
+            onEdit={setEditing}
+            onDelete={setDeleting}
+          />
+        );
+      })}
+
+      {(byGroup.get("__none__") ?? []).length > 0 ? (
+        <GroupSection
+          group={{ id: "__none__", label: "Unassigned" }}
+          pens={byGroup.get("__none__") ?? []}
+          headcount={0}
+          barnLabel={barnLabel}
+          onAdd={() => setCreateDefaultGroupId(null)}
+          onEdit={setEditing}
+          onDelete={setDeleting}
+        />
+      ) : null}
 
       <EditDialog
         row={editing}
@@ -216,6 +197,130 @@ export function PensTable({
         onClose={() => setDeleting(null)}
       />
     </div>
+  );
+}
+
+type SectionGroup = { id: string; label: string };
+function GroupSection({
+  group,
+  pens,
+  headcount,
+  barnLabel,
+  onAdd,
+  onEdit,
+  onDelete,
+}: {
+  group: SectionGroup;
+  pens: Pen[];
+  headcount: number;
+  barnLabel: (id: string | null) => string;
+  onAdd: () => void;
+  onEdit: (p: Pen) => void;
+  onDelete: (p: Pen) => void;
+}) {
+  const totalCap = pens.reduce((s, p) => s + (p.capacity_head ?? 0), 0);
+  const totalBunk = pens.reduce((s, p) => s + (p.bunk_running_ft ?? 0), 0);
+  const stockingPct = totalCap > 0 ? Math.round((headcount / totalCap) * 100) : 0;
+  const bunkInPerCow = headcount > 0 ? Math.round((totalBunk * 12) / headcount) : 0;
+
+  let stockingTone = "text-muted-foreground";
+  let stockingNote = "—";
+  if (totalCap > 0 && headcount > 0) {
+    if (stockingPct > 115) {
+      stockingTone = "text-destructive";
+      stockingNote = "over-stocked";
+    } else if (stockingPct < 70) {
+      stockingTone = "text-amber-600 dark:text-amber-400";
+      stockingNote = "under-stocked";
+    } else {
+      stockingTone = "text-primary";
+      stockingNote = "on target";
+    }
+  }
+
+  return (
+    <section className="ring-1 ring-foreground/10 flex flex-col">
+      <header className="px-3 py-2 bg-foreground/5 flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <h3 className="text-sm font-medium">
+            {group.label}
+            <span className="ml-2 text-[10px] font-normal text-muted-foreground">
+              {pens.length} pen{pens.length === 1 ? "" : "s"} · {headcount} cow{headcount === 1 ? "" : "s"}
+              {totalCap > 0 ? ` · cap ${totalCap}` : ""}
+              {totalBunk > 0 ? ` · ${totalBunk}ft bunk` : ""}
+            </span>
+          </h3>
+          <p className={`text-[10px] ${stockingTone}`}>
+            {totalCap > 0 ? `${stockingPct}% stocked · ${stockingNote}` : "no capacity declared"}
+            {bunkInPerCow > 0 ? ` · ${bunkInPerCow} in/cow bunk space` : ""}
+          </p>
+        </div>
+        {group.id !== "__none__" ? (
+          <Button type="button" size="sm" variant="ghost" onClick={onAdd}>
+            <HugeiconsIcon icon={PlusSignIcon} />
+            Add pen
+          </Button>
+        ) : null}
+      </header>
+      {pens.length === 0 ? (
+        <div className="px-3 py-3 text-xs text-muted-foreground text-center">
+          No pens in this group yet.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-foreground/[0.025]">
+              <tr className="text-left">
+                <th className="px-3 py-1.5 font-medium">Name</th>
+                <th className="px-3 py-1.5 font-medium">Type</th>
+                <th className="px-3 py-1.5 font-medium">Barn</th>
+                <th className="px-3 py-1.5 font-medium text-right">Cap</th>
+                <th className="px-3 py-1.5 font-medium text-right">Bunk ft</th>
+                <th className="px-3 py-1.5 font-medium">Flags</th>
+                <th className="px-3 py-1.5 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pens.map((p) => (
+                <tr key={p.id} className="border-t border-foreground/10">
+                  <td className="px-3 py-1.5">
+                    <span className="font-medium">{p.name}</span>
+                    {p.is_placeholder ? (
+                      <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                        placeholder
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-1.5">{PenTypeView[p.type] ?? p.type}</td>
+                  <td className="px-3 py-1.5 text-muted-foreground">{barnLabel(p.barn_id)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{p.capacity_head ?? "—"}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{p.bunk_running_ft ?? "—"}</td>
+                  <td className="px-3 py-1.5 text-[10px] text-muted-foreground">
+                    {[
+                      p.is_AI_pen ? "AI" : null,
+                      p.is_BULL_pen ? "BULL" : null,
+                      p.is_DRY_pen ? "DRY" : null,
+                      p.is_HOSP_pen ? "HOSP" : null,
+                      p.is_FRESH_pen ? "FRESH" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "—"}
+                  </td>
+                  <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                    <Button type="button" size="sm" variant="ghost" onClick={() => onEdit(p)}>
+                      <HugeiconsIcon icon={PencilEdit02Icon} />
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => onDelete(p)}>
+                      <HugeiconsIcon icon={Delete02Icon} />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -291,6 +396,49 @@ function PenFormBody({
                 <Input
                   type="number"
                   inputMode="numeric"
+                  value={field.value === "" || field.value === undefined ? "" : (field.value as number)}
+                  onChange={(e) =>
+                    field.onChange(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="bunk_running_ft"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Bunk feet (running)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  step="any"
+                  inputMode="decimal"
+                  value={field.value === "" || field.value === undefined ? "" : (field.value as number)}
+                  onChange={(e) =>
+                    field.onChange(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="stocking_target_pct"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Target stocking % (override)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  step="any"
+                  inputMode="decimal"
+                  placeholder="leave blank to use group default"
                   value={field.value === "" || field.value === undefined ? "" : (field.value as number)}
                   onChange={(e) =>
                     field.onChange(e.target.value === "" ? "" : Number(e.target.value))
@@ -414,10 +562,14 @@ function CreateDialog({
   locationId,
   barns,
   groups,
+  defaultGroupId,
+  onAfter,
 }: {
   locationId: string;
   barns: BarnLite[];
   groups: GroupLite[];
+  defaultGroupId?: string | null;
+  onAfter?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -425,6 +577,13 @@ function CreateDialog({
     resolver: zodResolver(formSchema),
     defaultValues: empty,
   });
+
+  // Open the dialog automatically when caller provides a default group
+  // (i.e. the user clicked "Add pen" inside a group section).
+  if (defaultGroupId !== undefined && defaultGroupId !== null && !open) {
+    form.reset({ ...empty, group_id: defaultGroupId });
+    setOpen(true);
+  }
 
   const onSubmit = (values: FormValues) => {
     startTransition(async () => {
@@ -436,21 +595,32 @@ function CreateDialog({
       toast.success("Pen created.");
       form.reset(empty);
       setOpen(false);
+      onAfter?.();
     });
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) onAfter?.();
+      }}
+    >
       <DialogTrigger asChild>
-        <Button type="button">
+        <Button type="button" size="sm" variant="outline">
           <HugeiconsIcon icon={PlusSignIcon} />
-          New Pen
+          New pen
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Pen</DialogTitle>
-          <DialogDescription>Physical pen inside a barn.</DialogDescription>
+          <DialogDescription>
+            Pens belong to groups. Capacity + bunk feet are your
+            declared values; the app cautions on over- / under-stocking
+            but never blocks.
+          </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-3">
@@ -492,6 +662,8 @@ function EditDialog({
           barn_id: row.barn_id ?? "",
           group_id: row.group_id ?? "",
           capacity_head: row.capacity_head ?? ("" as unknown as number),
+          bunk_running_ft: row.bunk_running_ft ?? ("" as unknown as number),
+          stocking_target_pct: row.stocking_target_pct ?? ("" as unknown as number),
           is_AI_pen: row.is_AI_pen,
           is_BULL_pen: row.is_BULL_pen,
           is_DRY_pen: row.is_DRY_pen,
