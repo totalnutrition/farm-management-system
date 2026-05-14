@@ -71,6 +71,7 @@ const MENU: MenuGroup[] = [
     roles: ROLES,
     links: [
       { name: "Animals",       icon: CowFaceIcon,           link: "/animals",        roles: ROLES },
+      { name: "Group moves",   icon: TruckIcon,             link: "/group-moves",    roles: ROLES },
       { name: "Pen moves",     icon: TruckIcon,             link: "/pen-moves",      roles: ROLES },
     ],
   },
