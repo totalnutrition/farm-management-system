@@ -12,8 +12,10 @@ import {
   suggestStrategySlug,
 } from "@/lib/herd-profile";
 import { CapacityDefaultsFallback } from "@/lib/capacity-defaults";
-import { computeCapacityPlan } from "@/lib/capacity-plan";
+import { computeCapacityPlanFromCounts } from "@/lib/capacity-plan";
 import { loadStrategyPresetCards } from "@/lib/group-strategy-presets";
+import { computeGroupHeadcounts } from "@/lib/group-headcount";
+import type { GroupDef } from "@/lib/group-rules";
 import { ComingSoon } from "@/components/coming-soon";
 import { getGroups, getHerdProfile } from "../../groups-actions";
 import { GroupStrategyPicker } from "../../group-strategy-picker";
@@ -52,29 +54,26 @@ export default async function LocationGroupsPage({
     );
   }
 
-  // Observed animal counts from the actual roster (not a manual estimate).
+  // Observed animal counts from the actual roster — by life_stage,
+  // not by parity, so dry cows show up as dry (they have parity > 0
+  // but aren't milking).
   const { data: animalRows } = await admin
     .from("animals")
-    .select("sex, status, current_lactation")
+    .select("sex, status, life_stage")
     .eq("location_id", id);
   const animals = animalRows ?? [];
+  const activeAnimals = animals.filter((a) => a.status === "active");
   const observedCounts = {
-    lactating: animals.filter(
+    lactating: activeAnimals.filter((a) => a.life_stage === "lactating").length,
+    dry: activeAnimals.filter((a) => a.life_stage === "dry").length,
+    heifer: activeAnimals.filter(
       (a) =>
-        a.status === "active" &&
-        (a.current_lactation ?? 0) > 0,
+        a.life_stage === "weaned_heifer" ||
+        a.life_stage === "breeding_heifer" ||
+        a.life_stage === "bred_heifer",
     ).length,
-    dry: animals.filter(
-      (a) => a.status === "active" && a.current_lactation === null,
-    ).length,
-    heifer: animals.filter(
-      (a) =>
-        a.status === "active" &&
-        a.sex === "female" &&
-        (a.current_lactation ?? 0) === 0,
-    ).length,
-    calf: 0,
-    total: animals.filter((a) => a.status === "active").length,
+    calf: activeAnimals.filter((a) => a.life_stage === "calf").length,
+    total: activeAnimals.length,
   };
 
   const [profile, groups, presets, capDefaults] = await Promise.all([
@@ -108,7 +107,25 @@ export default async function LocationGroupsPage({
       }
     : CapacityDefaultsFallback;
 
-  const capacityPlan = computeCapacityPlan(profile, groups, defaults);
+  // Run the rule engine over the actual roster to get accurate per-
+  // group head counts. The previous implementation used herd_profile
+  // targets which left most groups at 0 for fresh installs.
+  const groupDefs: GroupDef[] = groups.map((g) => ({
+    id: g.id,
+    label: g.label,
+    group_slug: g.group_slug,
+    group_class: g.group_class,
+    display_order: g.display_order,
+    rule_predicates: g.rule_predicates as Record<string, unknown>,
+  }));
+  const headCounts = await computeGroupHeadcounts(id, groupDefs);
+  const capacityPlan = computeCapacityPlanFromCounts(
+    groups,
+    headCounts.byGroup,
+    defaults,
+  );
+  // profile remains in scope for the suggested-slug helper below.
+  void profile;
 
   const suggestedSlug = suggestStrategySlug(profile.target_lactating_count);
   const currentSlug =
@@ -210,9 +227,24 @@ export default async function LocationGroupsPage({
         <header className="flex flex-col gap-0.5">
           <h2 className="text-sm font-medium">Capacity plan</h2>
           <p className="text-xs text-muted-foreground">
-            Computed from observed herd counts × group rules × organization
-            stocking defaults. Becomes the target the Barn/Pen steps
-            build toward.
+            Each row&apos;s <span className="font-medium">Head</span> is the
+            count of active animals the rule engine would place in that
+            group right now (including milk yield for High / Mid / Low).
+            <span className="font-medium"> Pen cap</span> ={" "}
+            <span className="font-mono">head × stocking %</span> — the
+            minimum stall count those pens must provide.{" "}
+            <span className="font-medium">Bunk ft</span> ={" "}
+            <span className="font-mono">head × bunk in/cow ÷ 12</span> — the
+            minimum running feet of feed bunk. Settings → Infrastructure
+            is where you build pens to satisfy these targets.
+            {headCounts.unassigned > 0 ? (
+              <span className="block text-amber-600 dark:text-amber-400 mt-1">
+                {headCounts.unassigned} animal
+                {headCounts.unassigned === 1 ? "" : "s"} don&apos;t match any
+                group rule yet — likely missing milk data or out-of-range
+                facts. Open Group moves to see which.
+              </span>
+            ) : null}
           </p>
         </header>
         <CapacityPlanTable plan={capacityPlan} />

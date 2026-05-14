@@ -178,3 +178,44 @@ export function computeCapacityPlan(
     },
   };
 }
+
+/**
+ * Same shape as computeCapacityPlan, but the head count per group comes
+ * from an explicit Map (typically the output of computeGroupHeadcounts
+ * which runs the rule engine over the actual roster). This is the
+ * accurate path; the herd-profile variant above is kept for the setup
+ * wizard preview when no animals exist yet.
+ */
+export function computeCapacityPlanFromCounts(
+  groups: LocationGroup[],
+  headByGroup: Map<string, number>,
+  defaults: CapacityDefaults,
+): CapacityPlan {
+  const rows: CapacityPlanRow[] = groups.map((g) => {
+    const head = headByGroup.get(g.id) ?? 0;
+    const stocking = stockingPctFor(g, defaults);
+    const bunkIn = bunkInFor(g, defaults);
+    const penCap = Math.ceil((head * stocking) / 100);
+    const bunkTotalIn = penCap * bunkIn;
+    return {
+      group_id: g.id,
+      group_label: g.label,
+      group_class: g.group_class,
+      estimated_head: head,
+      stocking_pct: stocking,
+      pen_capacity: penCap,
+      bunk_in_per_head: bunkIn,
+      bunk_total_in: bunkTotalIn,
+      bunk_total_ft: Math.round((bunkTotalIn / 12) * 10) / 10,
+    };
+  });
+  return {
+    rows,
+    totals: {
+      estimated_head: rows.reduce((s, r) => s + r.estimated_head, 0),
+      pen_capacity: rows.reduce((s, r) => s + r.pen_capacity, 0),
+      bunk_total_ft:
+        Math.round(rows.reduce((s, r) => s + r.bunk_total_ft, 0) * 10) / 10,
+    },
+  };
+}
