@@ -160,69 +160,11 @@ export async function quickAddPen(input: NewPenInput): Promise<Result> {
 }
 
 // ---------------------------------------------------------------------
-// Inline barn CRUD — declared on /pen-moves so users can create the
-// physical envelope and the pens inside it from the same workspace.
+// Inline barn delete / merge — declared on /pen-moves alongside Settings →
+// Infrastructure. Create / update are handled by the canonical
+// createBarn / updateBarn in settings/locations/[id]/barns-actions.ts
+// so both surfaces collect the same structure + facilities fields.
 // ---------------------------------------------------------------------
-const barnCreateSchema = z.object({
-  location_id: z.string().uuid(),
-  name: z.string().trim().min(1, "Name required.").max(120),
-  length_ft: z.number().min(0).max(10_000).nullable().optional(),
-  width_ft: z.number().min(0).max(10_000).nullable().optional(),
-  layout: z.enum(["single_side", "double_side", "free"]).default("double_side"),
-  alley_width_ft: z.number().min(0).max(100).nullable().optional(),
-});
-export type BarnCreateInput = z.infer<typeof barnCreateSchema>;
-
-export async function quickAddBarn(input: BarnCreateInput): Promise<Result> {
-  await requireAnyRole([RoleSuperAdmin, RoleAdmin]);
-  const parsed = barnCreateSchema.safeParse(input);
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
-
-  const admin = createAdminClient();
-  const { error } = await admin.from("barns").insert({
-    location_id: parsed.data.location_id,
-    name: parsed.data.name,
-    type: "freestall",
-    length_ft: parsed.data.length_ft ?? null,
-    width_ft: parsed.data.width_ft ?? null,
-    layout: parsed.data.layout,
-    alley_width_ft: parsed.data.alley_width_ft ?? null,
-  });
-  if (error) return { error: error.message };
-
-  revalidatePath("/pen-moves");
-  revalidatePath(`/settings/locations/${parsed.data.location_id}/infrastructure`);
-  return { success: true };
-}
-
-const barnUpdateSchema = barnCreateSchema.extend({
-  id: z.string().uuid(),
-});
-export type BarnUpdateInput = z.infer<typeof barnUpdateSchema>;
-
-export async function updateBarnQuick(input: BarnUpdateInput): Promise<Result> {
-  await requireAnyRole([RoleSuperAdmin, RoleAdmin]);
-  const parsed = barnUpdateSchema.safeParse(input);
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
-
-  const admin = createAdminClient();
-  const { id, ...rest } = parsed.data;
-  const { error } = await admin
-    .from("barns")
-    .update({
-      name: rest.name,
-      length_ft: rest.length_ft ?? null,
-      width_ft: rest.width_ft ?? null,
-      layout: rest.layout,
-      alley_width_ft: rest.alley_width_ft ?? null,
-    })
-    .eq("id", id);
-  if (error) return { error: error.message };
-
-  revalidatePath("/pen-moves");
-  revalidatePath(`/settings/locations/${parsed.data.location_id}/infrastructure`);
-  return { success: true };
-}
 
 export async function deleteBarnQuick(input: {
   barn_id: string;

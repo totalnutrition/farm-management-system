@@ -153,6 +153,7 @@ export async function createBarn(
   const { error } = await authz.admin.from("barns").insert(toRow(parsed.data));
   if (error) return { error: error.message };
   revalidatePath(`/settings/locations/${parsed.data.location_id}/infrastructure`);
+  revalidatePath("/pen-moves");
   return { success: true };
 }
 
@@ -167,6 +168,7 @@ export async function updateBarn(
   const { error } = await authz.admin.from("barns").update(toRow(rest)).eq("id", id);
   if (error) return { error: error.message };
   revalidatePath(`/settings/locations/${parsed.data.location_id}/infrastructure`);
+  revalidatePath("/pen-moves");
   return { success: true };
 }
 
@@ -179,5 +181,6 @@ export async function deleteBarn(input: {
   const { error } = await authz.admin.from("barns").delete().eq("id", input.id);
   if (error) return { error: error.message };
   revalidatePath(`/settings/locations/${input.location_id}/infrastructure`);
+  revalidatePath("/pen-moves");
   return { success: true };
 }
