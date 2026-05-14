@@ -28,8 +28,19 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
-import { applyPenMove, bulkApplyPenMoves, quickAddPen } from "./actions";
+import {
+  applyPenMove,
+  bulkApplyPenMoves,
+  quickAddPen,
+  quickAddBarn,
+  updateBarnQuick,
+  deleteBarnQuick,
+  mergeBarnsQuick,
+} from "./actions";
 import { Input } from "@/components/ui/input";
+import { BarnVisualizer } from "../settings/locations/[id]/barn-visualizer";
+import type { Barn } from "@/lib/barns";
+import type { Pen } from "@/lib/pens";
 
 export type AnimalLite = {
   id: string;
@@ -51,6 +62,29 @@ export type PenLite = {
   suggested_count: number;
 };
 
+export type BarnLite = {
+  id: string;
+  name: string;
+  length_ft: number | null;
+  width_ft: number | null;
+  layout: string;
+  alley_width_ft: number | null;
+};
+
+export type PenForVisualizer = {
+  id: string;
+  barn_id: string | null;
+  group_id: string | null;
+  group_label: string | null;
+  name: string;
+  capacity_head: number | null;
+  bunk_running_ft: number | null;
+  length_ft: number | null;
+  width_ft: number | null;
+  position_index: number;
+  side: "left" | "right" | null;
+};
+
 export type GroupBlock = {
   group_id: string;
   group_label: string;
@@ -65,26 +99,42 @@ export type GroupBlock = {
 export function PenMovesClient({
   blocks,
   locationId,
+  barns,
+  pens,
+  headcountByPen,
 }: {
   blocks: GroupBlock[];
   locationId: string;
+  barns: BarnLite[];
+  pens: PenForVisualizer[];
+  headcountByPen: Record<string, number>;
 }) {
-  if (blocks.length === 0) {
-    return (
-      <div className="ring-1 ring-foreground/10 p-3 text-xs text-muted-foreground">
-        Nothing here yet. Assign cows to groups first on{" "}
-        <Link href="/group-moves" className="underline underline-offset-2">
-          Group moves
-        </Link>
-        , then come back to declare and assign pens per group.
-      </div>
-    );
-  }
   return (
     <div className="flex flex-col gap-4">
-      {blocks.map((b) => (
-        <GroupBlockCard key={b.group_id} block={b} locationId={locationId} />
-      ))}
+      <BarnsSection
+        barns={barns}
+        pens={pens}
+        headcountByPen={headcountByPen}
+        locationId={locationId}
+      />
+      {blocks.length === 0 ? (
+        <div className="ring-1 ring-foreground/10 p-3 text-xs text-muted-foreground">
+          No groups need pen splits yet. Assign cows to groups first on{" "}
+          <Link href="/group-moves" className="underline underline-offset-2">
+            Group moves
+          </Link>
+          , then come back to stripe them across pens.
+        </div>
+      ) : (
+        blocks.map((b) => (
+          <GroupBlockCard
+            key={b.group_id}
+            block={b}
+            locationId={locationId}
+            barns={barns}
+          />
+        ))
+      )}
     </div>
   );
 }
@@ -92,9 +142,11 @@ export function PenMovesClient({
 function GroupBlockCard({
   block,
   locationId,
+  barns,
 }: {
   block: GroupBlock;
   locationId: string;
+  barns: BarnLite[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -180,7 +232,7 @@ function GroupBlockCard({
   // based on the engine-driven target capacity.
   if (block.pens.length === 0) {
     return (
-      <section className="ring-1 ring-amber-500/40 bg-amber-500/5 flex flex-col">
+      <section id={`group-${block.group_id}`} className="ring-1 ring-amber-500/40 bg-amber-500/5 flex flex-col">
         <header className="px-3 py-2 flex items-start justify-between gap-3">
           <div className="flex flex-col gap-0.5">
             <h3 className="text-sm font-medium">
@@ -201,6 +253,7 @@ function GroupBlockCard({
           <AddPenInline
             locationId={locationId}
             groupId={block.group_id}
+            barns={barns}
             suggestedCap={
               block.target_pen_cap > 0
                 ? Math.min(80, Math.max(20, Math.round(block.target_pen_cap / Math.max(1, Math.ceil(block.target_pen_cap / 50)))))
@@ -214,7 +267,7 @@ function GroupBlockCard({
   }
 
   return (
-    <section className="ring-1 ring-foreground/10 flex flex-col">
+    <section id={`group-${block.group_id}`} className="ring-1 ring-foreground/10 flex flex-col">
       <header className="px-3 py-2 bg-foreground/5 flex items-start justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <h3 className="text-sm font-medium">
@@ -252,6 +305,7 @@ function GroupBlockCard({
         <AddPenInline
           locationId={locationId}
           groupId={block.group_id}
+          barns={barns}
           suggestedCap={null}
           defaultName={`${block.group_label} pen ${block.pens.length + 1}`}
           compact
@@ -363,12 +417,14 @@ function GroupBlockCard({
 function AddPenInline({
   locationId,
   groupId,
+  barns,
   suggestedCap,
   defaultName,
   compact = false,
 }: {
   locationId: string;
   groupId: string;
+  barns: BarnLite[];
   suggestedCap: number | null;
   defaultName: string;
   compact?: boolean;
@@ -379,6 +435,10 @@ function AddPenInline({
   const [cap, setCap] = useState<string>(suggestedCap ? String(suggestedCap) : "");
   const [lengthFt, setLengthFt] = useState<string>("");
   const [widthFt, setWidthFt] = useState<string>("");
+  const [barnId, setBarnId] = useState<string>(
+    barns.length === 1 ? barns[0].id : "",
+  );
+  const [side, setSide] = useState<"left" | "right" | "none">("none");
   const [busy, startTransition] = useTransition();
 
   if (!open) {
@@ -394,6 +454,10 @@ function AddPenInline({
       toast.error("Name the pen.");
       return;
     }
+    if (barns.length > 1 && !barnId) {
+      toast.error("Pick a barn.");
+      return;
+    }
     startTransition(async () => {
       const r = await quickAddPen({
         location_id: locationId,
@@ -402,6 +466,8 @@ function AddPenInline({
         capacity_head: cap ? Number(cap) : null,
         length_ft: lengthFt ? Number(lengthFt) : null,
         width_ft: widthFt ? Number(widthFt) : null,
+        barn_id: barnId || null,
+        side: side === "none" ? null : side,
       });
       if (r.error) {
         toast.error(r.error);
@@ -413,6 +479,7 @@ function AddPenInline({
       setCap(suggestedCap ? String(suggestedCap) : "");
       setLengthFt("");
       setWidthFt("");
+      setSide("none");
       router.refresh();
     });
   };
@@ -423,6 +490,23 @@ function AddPenInline({
         <label className="text-[10px] text-muted-foreground">Name</label>
         <Input value={name} onChange={(e) => setName(e.target.value)} />
       </div>
+      {barns.length > 1 ? (
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] text-muted-foreground">Barn</label>
+          <Select value={barnId} onValueChange={setBarnId}>
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Pick a barn" />
+            </SelectTrigger>
+            <SelectContent>
+              {barns.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
       <div className="flex flex-col gap-1">
         <label className="text-[10px] text-muted-foreground">
           Capacity (head){suggestedCap ? ` — suggested ${suggestedCap}` : ""}
@@ -456,6 +540,19 @@ function AddPenInline({
           value={widthFt}
           onChange={(e) => setWidthFt(e.target.value)}
         />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] text-muted-foreground">Side (double-side barn)</label>
+        <Select value={side} onValueChange={(v) => setSide(v as "left" | "right" | "none")}>
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">— unspecified —</SelectItem>
+            <SelectItem value="left">Left of feed alley</SelectItem>
+            <SelectItem value="right">Right of feed alley</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       <div className="col-span-2 sm:col-span-4 flex gap-2">
         <Button type="button" size="sm" onClick={onCreate} disabled={busy}>
@@ -590,5 +687,566 @@ function OverrideDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Barns section — top-down visual of every barn at the active location,
+// with inline create / edit / delete / merge so users don't bounce to
+// Infrastructure to set up the physical envelope.
+// ---------------------------------------------------------------------
+
+type BarnLayoutValue = "single_side" | "double_side" | "free";
+
+function toVisualizerBarn(b: BarnLite): Barn {
+  // BarnVisualizer expects the full lib/barns Barn shape but only reads
+  // a handful of fields. Fill the rest with sensible nulls so we don't
+  // have to hydrate them from the database.
+  return {
+    id: b.id,
+    location_id: "",
+    name: b.name,
+    barn_code: null,
+    type: "freestall",
+    row_configuration: null,
+    length_ft: b.length_ft,
+    width_ft: b.width_ft,
+    layout: b.layout,
+    alley_width_ft: b.alley_width_ft,
+    freestall_count: null,
+    headlock_count: null,
+    loafing_area_sqft: null,
+    holding_pen_capacity: null,
+    stall_surface: null,
+    bedding_type: null,
+    stall_length_ft: null,
+    stall_width_in: null,
+    neck_rail_height_in: null,
+    bunk_type: null,
+    bunk_total_linear_ft: null,
+    floor_type: null,
+    manure_handling: null,
+    ventilation_type: null,
+    fan_count: null,
+    fan_diameter_in: null,
+    soaker_lines_present: false,
+    soaker_nozzle_height_in: null,
+    sprinklers: false,
+    fans_over_stalls: false,
+    brushes_count: null,
+    footbath_present: false,
+    parlor_type: null,
+    parlor_stalls: null,
+    robot_count: null,
+    notes: null,
+  };
+}
+
+function toVisualizerPen(p: PenForVisualizer): Pen {
+  return {
+    id: p.id,
+    location_id: "",
+    barn_id: p.barn_id,
+    group_id: p.group_id,
+    name: p.name,
+    pen_code: null,
+    type: "milking",
+    capacity_head: p.capacity_head,
+    bunk_running_ft: p.bunk_running_ft,
+    stocking_target_pct: null,
+    length_ft: p.length_ft,
+    width_ft: p.width_ft,
+    position_index: p.position_index,
+    side: p.side,
+    is_AI_pen: false,
+    is_BULL_pen: false,
+    is_DRY_pen: false,
+    is_HOSP_pen: false,
+    is_FRESH_pen: false,
+    is_placeholder: false,
+    notes: null,
+  };
+}
+
+function BarnsSection({
+  barns,
+  pens,
+  headcountByPen,
+  locationId,
+}: {
+  barns: BarnLite[];
+  pens: PenForVisualizer[];
+  headcountByPen: Record<string, number>;
+  locationId: string;
+}) {
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<BarnLite | null>(null);
+  const [deleting, setDeleting] = useState<BarnLite | null>(null);
+  const [merging, setMerging] = useState<BarnLite | null>(null);
+
+  const groupLabelByPen = new Map(pens.map((p) => [p.id, p.group_label] as const));
+  const labelFor = (groupId: string | null): string => {
+    if (!groupId) return "— no group —";
+    // walk pens to find a label for this group_id
+    for (const p of pens) {
+      if (p.group_id === groupId) return p.group_label ?? "— no label —";
+    }
+    return "— no label —";
+  };
+  void groupLabelByPen;
+
+  const detached = pens.filter((p) => !p.barn_id);
+
+  return (
+    <section className="flex flex-col gap-3">
+      <header className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-medium">Barns</h2>
+          <p className="text-[10px] text-muted-foreground">
+            Top-down sketch per barn. Pens are shaded by group, click any
+            pen to jump to its group below. Edit barn dimensions on the
+            header buttons.
+          </p>
+        </div>
+        <Button type="button" size="sm" variant="outline" onClick={() => setCreating(true)}>
+          + Add barn
+        </Button>
+      </header>
+
+      {barns.length === 0 ? (
+        <div className="ring-1 ring-foreground/10 p-4 text-xs text-muted-foreground">
+          No barns yet. Add one with <span className="font-medium">+ Add barn</span>{" "}
+          above — sketch its length, width and layout, then declare pens
+          inside it.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {barns.map((b) => (
+            <div key={b.id} className="flex flex-col gap-1">
+              <div className="flex justify-end gap-2 -mb-1">
+                <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(b)}>
+                  Edit
+                </Button>
+                {barns.length > 1 ? (
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setMerging(b)}>
+                    Merge into…
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive"
+                  onClick={() => setDeleting(b)}
+                >
+                  Delete
+                </Button>
+              </div>
+              <BarnVisualizer
+                barn={toVisualizerBarn(b)}
+                pens={pens.filter((p) => p.barn_id === b.id).map(toVisualizerPen)}
+                groupLabel={labelFor}
+                headcountByPen={headcountByPen}
+                onPenClick={(p) => {
+                  // Scroll to the group section for this pen, if it has one.
+                  if (!p.group_id) return;
+                  const el = document.getElementById(`group-${p.group_id}`);
+                  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {detached.length > 0 ? (
+        <div className="ring-1 ring-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">
+            {detached.length} pen{detached.length === 1 ? "" : "s"} not in a barn:
+          </span>{" "}
+          {detached.map((p) => p.name).join(", ")}. Open Settings →
+          Infrastructure to re-home them, or merge / delete the orphan
+          barn that used to hold them.
+        </div>
+      ) : null}
+
+      <BarnFormDialog
+        open={creating}
+        onOpenChange={(o) => setCreating(o)}
+        mode="create"
+        locationId={locationId}
+      />
+      <BarnFormDialog
+        open={!!editing}
+        onOpenChange={(o) => !o && setEditing(null)}
+        mode="edit"
+        barn={editing}
+        locationId={locationId}
+      />
+      <DeleteBarnDialog
+        open={!!deleting}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        barn={deleting}
+        otherBarns={barns.filter((b) => b.id !== deleting?.id)}
+        penCount={
+          deleting ? pens.filter((p) => p.barn_id === deleting.id).length : 0
+        }
+      />
+      <MergeBarnDialog
+        open={!!merging}
+        onOpenChange={(o) => !o && setMerging(null)}
+        primary={merging}
+        otherBarns={barns.filter((b) => b.id !== merging?.id)}
+      />
+    </section>
+  );
+}
+
+function BarnFormDialog({
+  open,
+  onOpenChange,
+  mode,
+  barn,
+  locationId,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  mode: "create" | "edit";
+  barn?: BarnLite | null;
+  locationId: string;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        {open ? (
+          <BarnFormBody
+            mode={mode}
+            barn={barn ?? null}
+            locationId={locationId}
+            onClose={() => onOpenChange(false)}
+          />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BarnFormBody({
+  mode,
+  barn,
+  locationId,
+  onClose,
+}: {
+  mode: "create" | "edit";
+  barn: BarnLite | null;
+  locationId: string;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const editing = mode === "edit" && barn;
+  const [name, setName] = useState(editing ? barn.name : "");
+  const [lengthFt, setLengthFt] = useState<string>(
+    editing && barn.length_ft !== null ? String(barn.length_ft) : "",
+  );
+  const [widthFt, setWidthFt] = useState<string>(
+    editing && barn.width_ft !== null ? String(barn.width_ft) : "",
+  );
+  const [layout, setLayout] = useState<BarnLayoutValue>(
+    editing ? ((barn.layout as BarnLayoutValue) ?? "double_side") : "double_side",
+  );
+  const [alleyFt, setAlleyFt] = useState<string>(
+    editing && barn.alley_width_ft !== null ? String(barn.alley_width_ft) : "",
+  );
+  const [busy, startTransition] = useTransition();
+
+  const onSubmit = () => {
+    if (!name.trim()) {
+      toast.error("Name the barn.");
+      return;
+    }
+    startTransition(async () => {
+      const payload = {
+        location_id: locationId,
+        name: name.trim(),
+        length_ft: lengthFt ? Number(lengthFt) : null,
+        width_ft: widthFt ? Number(widthFt) : null,
+        layout,
+        alley_width_ft: alleyFt ? Number(alleyFt) : null,
+      };
+      const r =
+        mode === "create"
+          ? await quickAddBarn(payload)
+          : await updateBarnQuick({ ...payload, id: barn!.id });
+      if (r.error) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(mode === "create" ? "Barn added." : "Barn updated.");
+      onClose();
+      router.refresh();
+    });
+  };
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>{mode === "create" ? "Add barn" : "Edit barn"}</DialogTitle>
+        <DialogDescription>
+          Dimensions drive the top-down sketch. Layout decides whether
+          pens flank one side of the feed alley or both.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="col-span-2 flex flex-col gap-1">
+          <label className="text-[10px] text-muted-foreground">Name</label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] text-muted-foreground">Length (ft, long axis)</label>
+          <Input
+            type="number"
+            step="any"
+            min={0}
+            value={lengthFt}
+            onChange={(e) => setLengthFt(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] text-muted-foreground">Width (ft, short axis)</label>
+          <Input
+            type="number"
+            step="any"
+            min={0}
+            value={widthFt}
+            onChange={(e) => setWidthFt(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] text-muted-foreground">Layout</label>
+          <Select value={layout} onValueChange={(v) => setLayout(v as BarnLayoutValue)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="single_side">Single-side</SelectItem>
+              <SelectItem value="double_side">Double-side</SelectItem>
+              <SelectItem value="free">Free / custom</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] text-muted-foreground">Feed alley (ft)</label>
+          <Input
+            type="number"
+            step="any"
+            min={0}
+            value={alleyFt}
+            onChange={(e) => setAlleyFt(e.target.value)}
+          />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="button" onClick={onSubmit} disabled={busy}>
+          {busy ? "Saving…" : mode === "create" ? "Add barn" : "Save"}
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
+
+function DeleteBarnDialog({
+  open,
+  onOpenChange,
+  barn,
+  otherBarns,
+  penCount,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  barn: BarnLite | null;
+  otherBarns: BarnLite[];
+  penCount: number;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        {open && barn ? (
+          <DeleteBarnBody
+            barn={barn}
+            otherBarns={otherBarns}
+            penCount={penCount}
+            onClose={() => onOpenChange(false)}
+          />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteBarnBody({
+  barn,
+  otherBarns,
+  penCount,
+  onClose,
+}: {
+  barn: BarnLite;
+  otherBarns: BarnLite[];
+  penCount: number;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [reattachTo, setReattachTo] = useState<string>("");
+  const [busy, startTransition] = useTransition();
+
+  const onSubmit = () => {
+    startTransition(async () => {
+      const r = await deleteBarnQuick({
+        barn_id: barn.id,
+        reattach_to_barn_id: reattachTo || null,
+      });
+      if (r.error) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(`${barn.name} deleted.`);
+      onClose();
+      router.refresh();
+    });
+  };
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Delete {barn.name}?</DialogTitle>
+        <DialogDescription>
+          {penCount === 0
+            ? "No pens are attached to this barn — it will be removed."
+            : `${penCount} pen${penCount === 1 ? "" : "s"} live in this barn. Pick where they should move, or leave them detached and re-home them later from Infrastructure.`}
+        </DialogDescription>
+      </DialogHeader>
+      {penCount > 0 ? (
+        <Select value={reattachTo} onValueChange={setReattachTo}>
+          <SelectTrigger>
+            <SelectValue placeholder="Detach pens (re-home later)" />
+          </SelectTrigger>
+          <SelectContent>
+            {otherBarns.map((b) => (
+              <SelectItem key={b.id} value={b.id}>
+                Move pens to {b.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : null}
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="button" variant="destructive" onClick={onSubmit} disabled={busy}>
+          {busy ? "Deleting…" : "Delete barn"}
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
+
+function MergeBarnDialog({
+  open,
+  onOpenChange,
+  primary,
+  otherBarns,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  primary: BarnLite | null;
+  otherBarns: BarnLite[];
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        {open && primary ? (
+          <MergeBarnBody
+            primary={primary}
+            otherBarns={otherBarns}
+            onClose={() => onOpenChange(false)}
+          />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MergeBarnBody({
+  primary,
+  otherBarns,
+  onClose,
+}: {
+  primary: BarnLite;
+  otherBarns: BarnLite[];
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [secondaryId, setSecondaryId] = useState<string>("");
+  const [newName, setNewName] = useState<string>(primary.name);
+  const [busy, startTransition] = useTransition();
+
+  const onSubmit = () => {
+    if (!secondaryId) {
+      toast.error("Pick the barn to merge in.");
+      return;
+    }
+    startTransition(async () => {
+      const r = await mergeBarnsQuick({
+        primary_barn_id: primary.id,
+        secondary_barn_id: secondaryId,
+        new_name: newName.trim() || undefined,
+      });
+      if (r.error) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success("Barns merged.");
+      onClose();
+      router.refresh();
+    });
+  };
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Merge into {primary.name}</DialogTitle>
+        <DialogDescription>
+          Pens from the second barn move into <span className="font-medium">{primary.name}</span>;
+          lengths sum along the long axis. The second barn is deleted.
+        </DialogDescription>
+      </DialogHeader>
+      <Select value={secondaryId} onValueChange={setSecondaryId}>
+        <SelectTrigger>
+          <SelectValue placeholder="Pick the barn to merge in" />
+        </SelectTrigger>
+        <SelectContent>
+          {otherBarns.map((b) => (
+            <SelectItem key={b.id} value={b.id}>
+              {b.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] text-muted-foreground">Merged barn name</label>
+        <Input value={newName} onChange={(e) => setNewName(e.target.value)} />
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="button" onClick={onSubmit} disabled={busy}>
+          {busy ? "Merging…" : "Merge"}
+        </Button>
+      </DialogFooter>
+    </>
   );
 }

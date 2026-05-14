@@ -158,3 +158,169 @@ export async function quickAddPen(input: NewPenInput): Promise<Result> {
   revalidatePath(`/settings/locations/${parsed.data.location_id}/infrastructure`);
   return { success: true };
 }
+
+// ---------------------------------------------------------------------
+// Inline barn CRUD — declared on /pen-moves so users can create the
+// physical envelope and the pens inside it from the same workspace.
+// ---------------------------------------------------------------------
+const barnCreateSchema = z.object({
+  location_id: z.string().uuid(),
+  name: z.string().trim().min(1, "Name required.").max(120),
+  length_ft: z.number().min(0).max(10_000).nullable().optional(),
+  width_ft: z.number().min(0).max(10_000).nullable().optional(),
+  layout: z.enum(["single_side", "double_side", "free"]).default("double_side"),
+  alley_width_ft: z.number().min(0).max(100).nullable().optional(),
+});
+export type BarnCreateInput = z.infer<typeof barnCreateSchema>;
+
+export async function quickAddBarn(input: BarnCreateInput): Promise<Result> {
+  await requireAnyRole([RoleSuperAdmin, RoleAdmin]);
+  const parsed = barnCreateSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("barns").insert({
+    location_id: parsed.data.location_id,
+    name: parsed.data.name,
+    type: "freestall",
+    length_ft: parsed.data.length_ft ?? null,
+    width_ft: parsed.data.width_ft ?? null,
+    layout: parsed.data.layout,
+    alley_width_ft: parsed.data.alley_width_ft ?? null,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/pen-moves");
+  revalidatePath(`/settings/locations/${parsed.data.location_id}/infrastructure`);
+  return { success: true };
+}
+
+const barnUpdateSchema = barnCreateSchema.extend({
+  id: z.string().uuid(),
+});
+export type BarnUpdateInput = z.infer<typeof barnUpdateSchema>;
+
+export async function updateBarnQuick(input: BarnUpdateInput): Promise<Result> {
+  await requireAnyRole([RoleSuperAdmin, RoleAdmin]);
+  const parsed = barnUpdateSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const admin = createAdminClient();
+  const { id, ...rest } = parsed.data;
+  const { error } = await admin
+    .from("barns")
+    .update({
+      name: rest.name,
+      length_ft: rest.length_ft ?? null,
+      width_ft: rest.width_ft ?? null,
+      layout: rest.layout,
+      alley_width_ft: rest.alley_width_ft ?? null,
+    })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/pen-moves");
+  revalidatePath(`/settings/locations/${parsed.data.location_id}/infrastructure`);
+  return { success: true };
+}
+
+export async function deleteBarnQuick(input: {
+  barn_id: string;
+  reattach_to_barn_id?: string | null;
+}): Promise<Result> {
+  await requireAnyRole([RoleSuperAdmin, RoleAdmin]);
+  const parsed = z
+    .object({
+      barn_id: z.string().uuid(),
+      reattach_to_barn_id: z.string().uuid().nullable().optional(),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { error: "Invalid input." };
+
+  const admin = createAdminClient();
+
+  const { data: barn } = await admin
+    .from("barns")
+    .select("id, location_id")
+    .eq("id", parsed.data.barn_id)
+    .maybeSingle();
+  if (!barn) return { error: "Barn not found." };
+
+  // Move pens to the reattach target (or detach if null).
+  await admin
+    .from("pens")
+    .update({ barn_id: parsed.data.reattach_to_barn_id ?? null })
+    .eq("barn_id", parsed.data.barn_id);
+
+  const { error } = await admin
+    .from("barns")
+    .delete()
+    .eq("id", parsed.data.barn_id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/pen-moves");
+  revalidatePath(`/settings/locations/${barn.location_id}/infrastructure`);
+  return { success: true };
+}
+
+export async function mergeBarnsQuick(input: {
+  primary_barn_id: string;
+  secondary_barn_id: string;
+  new_name?: string;
+}): Promise<Result> {
+  await requireAnyRole([RoleSuperAdmin, RoleAdmin]);
+  const parsed = z
+    .object({
+      primary_barn_id: z.string().uuid(),
+      secondary_barn_id: z.string().uuid(),
+      new_name: z.string().trim().max(120).optional(),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { error: "Invalid input." };
+  if (parsed.data.primary_barn_id === parsed.data.secondary_barn_id) {
+    return { error: "Pick two different barns." };
+  }
+
+  const admin = createAdminClient();
+  const { data: pair } = await admin
+    .from("barns")
+    .select("id, location_id, name, length_ft, width_ft")
+    .in("id", [parsed.data.primary_barn_id, parsed.data.secondary_barn_id]);
+  if (!pair || pair.length !== 2) return { error: "Barns not found." };
+  if (pair[0].location_id !== pair[1].location_id)
+    return { error: "Barns belong to different locations." };
+
+  const primary = pair.find((b) => b.id === parsed.data.primary_barn_id)!;
+  const secondary = pair.find((b) => b.id === parsed.data.secondary_barn_id)!;
+
+  // Move pens.
+  await admin
+    .from("pens")
+    .update({ barn_id: primary.id })
+    .eq("barn_id", secondary.id);
+
+  // Sum lengths (along the long axis); keep primary's width.
+  const mergedLen =
+    primary.length_ft || secondary.length_ft
+      ? Number(primary.length_ft ?? 0) + Number(secondary.length_ft ?? 0) || null
+      : null;
+
+  const { error: updErr } = await admin
+    .from("barns")
+    .update({
+      name: parsed.data.new_name ?? primary.name,
+      length_ft: mergedLen,
+    })
+    .eq("id", primary.id);
+  if (updErr) return { error: updErr.message };
+
+  const { error: delErr } = await admin
+    .from("barns")
+    .delete()
+    .eq("id", secondary.id);
+  if (delErr) return { error: delErr.message };
+
+  revalidatePath("/pen-moves");
+  revalidatePath(`/settings/locations/${primary.location_id}/infrastructure`);
+  return { success: true };
+}

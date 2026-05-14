@@ -22,6 +22,8 @@ import {
   type GroupBlock,
   type AnimalLite,
   type PenLite,
+  type BarnLite,
+  type PenForVisualizer,
 } from "./pen-moves-client";
 
 export const metadata = { title: "Pen moves" };
@@ -66,10 +68,20 @@ export default async function PenMovesPage() {
     group_id: string | null;
     name: string;
     capacity_head: number | null;
+    bunk_running_ft: number | null;
     length_ft: number | null;
     width_ft: number | null;
     position_index: number;
     side: "left" | "right" | null;
+  };
+  type B = {
+    id: string;
+    location_id: string;
+    name: string;
+    length_ft: number | null;
+    width_ft: number | null;
+    layout: string | null;
+    alley_width_ft: number | null;
   };
   type G = {
     id: string;
@@ -80,7 +92,7 @@ export default async function PenMovesPage() {
     rule_predicates: Record<string, unknown>;
   };
 
-  const [animalRows, penRows, groupRows, capDefaults, user] = await Promise.all([
+  const [animalRows, penRows, barnRows, groupRows, capDefaults, user] = await Promise.all([
     admin
       .from("animals")
       .select(
@@ -93,11 +105,17 @@ export default async function PenMovesPage() {
     admin
       .from("pens")
       .select(
-        "id, location_id, barn_id, group_id, name, capacity_head, length_ft, width_ft, position_index, side",
+        "id, location_id, barn_id, group_id, name, capacity_head, bunk_running_ft, length_ft, width_ft, position_index, side",
       )
       .eq("location_id", active.id)
       .order("position_index")
       .then(({ data }) => (data ?? []) as P[]),
+    admin
+      .from("barns")
+      .select("id, location_id, name, length_ft, width_ft, layout, alley_width_ft")
+      .eq("location_id", active.id)
+      .order("name")
+      .then(({ data }) => (data ?? []) as B[]),
     admin
       .from("location_groups")
       .select("id, label, display_order, group_slug, group_class, rule_predicates")
@@ -251,6 +269,38 @@ export default async function PenMovesPage() {
   const groupsWithoutPens = blocks.filter((b) => b.pens.length === 0).length;
   const totalUnassignedPen = animalRows.filter((a) => !a.current_pen_id).length;
 
+  // Headcount per pen (current, not suggested) for the barn visualizer.
+  const headcountByPen: Record<string, number> = {};
+  for (const a of animalRows) {
+    if (a.current_pen_id) {
+      headcountByPen[a.current_pen_id] = (headcountByPen[a.current_pen_id] ?? 0) + 1;
+    }
+  }
+
+  const groupLabelById = new Map(groupRows.map((g) => [g.id, g.label] as const));
+
+  const barns: BarnLite[] = barnRows.map((b) => ({
+    id: b.id,
+    name: b.name,
+    length_ft: b.length_ft,
+    width_ft: b.width_ft,
+    layout: b.layout ?? "double_side",
+    alley_width_ft: b.alley_width_ft,
+  }));
+  const pensForViz: PenForVisualizer[] = penRows.map((p) => ({
+    id: p.id,
+    barn_id: p.barn_id,
+    group_id: p.group_id,
+    group_label: p.group_id ? groupLabelById.get(p.group_id) ?? null : null,
+    name: p.name,
+    capacity_head: p.capacity_head,
+    bunk_running_ft: p.bunk_running_ft,
+    length_ft: p.length_ft,
+    width_ft: p.width_ft,
+    position_index: p.position_index,
+    side: p.side,
+  }));
+
   return (
     <div className="flex flex-col gap-4 py-4">
       <header className="flex flex-col gap-1">
@@ -271,7 +321,13 @@ export default async function PenMovesPage() {
         </p>
       </header>
 
-      <PenMovesClient blocks={blocks} locationId={active.id} />
+      <PenMovesClient
+        blocks={blocks}
+        locationId={active.id}
+        barns={barns}
+        pens={pensForViz}
+        headcountByPen={headcountByPen}
+      />
     </div>
   );
 }
