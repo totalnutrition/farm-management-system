@@ -91,3 +91,70 @@ export async function bulkApplyPenMoves(input: BulkInput): Promise<Result> {
   revalidatePath("/animals");
   return { success: true, applied: real.length };
 }
+
+// ---------------------------------------------------------------------
+// Inline pen creation from /pen-moves — bypasses Settings → Infra so
+// users can stand pens up without leaving the assignment workflow.
+// ---------------------------------------------------------------------
+const newPenSchema = z.object({
+  location_id: z.string().uuid(),
+  group_id: z.string().uuid(),
+  name: z.string().trim().min(1, "Name required.").max(120),
+  capacity_head: z.number().int().min(0).max(100_000).nullable().optional(),
+  length_ft: z.number().min(0).max(10_000).nullable().optional(),
+  width_ft: z.number().min(0).max(10_000).nullable().optional(),
+  bunk_running_ft: z.number().min(0).max(10_000).nullable().optional(),
+  side: z.enum(["left", "right"]).nullable().optional(),
+  barn_id: z.string().uuid().nullable().optional(),
+});
+export type NewPenInput = z.infer<typeof newPenSchema>;
+
+export async function quickAddPen(input: NewPenInput): Promise<Result> {
+  await requireAnyRole([RoleSuperAdmin, RoleAdmin]);
+  const parsed = newPenSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const admin = createAdminClient();
+  // Default barn: if the location has exactly one barn, attach the
+  // new pen to it. Otherwise leave barn_id null and let the user
+  // re-home the pen on Infrastructure later.
+  let barnId = parsed.data.barn_id ?? null;
+  if (barnId === null) {
+    const { data: barns } = await admin
+      .from("barns")
+      .select("id")
+      .eq("location_id", parsed.data.location_id);
+    if (barns && barns.length === 1) barnId = barns[0].id as string;
+  }
+
+  // Pick a sensible position_index — append to whatever side the user
+  // chose (default 0 if the side is empty).
+  const { data: existing } = await admin
+    .from("pens")
+    .select("position_index, side")
+    .eq("location_id", parsed.data.location_id)
+    .eq("group_id", parsed.data.group_id);
+  const sameSide = (existing ?? []).filter(
+    (r) => (r as { side: string | null }).side === (parsed.data.side ?? null),
+  );
+  const nextPos = sameSide.length;
+
+  const { error } = await admin.from("pens").insert({
+    location_id: parsed.data.location_id,
+    group_id: parsed.data.group_id,
+    barn_id: barnId,
+    name: parsed.data.name,
+    type: "milking",
+    capacity_head: parsed.data.capacity_head ?? null,
+    bunk_running_ft: parsed.data.bunk_running_ft ?? null,
+    length_ft: parsed.data.length_ft ?? null,
+    width_ft: parsed.data.width_ft ?? null,
+    position_index: nextPos,
+    side: parsed.data.side ?? null,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/pen-moves");
+  revalidatePath(`/settings/locations/${parsed.data.location_id}/infrastructure`);
+  return { success: true };
+}

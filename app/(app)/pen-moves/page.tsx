@@ -2,6 +2,17 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { getActiveLocation } from "@/lib/locations";
 import { NoLocationSelected } from "@/components/no-location-selected";
 import {
+  getOrganizationIdFromUser,
+  requireAnyRole,
+} from "@/lib/supabase-auth";
+import {
+  CapacityDefaultsFallback,
+  type CapacityDefaults,
+} from "@/lib/capacity-defaults";
+import { computeCapacityPlanFromCounts } from "@/lib/capacity-plan";
+import { computeGroupHeadcounts } from "@/lib/group-headcount";
+import type { GroupDef } from "@/lib/group-rules";
+import {
   suggestPenSplit,
   type SplitAnimal,
   type SplitPen,
@@ -50,13 +61,26 @@ export default async function PenMovesPage() {
   };
   type P = {
     id: string;
-    name: string;
+    location_id: string;
+    barn_id: string | null;
     group_id: string | null;
+    name: string;
     capacity_head: number | null;
+    length_ft: number | null;
+    width_ft: number | null;
+    position_index: number;
+    side: "left" | "right" | null;
   };
-  type G = { id: string; label: string; display_order: number };
+  type G = {
+    id: string;
+    label: string;
+    display_order: number;
+    group_slug: string;
+    group_class: string;
+    rule_predicates: Record<string, unknown>;
+  };
 
-  const [animalRows, penRows, groupRows] = await Promise.all([
+  const [animalRows, penRows, groupRows, capDefaults, user] = await Promise.all([
     admin
       .from("animals")
       .select(
@@ -68,17 +92,80 @@ export default async function PenMovesPage() {
       .then(({ data }) => (data ?? []) as A[]),
     admin
       .from("pens")
-      .select("id, name, group_id, capacity_head")
+      .select(
+        "id, location_id, barn_id, group_id, name, capacity_head, length_ft, width_ft, position_index, side",
+      )
       .eq("location_id", active.id)
-      .order("name")
+      .order("position_index")
       .then(({ data }) => (data ?? []) as P[]),
     admin
       .from("location_groups")
-      .select("id, label, display_order")
+      .select("id, label, display_order, group_slug, group_class, rule_predicates")
       .eq("location_id", active.id)
       .order("display_order")
       .then(({ data }) => (data ?? []) as G[]),
+    admin
+      .from("org_capacity_defaults")
+      .select("*")
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => data),
+    requireAnyRole(["super_admin", "admin"]),
   ]);
+
+  const orgId = getOrganizationIdFromUser(user);
+  void orgId;
+
+  // Engine-driven target capacity per group → drives the empty-state hint.
+  const groupDefs: GroupDef[] = groupRows.map((g) => ({
+    id: g.id,
+    label: g.label,
+    group_slug: g.group_slug,
+    group_class: g.group_class,
+    display_order: g.display_order,
+    rule_predicates: g.rule_predicates,
+  }));
+  const headCounts = await computeGroupHeadcounts(active.id, groupDefs);
+  const defaults: CapacityDefaults = capDefaults
+    ? {
+        fresh_stocking_pct: Number(capDefaults.fresh_stocking_pct),
+        high_stocking_pct: Number(capDefaults.high_stocking_pct),
+        mid_stocking_pct: Number(capDefaults.mid_stocking_pct),
+        low_stocking_pct: Number(capDefaults.low_stocking_pct),
+        dry_close_stocking_pct: Number(capDefaults.dry_close_stocking_pct),
+        dry_far_stocking_pct: Number(capDefaults.dry_far_stocking_pct),
+        fresh_bunk_in: Number(capDefaults.fresh_bunk_in),
+        high_bunk_in: Number(capDefaults.high_bunk_in),
+        mid_bunk_in: Number(capDefaults.mid_bunk_in),
+        low_bunk_in: Number(capDefaults.low_bunk_in),
+        dry_close_bunk_in: Number(capDefaults.dry_close_bunk_in),
+        dry_far_bunk_in: Number(capDefaults.dry_far_bunk_in),
+      }
+    : CapacityDefaultsFallback;
+  const plan = computeCapacityPlanFromCounts(
+    groupRows.map((g) => ({
+      id: g.id,
+      label: g.label,
+      group_slug: g.group_slug,
+      group_class: g.group_class,
+      display_order: g.display_order,
+      rule_predicates: g.rule_predicates,
+      // satisfies LocationGroup shape — fields the capacity helper
+      // doesn't read are fine to mock as nulls.
+      location_id: active.id,
+      preset_slug: null,
+      is_custom: false,
+    })),
+    headCounts.byGroup,
+    defaults,
+  );
+  const targetByGroup = new Map<string, { pen_cap: number; bunk_ft: number }>();
+  for (const r of plan.rows) {
+    targetByGroup.set(r.group_id, {
+      pen_cap: r.pen_capacity,
+      bunk_ft: r.bunk_total_ft,
+    });
+  }
 
   const penName = new Map(penRows.map((p) => [p.id, p.name] as const));
   const pensByGroup = new Map<string, P[]>();
@@ -147,6 +234,7 @@ export default async function PenMovesPage() {
       suggested_count: suggestedByPen.get(p.id) ?? 0,
     }));
 
+    const target = targetByGroup.get(g.id);
     blocks.push({
       group_id: g.id,
       group_label: g.label,
@@ -155,6 +243,8 @@ export default async function PenMovesPage() {
         if (a.parity !== b.parity) return a.parity - b.parity;
         return (a.dim ?? 0) - (b.dim ?? 0);
       }),
+      target_pen_cap: target?.pen_cap ?? 0,
+      target_bunk_ft: target?.bunk_ft ?? 0,
     });
   }
 
@@ -166,15 +256,16 @@ export default async function PenMovesPage() {
       <header className="flex flex-col gap-1">
         <h1 className="font-heading text-lg font-medium">Pen moves</h1>
         <p className="text-xs text-muted-foreground">
-          {active.name} · suggested pen assignments per group, computed from
-          parity + DIM and pen capacity. Caution badges flag over- /
-          under-stocked pens but don&apos;t block the assignment.
+          {active.name} · one section per group. Declare pens inline with{" "}
+          <span className="font-medium">+ Add pen here</span>, then the
+          engine stripes cows across them by parity + DIM. Caution badges
+          flag over- / under-stocked pens but never block.
           {groupsWithoutPens > 0 ? (
             <span className="block text-amber-600 dark:text-amber-400 mt-1">
               {groupsWithoutPens} group{groupsWithoutPens === 1 ? "" : "s"}{" "}
-              with cows but no pens declared yet ({totalUnassignedPen} cow
-              {totalUnassignedPen === 1 ? "" : "s"} ungated). Use the
-              &quot;Add pen&quot; link in each section below.
+              still need pens ({totalUnassignedPen} cow
+              {totalUnassignedPen === 1 ? "" : "s"} ungated). Suggested
+              capacity per group is in each section&apos;s header.
             </span>
           ) : null}
         </p>
