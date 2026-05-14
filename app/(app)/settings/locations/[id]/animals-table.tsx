@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,6 +12,10 @@ import {
   PencilEdit02Icon,
   Delete02Icon,
   ArrowRight01Icon,
+  ArrowUp01Icon,
+  ArrowDown01Icon,
+  Search01Icon,
+  DownloadCircle01Icon,
 } from "@hugeicons/core-free-icons";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -42,14 +46,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   createAnimal,
   deleteAnimal,
@@ -233,14 +229,217 @@ export function AnimalsTable({
   const [deleting, setDeleting] = useState<AnimalRow | null>(null);
   const router = useRouter();
 
-  const penLabel = (id: string | null) =>
-    pens.find((p) => p.id === id)?.name ?? "—";
-  const groupLabel = (id: string | null) =>
-    groups.find((g) => g.id === id)?.label ?? "—";
+  const [search, setSearch] = useState("");
+  const [sexFilter, setSexFilter] = useState<string>("all");
+  const [stageFilter, setStageFilter] = useState<string>("all");
+  const [breedFilter, setBreedFilter] = useState<string>("all");
+  const [penFilter, setPenFilter] = useState<string>("all");
+  const [groupFilter, setGroupFilter] = useState<string>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("animal_id");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [density, setDensity] = useState<"compact" | "cozy">("compact");
+
+  const penLabel = useCallback(
+    (id: string | null) => pens.find((p) => p.id === id)?.name ?? "—",
+    [pens],
+  );
+  const groupLabel = useCallback(
+    (id: string | null) => groups.find((g) => g.id === id)?.label ?? "—",
+    [groups],
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((a) => {
+      if (q) {
+        const hit =
+          (a.animal_id ?? "").toLowerCase().includes(q) ||
+          (a.name ?? "").toLowerCase().includes(q) ||
+          (a.official_id ?? "").toLowerCase().includes(q) ||
+          (a.sire_naab ?? "").toLowerCase().includes(q);
+        if (!hit) return false;
+      }
+      if (sexFilter !== "all" && a.sex !== sexFilter) return false;
+      if (stageFilter !== "all" && (a.life_stage ?? "other") !== stageFilter) return false;
+      if (breedFilter !== "all" && (a.breed_code ?? "—") !== breedFilter) return false;
+      if (penFilter !== "all" && (a.current_pen_id ?? "—") !== penFilter) return false;
+      if (groupFilter !== "all" && (a.current_group_id ?? "—") !== groupFilter) return false;
+      return true;
+    });
+  }, [rows, search, sexFilter, stageFilter, breedFilter, penFilter, groupFilter]);
+
+  const sorted = useMemo(() => {
+    const copy = [...filtered];
+    const dir = sortDir === "asc" ? 1 : -1;
+    copy.sort((a, b) => dir * compareRow(a, b, sortKey, penLabel, groupLabel));
+    return copy;
+  }, [filtered, sortKey, sortDir, penLabel, groupLabel]);
+
+  const onSort = (k: SortKey) => {
+    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(k);
+      setSortDir("asc");
+    }
+  };
+
+  const breedsInUse = useMemo(
+    () =>
+      Array.from(new Set(rows.map((r) => r.breed_code ?? "—"))).sort(),
+    [rows],
+  );
+  const lifeStages = [
+    "calf",
+    "weaned_heifer",
+    "breeding_heifer",
+    "bred_heifer",
+    "lactating",
+    "dry",
+    "bull",
+    "other",
+  ];
+
+  const exportCsv = () => {
+    const header = [
+      "animal_id",
+      "name",
+      "official_id",
+      "breed_code",
+      "sex",
+      "life_stage",
+      "birth_date",
+      "current_lactation",
+      "last_calving_date",
+      "dim",
+      "pen",
+      "group",
+      "status",
+    ];
+    const lines = [header.join(",")];
+    for (const a of sorted) {
+      const dim = a.last_calving_date ? diffDays(a.last_calving_date) : "";
+      const cells = [
+        a.animal_id,
+        a.name ?? "",
+        a.official_id ?? "",
+        a.breed_code ?? "",
+        a.sex,
+        a.life_stage ?? "",
+        a.birth_date,
+        a.current_lactation ?? "",
+        a.last_calving_date ?? "",
+        dim,
+        penLabel(a.current_pen_id),
+        groupLabel(a.current_group_id),
+        a.status,
+      ];
+      lines.push(
+        cells
+          .map((c) => {
+            const s = String(c ?? "");
+            return s.includes(",") || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+          })
+          .join(","),
+      );
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `animals_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const cellPad = density === "compact" ? "px-2 py-1" : "px-3 py-2";
+  const headPad = density === "compact" ? "px-2 py-1.5" : "px-3 py-2";
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <HugeiconsIcon
+            icon={Search01Icon}
+            className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground"
+          />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search ID / name / official ID / NAAB"
+            className="h-8 w-64 pl-7 pr-2 text-xs border border-foreground/10 bg-background"
+          />
+        </div>
+        <FilterSelect
+          label="Sex"
+          value={sexFilter}
+          onChange={setSexFilter}
+          options={[
+            ["all", "All sex"],
+            ["female", "Female"],
+            ["male", "Male"],
+            ["freemartin", "Freemartin"],
+            ["castrated", "Castrated"],
+          ]}
+        />
+        <FilterSelect
+          label="Stage"
+          value={stageFilter}
+          onChange={setStageFilter}
+          options={[["all", "All stages"], ...lifeStages.map((s) => [s, s.replace("_", " ")] as [string, string])]}
+        />
+        <FilterSelect
+          label="Breed"
+          value={breedFilter}
+          onChange={setBreedFilter}
+          options={[["all", "All breeds"], ...breedsInUse.map((b) => [b, b] as [string, string])]}
+        />
+        <FilterSelect
+          label="Pen"
+          value={penFilter}
+          onChange={setPenFilter}
+          options={[
+            ["all", "All pens"],
+            ["—", "(no pen)"],
+            ...pens.map((p) => [p.id, p.name] as [string, string]),
+          ]}
+        />
+        <FilterSelect
+          label="Group"
+          value={groupFilter}
+          onChange={setGroupFilter}
+          options={[
+            ["all", "All groups"],
+            ["—", "(no group)"],
+            ...groups.map((g) => [g.id, g.label] as [string, string]),
+          ]}
+        />
+
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            {sorted.length}/{rows.length}
+          </span>
+          <button
+            type="button"
+            className="h-7 px-2 text-[10px] uppercase tracking-wide border border-foreground/10 hover:bg-foreground/5"
+            onClick={() => setDensity((d) => (d === "compact" ? "cozy" : "compact"))}
+          >
+            {density === "compact" ? "Compact" : "Cozy"}
+          </button>
+          <Button type="button" size="sm" variant="outline" onClick={exportCsv}>
+            <HugeiconsIcon icon={DownloadCircle01Icon} />
+            CSV
+          </Button>
+          <CreateDialog
+            locationId={locationId}
+            pens={pens}
+            groups={groups}
+            breeds={breeds}
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
         <StatusFilter
           current={statusFilter}
           totals={totalsByStatus}
@@ -251,104 +450,93 @@ export function AnimalsTable({
             router.push(url.pathname + (url.search ? url.search : ""));
           }}
         />
-        <CreateDialog
-          locationId={locationId}
-          pens={pens}
-          groups={groups}
-          breeds={breeds}
-        />
       </div>
+
       <div className="ring-1 ring-foreground/10 overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Breed</TableHead>
-              <TableHead>Sex</TableHead>
-              <TableHead>Birth</TableHead>
-              <TableHead>Lact #</TableHead>
-              <TableHead>Last fresh</TableHead>
-              <TableHead>Pen</TableHead>
-              <TableHead>Group</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={11} className="text-center text-muted-foreground">
-                  No animals yet.
-                </TableCell>
-              </TableRow>
+        <table className="w-full text-xs">
+          <thead className="bg-foreground/5">
+            <tr className="text-left">
+              <SortHead label="ID" k="animal_id" sortKey={sortKey} sortDir={sortDir} onSort={onSort} pad={headPad} />
+              <SortHead label="Name" k="name" sortKey={sortKey} sortDir={sortDir} onSort={onSort} pad={headPad} />
+              <SortHead label="Breed" k="breed_code" sortKey={sortKey} sortDir={sortDir} onSort={onSort} pad={headPad} />
+              <SortHead label="Sex" k="sex" sortKey={sortKey} sortDir={sortDir} onSort={onSort} pad={headPad} />
+              <SortHead label="Stage" k="life_stage" sortKey={sortKey} sortDir={sortDir} onSort={onSort} pad={headPad} />
+              <SortHead label="Birth" k="birth_date" sortKey={sortKey} sortDir={sortDir} onSort={onSort} pad={headPad} />
+              <SortHead label="Lact" k="current_lactation" sortKey={sortKey} sortDir={sortDir} onSort={onSort} pad={headPad} align="right" />
+              <SortHead label="Last fresh" k="last_calving_date" sortKey={sortKey} sortDir={sortDir} onSort={onSort} pad={headPad} />
+              <SortHead label="DIM" k="dim" sortKey={sortKey} sortDir={sortDir} onSort={onSort} pad={headPad} align="right" />
+              <SortHead label="Pen" k="pen" sortKey={sortKey} sortDir={sortDir} onSort={onSort} pad={headPad} />
+              <SortHead label="Group" k="group" sortKey={sortKey} sortDir={sortDir} onSort={onSort} pad={headPad} />
+              <SortHead label="Status" k="status" sortKey={sortKey} sortDir={sortDir} onSort={onSort} pad={headPad} />
+              <th className={`${headPad} text-right`}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.length === 0 ? (
+              <tr>
+                <td colSpan={13} className={`${cellPad} text-center text-muted-foreground`}>
+                  No animals match.
+                </td>
+              </tr>
             ) : (
-              rows.map((a) => (
-                <TableRow key={a.id}>
-                  <TableCell className="font-mono text-xs font-medium">
-                    <Link
-                      href={`/settings/locations/${locationId}/animals/${a.id}`}
-                      className="hover:underline"
-                    >
-                      {a.animal_id}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{a.name ?? "—"}</TableCell>
-                  <TableCell className="font-mono text-xs">
-                    {a.breed_code ?? "—"}
-                  </TableCell>
-                  <TableCell className="capitalize text-xs">{a.sex}</TableCell>
-                  <TableCell className="text-xs">{a.birth_date}</TableCell>
-                  <TableCell className="text-right">
-                    {a.current_lactation ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {a.last_calving_date ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {penLabel(a.current_pen_id)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {groupLabel(a.current_group_id)}
-                  </TableCell>
-                  <TableCell className="capitalize text-xs">{a.status}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        asChild
+              sorted.map((a) => {
+                const dim = a.last_calving_date ? diffDays(a.last_calving_date) : null;
+                return (
+                  <tr key={a.id} className="border-t border-foreground/10 hover:bg-foreground/[0.025]">
+                    <td className={`${cellPad} font-mono font-medium`}>
+                      <Link
+                        href={`/settings/locations/${locationId}/animals/${a.id}`}
+                        className="hover:underline"
                       >
-                        <Link
-                          href={`/settings/locations/${locationId}/animals/${a.id}`}
-                        >
-                          <HugeiconsIcon icon={ArrowRight01Icon} />
-                        </Link>
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setEditing(a)}
-                      >
-                        <HugeiconsIcon icon={PencilEdit02Icon} />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => setDeleting(a)}
-                      >
-                        <HugeiconsIcon icon={Delete02Icon} />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                        {a.animal_id}
+                      </Link>
+                    </td>
+                    <td className={cellPad}>{a.name ?? "—"}</td>
+                    <td className={`${cellPad} font-mono text-muted-foreground`}>
+                      {a.breed_code ?? "—"}
+                    </td>
+                    <td className={`${cellPad} capitalize text-muted-foreground`}>{a.sex}</td>
+                    <td className={`${cellPad} text-muted-foreground`}>
+                      {(a.life_stage ?? "—").replace("_", " ")}
+                    </td>
+                    <td className={`${cellPad} text-muted-foreground tabular-nums`}>{a.birth_date}</td>
+                    <td className={`${cellPad} text-right tabular-nums`}>
+                      {a.current_lactation ?? "—"}
+                    </td>
+                    <td className={`${cellPad} text-muted-foreground tabular-nums`}>
+                      {a.last_calving_date ?? "—"}
+                    </td>
+                    <td className={`${cellPad} text-right tabular-nums`}>
+                      {dim ?? "—"}
+                    </td>
+                    <td className={`${cellPad} text-muted-foreground`}>
+                      {penLabel(a.current_pen_id)}
+                    </td>
+                    <td className={`${cellPad} text-muted-foreground`}>
+                      {groupLabel(a.current_group_id)}
+                    </td>
+                    <td className={`${cellPad} capitalize text-muted-foreground`}>{a.status}</td>
+                    <td className={`${cellPad} text-right`}>
+                      <div className="flex justify-end gap-1">
+                        <Button type="button" size="sm" variant="ghost" asChild>
+                          <Link href={`/settings/locations/${locationId}/animals/${a.id}`}>
+                            <HugeiconsIcon icon={ArrowRight01Icon} />
+                          </Link>
+                        </Button>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(a)}>
+                          <HugeiconsIcon icon={PencilEdit02Icon} />
+                        </Button>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => setDeleting(a)}>
+                          <HugeiconsIcon icon={Delete02Icon} />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
-          </TableBody>
-        </Table>
+          </tbody>
+        </table>
       </div>
 
       <EditDialog
@@ -365,6 +553,143 @@ export function AnimalsTable({
         onClose={() => setDeleting(null)}
       />
     </div>
+  );
+}
+
+type SortKey =
+  | "animal_id"
+  | "name"
+  | "breed_code"
+  | "sex"
+  | "life_stage"
+  | "birth_date"
+  | "current_lactation"
+  | "last_calving_date"
+  | "dim"
+  | "pen"
+  | "group"
+  | "status";
+
+function diffDays(from: string): number {
+  return Math.floor((Date.now() - new Date(from).getTime()) / 86400000);
+}
+
+function compareRow(
+  a: AnimalRow,
+  b: AnimalRow,
+  k: SortKey,
+  penLabel: (id: string | null) => string,
+  groupLabel: (id: string | null) => string,
+): number {
+  switch (k) {
+    case "animal_id":
+      return cmpStr(a.animal_id, b.animal_id);
+    case "name":
+      return cmpStr(a.name, b.name);
+    case "breed_code":
+      return cmpStr(a.breed_code, b.breed_code);
+    case "sex":
+      return cmpStr(a.sex, b.sex);
+    case "life_stage":
+      return cmpStr(a.life_stage, b.life_stage);
+    case "birth_date":
+      return cmpStr(a.birth_date, b.birth_date);
+    case "current_lactation":
+      return cmpNum(a.current_lactation, b.current_lactation);
+    case "last_calving_date":
+      return cmpStr(a.last_calving_date, b.last_calving_date);
+    case "dim":
+      return cmpNum(
+        a.last_calving_date ? diffDays(a.last_calving_date) : null,
+        b.last_calving_date ? diffDays(b.last_calving_date) : null,
+      );
+    case "pen":
+      return cmpStr(penLabel(a.current_pen_id), penLabel(b.current_pen_id));
+    case "group":
+      return cmpStr(groupLabel(a.current_group_id), groupLabel(b.current_group_id));
+    case "status":
+      return cmpStr(a.status, b.status);
+  }
+}
+
+function cmpStr(a: string | null | undefined, b: string | null | undefined): number {
+  const av = (a ?? "").toLowerCase();
+  const bv = (b ?? "").toLowerCase();
+  if (!av && !bv) return 0;
+  if (!av) return 1;
+  if (!bv) return -1;
+  return av.localeCompare(bv);
+}
+function cmpNum(a: number | null | undefined, b: number | null | undefined): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return a - b;
+}
+
+function SortHead({
+  label,
+  k,
+  sortKey,
+  sortDir,
+  onSort,
+  pad,
+  align = "left",
+}: {
+  label: string;
+  k: SortKey;
+  sortKey: SortKey;
+  sortDir: "asc" | "desc";
+  onSort: (k: SortKey) => void;
+  pad: string;
+  align?: "left" | "right";
+}) {
+  const isActive = sortKey === k;
+  return (
+    <th className={`${pad} font-medium ${align === "right" ? "text-right" : ""}`}>
+      <button
+        type="button"
+        onClick={() => onSort(k)}
+        className={`inline-flex items-center gap-1 hover:text-foreground ${
+          isActive ? "text-foreground" : "text-muted-foreground"
+        } ${align === "right" ? "ml-auto" : ""}`}
+      >
+        {label}
+        {isActive ? (
+          <HugeiconsIcon
+            icon={sortDir === "asc" ? ArrowUp01Icon : ArrowDown01Icon}
+            className="size-3"
+          />
+        ) : null}
+      </button>
+    </th>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: [string, string][];
+}) {
+  return (
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="h-8 px-2 text-xs border border-foreground/10 bg-background"
+    >
+      {options.map(([v, lbl]) => (
+        <option key={v} value={v}>
+          {lbl}
+        </option>
+      ))}
+    </select>
   );
 }
 
