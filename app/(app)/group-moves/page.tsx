@@ -226,7 +226,11 @@ export default async function GroupMovesPage() {
         </span>
       </section>
 
-      <GroupMovesClient pending={pending} history={history} />
+      <GroupMovesClient
+        pending={pending}
+        history={history}
+        groups={groups.map((g) => ({ id: g.id, label: g.label }))}
+      />
     </div>
   );
 }

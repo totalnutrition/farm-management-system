@@ -14,6 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -55,12 +62,16 @@ const TABS = [
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
 
+export type GroupChoice = { id: string; label: string };
+
 export function GroupMovesClient({
   pending,
   history,
+  groups,
 }: {
   pending: PendingRow[];
   history: HistoryRow[];
+  groups: GroupChoice[];
 }) {
   const params = useSearchParams();
   const router = useRouter();
@@ -94,13 +105,19 @@ export function GroupMovesClient({
           </button>
         ))}
       </nav>
-      {active === "pending" ? <PendingTab rows={pending} /> : null}
+      {active === "pending" ? <PendingTab rows={pending} groups={groups} /> : null}
       {active === "history" ? <HistoryTab rows={history} /> : null}
     </>
   );
 }
 
-function PendingTab({ rows }: { rows: PendingRow[] }) {
+function PendingTab({
+  rows,
+  groups,
+}: {
+  rows: PendingRow[];
+  groups: GroupChoice[];
+}) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [showOverridden, setShowOverridden] = useState(false);
@@ -268,21 +285,34 @@ function PendingTab({ rows }: { rows: PendingRow[] }) {
         </table>
       </div>
 
-      <OverrideDialog target={overrideTarget} onClose={() => setOverrideTarget(null)} />
+      <OverrideDialog
+        target={overrideTarget}
+        groups={groups}
+        onClose={() => setOverrideTarget(null)}
+      />
     </>
   );
 }
 
+const STAY = "__stay__";
+
 function OverrideDialog({
   target,
+  groups,
   onClose,
 }: {
   target: PendingRow | null;
+  groups: GroupChoice[];
   onClose: () => void;
 }) {
   const [reason, setReason] = useState("");
+  // STAY = keep in current_group_id. Anything else = move to that group.
+  const [destination, setDestination] = useState<string>(STAY);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+
+  // Reset when target changes.
+  if (target && destination === "" /* never set */) setDestination(STAY);
 
   const onSubmit = () => {
     if (!target) return;
@@ -290,11 +320,14 @@ function OverrideDialog({
       toast.error("Reason required.");
       return;
     }
+    const targetGroupId =
+      destination === STAY ? target.current_group_id : destination;
     startTransition(async () => {
       const r = await overrideMove({
         animal_id: target.animal_id,
         current_group_id: target.current_group_id,
         suggested_group_id: target.suggested_group_id,
+        target_group_id: targetGroupId,
         reason: reason.trim(),
         rule_explanation: target.rule_explanation,
       });
@@ -302,35 +335,80 @@ function OverrideDialog({
         toast.error(r.error);
         return;
       }
-      toast.success(`Override recorded for ${target.animal_label}.`);
+      const destLabel =
+        destination === STAY
+          ? target.current_group_label ?? "(no group)"
+          : groups.find((g) => g.id === destination)?.label ?? "?";
+      toast.success(
+        `${target.animal_label} → ${destLabel} (override).`,
+      );
       setReason("");
+      setDestination(STAY);
       onClose();
       router.refresh();
     });
   };
 
+  const destLabel =
+    destination === STAY
+      ? `keep in ${target?.current_group_label ?? "(no group)"}`
+      : `move to ${groups.find((g) => g.id === destination)?.label ?? "?"}`;
+
   return (
-    <Dialog open={!!target} onOpenChange={(o) => !o && onClose()}>
+    <Dialog
+      open={!!target}
+      onOpenChange={(o) => {
+        if (!o) {
+          onClose();
+          setDestination(STAY);
+          setReason("");
+        }
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Override suggestion</DialogTitle>
           <DialogDescription>
             {target ? (
               <>
-                Keep <span className="font-medium text-foreground">{target.animal_label}</span> in{" "}
+                Engine suggested{" "}
                 <span className="font-medium text-foreground">
-                  {target.current_group_label ?? "(no group)"}
+                  {target.suggested_group_label}
                 </span>{" "}
-                instead of the suggested{" "}
-                <span className="font-medium text-foreground">{target.suggested_group_label}</span>.
-                Recorded on the cow + history; engine won&apos;t re-suggest until her facts change.
+                for{" "}
+                <span className="font-medium text-foreground">
+                  {target.animal_label}
+                </span>
+                . Pick a different destination if needed and record why —
+                the engine won&apos;t re-suggest until her facts change.
               </>
             ) : null}
           </DialogDescription>
         </DialogHeader>
+        <div className="flex flex-col gap-2">
+          <label className="text-xs text-muted-foreground">Move to</label>
+          <Select value={destination} onValueChange={setDestination}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={STAY}>
+                Keep in current ({target?.current_group_label ?? "(no group)"})
+              </SelectItem>
+              {groups
+                .filter((g) => g.id !== target?.suggested_group_id)
+                .map((g) => (
+                  <SelectItem key={g.id} value={g.id}>
+                    Move to {g.label}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[10px] text-muted-foreground">{destLabel}</p>
+        </div>
         <Textarea
           rows={3}
-          placeholder="Why override? e.g. hospital observation, recent calving complications…"
+          placeholder="Why override? e.g. hospital observation, kept with primip pen for monitoring…"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />

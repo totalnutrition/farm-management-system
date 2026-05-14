@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -56,26 +57,40 @@ export type GroupBlock = {
   animals: AnimalLite[];
 };
 
-export function PenMovesClient({ blocks }: { blocks: GroupBlock[] }) {
+export function PenMovesClient({
+  blocks,
+  locationId,
+}: {
+  blocks: GroupBlock[];
+  locationId: string;
+}) {
   if (blocks.length === 0) {
     return (
       <div className="ring-1 ring-foreground/10 p-3 text-xs text-muted-foreground">
-        Nothing to assign. Every grouped animal already sits in a pen, or no
-        groups have multiple pens yet. Add pens under each group in
-        Settings → Location → Infrastructure.
+        Nothing here yet. Assign cows to groups first on{" "}
+        <Link href="/group-moves" className="underline underline-offset-2">
+          Group moves
+        </Link>
+        , then come back to declare and assign pens per group.
       </div>
     );
   }
   return (
     <div className="flex flex-col gap-4">
       {blocks.map((b) => (
-        <GroupBlockCard key={b.group_id} block={b} />
+        <GroupBlockCard key={b.group_id} block={b} locationId={locationId} />
       ))}
     </div>
   );
 }
 
-function GroupBlockCard({ block }: { block: GroupBlock }) {
+function GroupBlockCard({
+  block,
+  locationId,
+}: {
+  block: GroupBlock;
+  locationId: string;
+}) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
@@ -85,6 +100,7 @@ function GroupBlockCard({ block }: { block: GroupBlock }) {
   const pendingMoves = block.animals.filter(
     (a) => a.suggested_pen_id && a.suggested_pen_id !== a.current_pen_id,
   );
+  const infraHref = `/settings/locations/${locationId}/infrastructure`;
 
   const onAccept = (a: AnimalLite) => {
     if (!a.suggested_pen_id) return;
@@ -135,6 +151,33 @@ function GroupBlockCard({ block }: { block: GroupBlock }) {
     setOverrideTo(a.current_pen_id ?? "");
   };
 
+  // ZERO-pen path: render a CTA to add a pen, no table.
+  if (block.pens.length === 0) {
+    return (
+      <section className="ring-1 ring-amber-500/40 bg-amber-500/5 flex flex-col">
+        <header className="px-3 py-2 flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-0.5">
+            <h3 className="text-sm font-medium">
+              {block.group_label}
+              <span className="ml-2 text-[10px] font-normal text-muted-foreground">
+                {block.animals.length} cow
+                {block.animals.length === 1 ? "" : "s"} · no pens declared
+              </span>
+            </h3>
+            <p className="text-[10px] text-muted-foreground">
+              Create one or more pens under this group on Infrastructure
+              first — then come back here to stripe cows across them by
+              parity / DIM.
+            </p>
+          </div>
+          <Button asChild type="button" size="sm" variant="outline">
+            <Link href={infraHref}>Add pen on Infrastructure →</Link>
+          </Button>
+        </header>
+      </section>
+    );
+  }
+
   return (
     <section className="ring-1 ring-foreground/10 flex flex-col">
       <header className="px-3 py-2 bg-foreground/5 flex items-start justify-between gap-3">
@@ -146,14 +189,17 @@ function GroupBlockCard({ block }: { block: GroupBlock }) {
             </span>
           </h3>
           <p className="text-[10px] text-muted-foreground">
-            Suggested by parity, then DIM ascending. Pens fill proportionally
-            to declared capacity.
+            {block.pens.length === 1
+              ? "Single pen — all cows in this group go here."
+              : "Suggested by parity, then DIM ascending. Pens fill proportionally to declared capacity."}
           </p>
         </div>
         {pendingMoves.length > 0 ? (
           <Button type="button" size="sm" variant="outline" onClick={onAcceptAll}>
             <HugeiconsIcon icon={CheckmarkCircle02Icon} />
-            Accept {pendingMoves.length} move{pendingMoves.length === 1 ? "" : "s"}
+            {block.pens.length === 1
+              ? `Move ${pendingMoves.length} cow${pendingMoves.length === 1 ? "" : "s"} here`
+              : `Accept ${pendingMoves.length} move${pendingMoves.length === 1 ? "" : "s"}`}
           </Button>
         ) : (
           <span className="text-[10px] uppercase tracking-wide text-primary">
