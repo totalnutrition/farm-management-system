@@ -54,6 +54,10 @@ const formSchema = z.object({
   capacity_head: z.union([z.number(), z.literal("")]),
   bunk_running_ft: z.union([z.number(), z.literal("")]),
   stocking_target_pct: z.union([z.number(), z.literal("")]),
+  length_ft: z.union([z.number(), z.literal("")]),
+  width_ft: z.union([z.number(), z.literal("")]),
+  position_index: z.union([z.number(), z.literal("")]),
+  side: z.enum(["left", "right", ""]),
   is_AI_pen: z.boolean(),
   is_BULL_pen: z.boolean(),
   is_DRY_pen: z.boolean(),
@@ -72,6 +76,10 @@ const empty: FormValues = {
   capacity_head: "" as unknown as number,
   bunk_running_ft: "" as unknown as number,
   stocking_target_pct: "" as unknown as number,
+  length_ft: "" as unknown as number,
+  width_ft: "" as unknown as number,
+  position_index: 0,
+  side: "" as const,
   is_AI_pen: false,
   is_BULL_pen: false,
   is_DRY_pen: false,
@@ -93,6 +101,11 @@ function toSubmit(locationId: string, values: FormValues) {
       typeof values.bunk_running_ft === "number" ? values.bunk_running_ft : null,
     stocking_target_pct:
       typeof values.stocking_target_pct === "number" ? values.stocking_target_pct : null,
+    length_ft: typeof values.length_ft === "number" ? values.length_ft : null,
+    width_ft: typeof values.width_ft === "number" ? values.width_ft : null,
+    position_index:
+      typeof values.position_index === "number" ? values.position_index : 0,
+    side: values.side === "" ? null : values.side,
     is_AI_pen: values.is_AI_pen,
     is_BULL_pen: values.is_BULL_pen,
     is_DRY_pen: values.is_DRY_pen,
@@ -487,6 +500,96 @@ function PenFormBody({
         />
         <FormField
           control={form.control}
+          name="length_ft"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Pen length (ft, along barn long axis)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  step="any"
+                  inputMode="decimal"
+                  value={field.value === "" || field.value === undefined ? "" : (field.value as number)}
+                  onChange={(e) =>
+                    field.onChange(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="width_ft"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Pen width (ft)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  step="any"
+                  inputMode="decimal"
+                  value={field.value === "" || field.value === undefined ? "" : (field.value as number)}
+                  onChange={(e) =>
+                    field.onChange(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="position_index"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Position (order along barn, 0 = first)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={field.value === "" || field.value === undefined ? "" : (field.value as number)}
+                  onChange={(e) =>
+                    field.onChange(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="side"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Side (double-side barns only)</FormLabel>
+              <FormControl>
+                <Select
+                  value={field.value === "" ? "__none" : field.value}
+                  onValueChange={(v) =>
+                    field.onChange(v === "__none" ? "" : (v as "left" | "right"))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">— n/a —</SelectItem>
+                    <SelectItem value="left">Left</SelectItem>
+                    <SelectItem value="right">Right</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
           name="barn_id"
           render={({ field }) => (
             <FormItem>
@@ -700,6 +803,10 @@ function EditDialog({
           capacity_head: row.capacity_head ?? ("" as unknown as number),
           bunk_running_ft: row.bunk_running_ft ?? ("" as unknown as number),
           stocking_target_pct: row.stocking_target_pct ?? ("" as unknown as number),
+          length_ft: row.length_ft ?? ("" as unknown as number),
+          width_ft: row.width_ft ?? ("" as unknown as number),
+          position_index: row.position_index ?? 0,
+          side: (row.side ?? "") as "left" | "right" | "",
           is_AI_pen: row.is_AI_pen,
           is_BULL_pen: row.is_BULL_pen,
           is_DRY_pen: row.is_DRY_pen,

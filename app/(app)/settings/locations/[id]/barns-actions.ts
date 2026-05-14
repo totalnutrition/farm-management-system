@@ -11,6 +11,7 @@ import {
 import { RoleAdmin, RoleSuperAdmin } from "@/lib/misc";
 import {
   BarnTypes,
+  BarnLayouts,
   ParlorTypes,
   RowConfigurations,
   VentilationTypes,
@@ -32,6 +33,12 @@ const baseSchema = z.object({
     .enum(RowConfigurations.map((r) => r.value) as [string, ...string[]])
     .nullable()
     .optional(),
+  length_ft: optNum.optional(),
+  width_ft: optNum.optional(),
+  layout: z
+    .enum(BarnLayouts.map((l) => l.value) as [string, ...string[]])
+    .default("double_side"),
+  alley_width_ft: optNum.optional(),
   freestall_count: optInt.optional(),
   headlock_count: optInt.optional(),
   loafing_area_sqft: optInt.optional(),
@@ -103,6 +110,10 @@ function toRow(input: z.infer<typeof baseSchema>) {
     barn_code: input.barn_code ?? null,
     type: input.type,
     row_configuration: input.row_configuration ?? null,
+    length_ft: input.length_ft ?? null,
+    width_ft: input.width_ft ?? null,
+    layout: input.layout,
+    alley_width_ft: input.alley_width_ft ?? null,
     freestall_count: input.freestall_count ?? null,
     headlock_count: input.headlock_count ?? null,
     loafing_area_sqft: input.loafing_area_sqft ?? null,

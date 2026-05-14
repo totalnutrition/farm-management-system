@@ -23,6 +23,10 @@ const baseSchema = z.object({
   capacity_head: z.number().int().min(0).max(1_000_000).nullable(),
   bunk_running_ft: z.number().min(0).max(10_000).nullable(),
   stocking_target_pct: z.number().min(0).max(300).nullable(),
+  length_ft: z.number().min(0).max(10_000).nullable(),
+  width_ft: z.number().min(0).max(10_000).nullable(),
+  position_index: z.number().int().min(0).max(1000),
+  side: z.enum(["left", "right"]).nullable(),
   is_AI_pen: z.boolean(),
   is_BULL_pen: z.boolean(),
   is_DRY_pen: z.boolean(),
@@ -56,7 +60,7 @@ export async function listPens(locationId: string): Promise<Pen[]> {
   const { data } = await authz.admin
     .from("pens")
     .select(
-      "id, location_id, barn_id, group_id, name, pen_code, type, capacity_head, bunk_running_ft, stocking_target_pct, is_AI_pen, is_BULL_pen, is_DRY_pen, is_HOSP_pen, is_FRESH_pen, is_placeholder, notes",
+      "id, location_id, barn_id, group_id, name, pen_code, type, capacity_head, bunk_running_ft, stocking_target_pct, length_ft, width_ft, position_index, side, is_AI_pen, is_BULL_pen, is_DRY_pen, is_HOSP_pen, is_FRESH_pen, is_placeholder, notes",
     )
     .eq("location_id", locationId)
     .order("name");

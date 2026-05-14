@@ -20,6 +20,7 @@ import { getGroups } from "../../groups-actions";
 import { listPens } from "../../pens-actions";
 import { PensTable } from "../../pens-table";
 import { CapacityPlanTable } from "../../capacity-plan-table";
+import { BarnVisualizer } from "../../barn-visualizer";
 import { listArableParcels } from "../../arable-parcels-actions";
 import { ArableParcelsTable } from "../../arable-parcels-table";
 
@@ -69,17 +70,28 @@ export default async function LocationInfrastructurePage({
       .then(({ data }) => data),
     admin
       .from("animals")
-      .select("current_group_id")
+      .select("current_group_id, current_pen_id")
       .eq("location_id", id)
       .eq("status", "active")
-      .then(({ data }) => (data ?? []) as { current_group_id: string | null }[]),
+      .then(({ data }) =>
+        (data ?? []) as {
+          current_group_id: string | null;
+          current_pen_id: string | null;
+        }[],
+      ),
   ]);
 
   const headcountByGroup: Record<string, number> = {};
+  const headcountByPen: Record<string, number> = {};
   for (const a of animalGroupRows) {
-    if (!a.current_group_id) continue;
-    headcountByGroup[a.current_group_id] = (headcountByGroup[a.current_group_id] ?? 0) + 1;
+    if (a.current_group_id) {
+      headcountByGroup[a.current_group_id] = (headcountByGroup[a.current_group_id] ?? 0) + 1;
+    }
+    if (a.current_pen_id) {
+      headcountByPen[a.current_pen_id] = (headcountByPen[a.current_pen_id] ?? 0) + 1;
+    }
   }
+  const groupLabelById = new Map(groups.map((g) => [g.id, g.label] as const));
 
   const defaults: CapacityDefaults = capDefaults
     ? {
@@ -160,6 +172,31 @@ export default async function LocationInfrastructurePage({
           planTotalStalls={plan.totals.pen_capacity}
         />
       </section>
+      {barns.some((b) => b.length_ft && b.width_ft) ? (
+        <section className="ring-1 ring-foreground/10 p-4 flex flex-col gap-3">
+          <header className="flex flex-col gap-0.5">
+            <h2 className="text-sm font-medium">Visual layout</h2>
+            <p className="text-xs text-muted-foreground">
+              Top-down view of each barn. Pens are colour-coded by group;
+              hover for details. Set length / width on the barn and on each
+              pen to control sizing — otherwise pens flow evenly.
+            </p>
+          </header>
+          <div className="flex flex-col gap-4">
+            {barns
+              .filter((b) => b.length_ft && b.width_ft)
+              .map((b) => (
+                <BarnVisualizer
+                  key={b.id}
+                  barn={b}
+                  pens={pens}
+                  groupLabel={(gid) => (gid ? groupLabelById.get(gid) ?? "—" : "—")}
+                  headcountByPen={headcountByPen}
+                />
+              ))}
+          </div>
+        </section>
+      ) : null}
       <section className="ring-1 ring-foreground/10 p-4 flex flex-col gap-3">
         <h2 className="text-sm font-medium">Pens</h2>
         <PensTable

@@ -26,6 +26,14 @@ export type Pen = {
   capacity_head: number | null;
   bunk_running_ft: number | null;
   stocking_target_pct: number | null;
+  /** Pen footprint length, ft (along the barn's long axis). */
+  length_ft: number | null;
+  /** Pen footprint width, ft (along the barn's short axis). */
+  width_ft: number | null;
+  /** 0-based order along the barn's long axis (smallest first). */
+  position_index: number;
+  /** For double-side barns: 'left' or 'right' of the central feed alley. */
+  side: "left" | "right" | null;
   is_AI_pen: boolean;
   is_BULL_pen: boolean;
   is_DRY_pen: boolean;
