@@ -39,6 +39,18 @@ export type SidebarUser = {
   role: string | null
 }
 
+export type SidebarBadgeCounts = {
+  hotList: number
+  groupMoves: number
+  penMoves: number
+}
+
+const ZERO_COUNTS: SidebarBadgeCounts = {
+  hotList: 0,
+  groupMoves: 0,
+  penMoves: 0,
+}
+
 type HugeIcon = Parameters<typeof HugeiconsIcon>[0]["icon"]
 
 type MenuLink = {
@@ -144,7 +156,24 @@ const MENU: MenuGroup[] = [
   },
 ]
 
-export function AppSidebar({ user }: { user: SidebarUser }) {
+function badgeFor(link: string, counts: SidebarBadgeCounts): number {
+  if (link === "/hot-list") return counts.hotList
+  if (link === "/group-moves") return counts.groupMoves
+  if (link === "/pen-moves") return counts.penMoves
+  return 0
+}
+
+function badgeTone(link: string): "destructive" | "amber" {
+  return link === "/hot-list" ? "destructive" : "amber"
+}
+
+export function AppSidebar({
+  user,
+  badgeCounts = ZERO_COUNTS,
+}: {
+  user: SidebarUser
+  badgeCounts?: SidebarBadgeCounts
+}) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -162,18 +191,36 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
               <SidebarGroupLabel>{i.label}</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {i.links.map((j) =>
-                    user.role && j.roles.includes(user.role) && (
+                  {i.links.map((j) => {
+                    if (!user.role || !j.roles.includes(user.role)) return null
+                    const badge = badgeFor(j.link, badgeCounts)
+                    const tone = badgeTone(j.link)
+                    return (
                       <SidebarMenuItem key={j.name}>
-                        <SidebarMenuButton asChild tooltip={j.name}>
-                          <Link href={j.link}>
+                        <SidebarMenuButton
+                          asChild
+                          tooltip={badge > 0 ? `${j.name} (${badge})` : j.name}
+                        >
+                          <Link href={j.link} className="flex items-center w-full">
                             <HugeiconsIcon icon={j.icon} />
-                            <span>{j.name}</span>
+                            <span className="flex-1">{j.name}</span>
+                            {badge > 0 ? (
+                              <span
+                                className={`ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded text-[10px] font-medium tabular-nums leading-none group-data-[collapsible=icon]:hidden ${
+                                  tone === "destructive"
+                                    ? "bg-destructive text-destructive-foreground"
+                                    : "bg-amber-500 text-amber-50 dark:text-amber-950"
+                                }`}
+                                aria-label={`${badge} pending`}
+                              >
+                                {badge > 99 ? "99+" : badge}
+                              </span>
+                            ) : null}
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
-                    ),
-                  )}
+                    )
+                  })}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
