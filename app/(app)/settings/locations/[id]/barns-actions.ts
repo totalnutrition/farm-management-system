@@ -64,6 +64,9 @@ const baseSchema = z.object({
   fans_over_stalls: z.boolean().default(false),
   brushes_count: optInt.optional(),
   footbath_present: z.boolean().default(false),
+  drinker_count: optInt.optional(),
+  drinker_type: optText.optional(),
+  drinker_linear_ft: optNum.optional(),
   parlor_type: z
     .enum(ParlorTypes.map((p) => p.value) as [string, ...string[]])
     .nullable()
@@ -136,6 +139,9 @@ function toRow(input: z.infer<typeof baseSchema>) {
     fans_over_stalls: input.fans_over_stalls,
     brushes_count: input.brushes_count ?? null,
     footbath_present: input.footbath_present,
+    drinker_count: input.drinker_count ?? null,
+    drinker_type: input.drinker_type ?? null,
+    drinker_linear_ft: input.drinker_linear_ft ?? null,
     parlor_type: input.parlor_type ?? null,
     parlor_stalls: input.parlor_stalls ?? null,
     robot_count: input.robot_count ?? null,

@@ -44,6 +44,66 @@ export const BarnLayouts = [
 ] as const;
 export type BarnLayout = (typeof BarnLayouts)[number]["value"];
 
+// ---------------------------------------------------------------------
+// Categorical dropdown option lists. Stored as plain text in the DB
+// today so we can extend the lists in code without a migration; the
+// form uses strict Selects so two people don't end up entering
+// "rubber" vs "rubber mat" vs "rubber matting".
+// ---------------------------------------------------------------------
+
+export const StallSurfaces = [
+  { value: "sand", label: "Sand" },
+  { value: "mattress", label: "Mattress / waterbed" },
+  { value: "rubber_mat", label: "Rubber mat" },
+  { value: "deep_bedded_pack", label: "Deep-bedded pack" },
+  { value: "compost_pack", label: "Compost pack" },
+  { value: "concrete", label: "Bare concrete" },
+] as const;
+
+export const BeddingTypes = [
+  { value: "sand", label: "Sand" },
+  { value: "sawdust", label: "Sawdust" },
+  { value: "wheat_straw", label: "Wheat straw" },
+  { value: "rice_husk", label: "Rice husk" },
+  { value: "wood_shavings", label: "Wood shavings" },
+  { value: "recycled_manure_solids", label: "Recycled manure solids" },
+  { value: "dried_dung_cake", label: "Dried dung cake" },
+  { value: "none", label: "None" },
+] as const;
+
+export const BunkTypes = [
+  { value: "drive_through", label: "Drive-through (truck unloads inside)" },
+  { value: "feed_alley", label: "Feed alley (cows + truck share a strip)" },
+  { value: "fenceline", label: "Fenceline (cows eat through a fence)" },
+  { value: "j_bunk", label: "J-bunk / pre-cast" },
+] as const;
+
+export const FloorTypes = [
+  { value: "grooved_concrete", label: "Grooved concrete" },
+  { value: "smooth_concrete", label: "Smooth concrete" },
+  { value: "rubber", label: "Rubber matting" },
+  { value: "slatted", label: "Slatted floor" },
+  { value: "earthen", label: "Earthen / open lot" },
+  { value: "sand_laneway", label: "Sand laneway" },
+] as const;
+
+export const ManureHandlingTypes = [
+  { value: "scrape_tractor", label: "Tractor scrape" },
+  { value: "scrape_alley", label: "Automatic alley scraper" },
+  { value: "flush", label: "Flush" },
+  { value: "vacuum", label: "Vacuum / slurry tanker" },
+  { value: "robot_scraper", label: "Robotic scraper" },
+  { value: "hand", label: "Manual / hand-cleaned" },
+] as const;
+
+export const DrinkerTypes = [
+  { value: "concrete_trough", label: "Concrete trough" },
+  { value: "tip_trough", label: "Tip-over trough (cleanable)" },
+  { value: "individual_bowl", label: "Individual ball / pressure bowl" },
+  { value: "ball_float", label: "Ball-float / floater" },
+  { value: "fast_fill", label: "Fast-fill water station" },
+] as const;
+
 export type Barn = {
   id: string;
   location_id: string;
@@ -79,6 +139,12 @@ export type Barn = {
   fans_over_stalls: boolean;
   brushes_count: number | null;
   footbath_present: boolean;
+  /** Number of drinker stations (waterers) in the barn. */
+  drinker_count: number | null;
+  /** Style of drinker — trough, ball-float, individual bowl, etc. */
+  drinker_type: string | null;
+  /** Total linear feet of trough water access (for water-space audits). */
+  drinker_linear_ft: number | null;
   parlor_type: string | null;
   parlor_stalls: number | null;
   robot_count: number | null;
