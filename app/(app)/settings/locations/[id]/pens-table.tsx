@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -40,7 +41,13 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { PenTypeView, PenTypes, type Pen } from "@/lib/pens";
-import { createPen, deletePen, updatePen } from "./pens-actions";
+import {
+  createPen,
+  deletePen,
+  mergePens,
+  splitPen,
+  updatePen,
+} from "./pens-actions";
 
 type BarnLite = { id: string; name: string };
 type GroupLite = { id: string; label: string };
@@ -130,9 +137,33 @@ export function PensTable({
   headcountByGroup?: Record<string, number>;
   targetByGroup?: Record<string, { pen_cap: number; bunk_ft: number }>;
 }) {
-  const [editing, setEditing] = useState<Pen | null>(null);
   const [deleting, setDeleting] = useState<Pen | null>(null);
   const [createDefaultGroupId, setCreateDefaultGroupId] = useState<string | null>(null);
+
+  // Edit state is URL-driven: ?edit=<pen_id> opens that pen. Row edit
+  // buttons and the BarnVisualizer both navigate to this URL, so the
+  // dialog state is a single source of truth.
+  const params = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const editParam = params.get("edit");
+  const editing = useMemo<Pen | null>(
+    () => (editParam ? rows.find((r) => r.id === editParam) ?? null : null),
+    [editParam, rows],
+  );
+  const openPenEdit = (pen: Pen) => {
+    const q = new URLSearchParams(params.toString());
+    q.set("edit", pen.id);
+    router.replace(`${pathname}?${q.toString()}`, { scroll: false });
+  };
+  const clearEditParam = () => {
+    if (!editParam) return;
+    const q = new URLSearchParams(params.toString());
+    q.delete("edit");
+    router.replace(`${pathname}${q.toString() ? `?${q.toString()}` : ""}`, {
+      scroll: false,
+    });
+  };
 
   const barnLabel = (id: string | null) =>
     barns.find((b) => b.id === id)?.name ?? "—";
@@ -184,7 +215,7 @@ export function PensTable({
             targetBunkFt={target?.bunk_ft}
             barnLabel={barnLabel}
             onAdd={() => setCreateDefaultGroupId(g.id)}
-            onEdit={setEditing}
+            onEdit={openPenEdit}
             onDelete={setDeleting}
           />
         );
@@ -197,7 +228,7 @@ export function PensTable({
           headcount={0}
           barnLabel={barnLabel}
           onAdd={() => setCreateDefaultGroupId(null)}
-          onEdit={setEditing}
+          onEdit={openPenEdit}
           onDelete={setDeleting}
         />
       ) : null}
@@ -207,7 +238,8 @@ export function PensTable({
         locationId={locationId}
         barns={barns}
         groups={groups}
-        onClose={() => setEditing(null)}
+        allPens={rows}
+        onClose={clearEditParam}
       />
       <DeleteDialog
         row={deleting}
@@ -781,15 +813,23 @@ function EditDialog({
   locationId,
   barns,
   groups,
+  allPens,
   onClose,
 }: {
   row: Pen | null;
   locationId: string;
   barns: BarnLite[];
   groups: GroupLite[];
+  allPens: Pen[];
   onClose: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+  const [splitOpen, setSplitOpen] = useState(false);
+  const [splitAt, setSplitAt] = useState<string>("");
+  const [splitName, setSplitName] = useState<string>("");
+  const [mergeWith, setMergeWith] = useState<string>("");
+  const [mergeName, setMergeName] = useState<string>("");
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     values: row
@@ -830,6 +870,65 @@ function EditDialog({
     });
   };
 
+  // Adjacent / sibling pens in the same barn for the Merge dropdown.
+  const mergeCandidates = allPens.filter(
+    (p) => p.id !== row.id && p.barn_id !== null && p.barn_id === row.barn_id,
+  );
+
+  const doMerge = () => {
+    if (!mergeWith) {
+      toast.error("Pick a pen to merge with.");
+      return;
+    }
+    if (!confirm("Merge will delete the other pen and move its cows here. Continue?"))
+      return;
+    startTransition(async () => {
+      const r = await mergePens({
+        primary_pen_id: row.id,
+        secondary_pen_id: mergeWith,
+        new_name: mergeName.trim() || undefined,
+      });
+      if (r.error) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success("Pens merged.");
+      setMergeWith("");
+      setMergeName("");
+      onClose();
+      router.refresh();
+    });
+  };
+
+  const doSplit = () => {
+    const at = Number(splitAt);
+    if (!at || at <= 0) {
+      toast.error("Enter a split point in feet.");
+      return;
+    }
+    if (!splitName.trim()) {
+      toast.error("Name the new pen.");
+      return;
+    }
+    startTransition(async () => {
+      const r = await splitPen({
+        pen_id: row.id,
+        split_at_ft: at,
+        new_name: splitName.trim(),
+      });
+      if (r.error) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success("Pen split.");
+      setSplitOpen(false);
+      setSplitAt("");
+      setSplitName("");
+      onClose();
+      router.refresh();
+    });
+  };
+
   return (
     <Dialog open={!!row} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -847,6 +946,126 @@ function EditDialog({
             </DialogFooter>
           </form>
         </Form>
+
+        <section className="border-t border-foreground/10 pt-3 mt-3 flex flex-col gap-3">
+          <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            Layout actions
+          </h4>
+
+          <div className="ring-1 ring-foreground/10 p-3 flex flex-col gap-2">
+            <div className="text-xs font-medium">Split this pen</div>
+            <p className="text-[10px] text-muted-foreground">
+              Carves the pen into two along its length. Capacity, bunk feet,
+              and length are allocated proportionally. Requires the pen&apos;s
+              length_ft to be set.
+            </p>
+            {!splitOpen ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setSplitOpen(true)}
+                disabled={!row.length_ft}
+              >
+                Split…
+              </Button>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-muted-foreground">
+                    Split at (ft from start, max {row.length_ft ?? 0})
+                  </label>
+                  <Input
+                    type="number"
+                    step="any"
+                    min={0}
+                    max={Number(row.length_ft ?? 0)}
+                    value={splitAt}
+                    onChange={(e) => setSplitAt(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-muted-foreground">
+                    Name for the new pen
+                  </label>
+                  <Input
+                    value={splitName}
+                    onChange={(e) => setSplitName(e.target.value)}
+                    placeholder={`${row.name} B`}
+                  />
+                </div>
+                <div className="col-span-2 flex gap-2">
+                  <Button type="button" size="sm" onClick={doSplit} disabled={isPending}>
+                    {isPending ? "Splitting…" : "Apply split"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSplitOpen(false);
+                      setSplitAt("");
+                      setSplitName("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="ring-1 ring-foreground/10 p-3 flex flex-col gap-2">
+            <div className="text-xs font-medium">Merge with another pen</div>
+            <p className="text-[10px] text-muted-foreground">
+              Combines the other pen into this one. The other pen&apos;s cows
+              and capacity / bunk / length values transfer here, then the
+              other pen is deleted. Same barn only.
+            </p>
+            {mergeCandidates.length === 0 ? (
+              <p className="text-[10px] text-muted-foreground italic">
+                No other pens in this barn to merge with.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-muted-foreground">
+                    Pen to merge into this one
+                  </label>
+                  <Select value={mergeWith} onValueChange={setMergeWith}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pick a pen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {mergeCandidates.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                          {p.length_ft ? ` · ${p.length_ft}ft` : ""}
+                          {p.capacity_head ? ` · cap ${p.capacity_head}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-muted-foreground">
+                    New name (optional)
+                  </label>
+                  <Input
+                    value={mergeName}
+                    onChange={(e) => setMergeName(e.target.value)}
+                    placeholder={row.name}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Button type="button" size="sm" onClick={doMerge} disabled={isPending || !mergeWith}>
+                    {isPending ? "Merging…" : "Merge"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
       </DialogContent>
     </Dialog>
   );

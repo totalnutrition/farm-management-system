@@ -15,6 +15,7 @@
  */
 
 import { useState } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import type { Pen } from "@/lib/pens";
 import type { Barn } from "@/lib/barns";
 
@@ -52,6 +53,14 @@ export function BarnVisualizer({
   headcountByPen?: Record<string, number>;
 }) {
   const [hoverPen, setHoverPen] = useState<Pen | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const openPenEdit = (penId: string) => {
+    const q = new URLSearchParams(params.toString());
+    q.set("edit", penId);
+    router.push(`${pathname}?${q.toString()}`, { scroll: false });
+  };
 
   // Choose canvas dimensions. Use barn dims if set, else 2:1.
   const lengthFt = barn.length_ft ?? 200;
@@ -183,6 +192,7 @@ export function BarnVisualizer({
                 key={pen.id}
                 onMouseEnter={() => setHoverPen(pen)}
                 onMouseLeave={() => setHoverPen(null)}
+                onClick={() => openPenEdit(pen.id)}
                 className="cursor-pointer"
               >
                 <rect
