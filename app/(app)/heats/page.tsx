@@ -1,14 +1,5 @@
-import { OperationalPlaceholder } from "@/components/operational-placeholder";
-
-export const metadata = { title: "Heats" };
+import { redirect } from "next/navigation";
 export const dynamic = "force-dynamic";
-
-export default async function Page() {
-  return (
-    <OperationalPlaceholder
-      title="Heats"
-      description="Heat detection events per cow. Drives breeding decisions."
-      livestockOnly={true}
-    />
-  );
+export default function Page() {
+  redirect("/reproduction?tab=heats");
 }
