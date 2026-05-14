@@ -37,6 +37,13 @@ export const ParlorTypes = [
   { value: "none", label: "None" },
 ] as const;
 
+export const BarnLayouts = [
+  { value: "single_side", label: "Single-side (pens on one side of feed alley)" },
+  { value: "double_side", label: "Double-side (pens both sides of central feed alley)" },
+  { value: "free", label: "Free (custom)" },
+] as const;
+export type BarnLayout = (typeof BarnLayouts)[number]["value"];
+
 export type Barn = {
   id: string;
   location_id: string;
@@ -44,6 +51,12 @@ export type Barn = {
   barn_code: string | null;
   type: string;
   row_configuration: string | null;
+  /** Long-axis length, ft. Drives the visual renderer. */
+  length_ft: number | null;
+  /** Short-axis width, ft. */
+  width_ft: number | null;
+  layout: string;
+  alley_width_ft: number | null;
   freestall_count: number | null;
   headlock_count: number | null;
   loafing_area_sqft: number | null;

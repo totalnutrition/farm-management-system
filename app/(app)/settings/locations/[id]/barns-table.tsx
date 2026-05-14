@@ -65,6 +65,10 @@ const formSchema = z.object({
   barn_code: z.string().trim(),
   type: z.enum(BarnTypes.map((b) => b.value) as [string, ...string[]]),
   row_configuration: z.string(),
+  length_ft: numOrEmpty,
+  width_ft: numOrEmpty,
+  layout: z.enum(["single_side", "double_side", "free"]),
+  alley_width_ft: numOrEmpty,
   freestall_count: numOrEmpty,
   headlock_count: numOrEmpty,
   loafing_area_sqft: numOrEmpty,
@@ -100,6 +104,10 @@ const emptyValues: FormValues = {
   barn_code: "",
   type: "freestall",
   row_configuration: "",
+  length_ft: "" as unknown as number,
+  width_ft: "" as unknown as number,
+  layout: "double_side",
+  alley_width_ft: "" as unknown as number,
   freestall_count: "" as unknown as number,
   headlock_count: "" as unknown as number,
   loafing_area_sqft: "" as unknown as number,
@@ -135,6 +143,11 @@ function toSubmit(locationId: string, values: FormValues) {
     barn_code: values.barn_code || null,
     type: values.type,
     row_configuration: values.row_configuration || null,
+    length_ft: typeof values.length_ft === "number" ? values.length_ft : null,
+    width_ft: typeof values.width_ft === "number" ? values.width_ft : null,
+    layout: values.layout,
+    alley_width_ft:
+      typeof values.alley_width_ft === "number" ? values.alley_width_ft : null,
     freestall_count: typeof values.freestall_count === "number" ? values.freestall_count : null,
     headlock_count: typeof values.headlock_count === "number" ? values.headlock_count : null,
     loafing_area_sqft:
@@ -346,6 +359,108 @@ function BarnFormBody({ form }: { form: ReturnType<typeof useForm<FormValues>> }
                     ))}
                   </SelectContent>
                 </Select>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="length_ft"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Length (ft, long axis)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  step="any"
+                  inputMode="decimal"
+                  value={
+                    field.value === "" || field.value === undefined
+                      ? ""
+                      : (field.value as number)
+                  }
+                  onChange={(e) =>
+                    field.onChange(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="width_ft"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Width (ft, short axis)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  step="any"
+                  inputMode="decimal"
+                  value={
+                    field.value === "" || field.value === undefined
+                      ? ""
+                      : (field.value as number)
+                  }
+                  onChange={(e) =>
+                    field.onChange(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="layout"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Layout</FormLabel>
+              <FormControl>
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="single_side">
+                      Single-side (pens on one side of feed alley)
+                    </SelectItem>
+                    <SelectItem value="double_side">
+                      Double-side (pens on both sides of central feed alley)
+                    </SelectItem>
+                    <SelectItem value="free">Free (custom)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="alley_width_ft"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Feed alley width (ft)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  step="any"
+                  inputMode="decimal"
+                  placeholder="e.g. 14"
+                  value={
+                    field.value === "" || field.value === undefined
+                      ? ""
+                      : (field.value as number)
+                  }
+                  onChange={(e) =>
+                    field.onChange(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -714,6 +829,10 @@ function EditDialog({
           barn_code: row.barn_code ?? "",
           type: row.type as FormValues["type"],
           row_configuration: row.row_configuration ?? "",
+          length_ft: row.length_ft ?? ("" as unknown as number),
+          width_ft: row.width_ft ?? ("" as unknown as number),
+          layout: (row.layout as FormValues["layout"]) ?? "double_side",
+          alley_width_ft: row.alley_width_ft ?? ("" as unknown as number),
           freestall_count: row.freestall_count ?? ("" as unknown as number),
           headlock_count: row.headlock_count ?? ("" as unknown as number),
           loafing_area_sqft: row.loafing_area_sqft ?? ("" as unknown as number),
