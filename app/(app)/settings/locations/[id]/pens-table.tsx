@@ -108,12 +108,14 @@ export function PensTable({
   barns,
   groups,
   headcountByGroup = {},
+  targetByGroup = {},
 }: {
   locationId: string;
   rows: Pen[];
   barns: BarnLite[];
   groups: GroupLite[];
   headcountByGroup?: Record<string, number>;
+  targetByGroup?: Record<string, { pen_cap: number; bunk_ft: number }>;
 }) {
   const [editing, setEditing] = useState<Pen | null>(null);
   const [deleting, setDeleting] = useState<Pen | null>(null);
@@ -158,12 +160,15 @@ export function PensTable({
       {groups.map((g) => {
         const groupPens = byGroup.get(g.id) ?? [];
         const headcount = headcountByGroup[g.id] ?? 0;
+        const target = targetByGroup[g.id];
         return (
           <GroupSection
             key={g.id}
             group={g}
             pens={groupPens}
             headcount={headcount}
+            targetPenCap={target?.pen_cap}
+            targetBunkFt={target?.bunk_ft}
             barnLabel={barnLabel}
             onAdd={() => setCreateDefaultGroupId(g.id)}
             onEdit={setEditing}
@@ -205,6 +210,8 @@ function GroupSection({
   group,
   pens,
   headcount,
+  targetPenCap,
+  targetBunkFt,
   barnLabel,
   onAdd,
   onEdit,
@@ -213,6 +220,8 @@ function GroupSection({
   group: SectionGroup;
   pens: Pen[];
   headcount: number;
+  targetPenCap?: number;
+  targetBunkFt?: number;
   barnLabel: (id: string | null) => string;
   onAdd: () => void;
   onEdit: (p: Pen) => void;
@@ -238,6 +247,30 @@ function GroupSection({
     }
   }
 
+  // Compare declared capacity to engine target (head × stocking).
+  let targetTone = "text-muted-foreground";
+  let targetNote = "";
+  if (targetPenCap !== undefined && targetPenCap > 0) {
+    if (totalCap === 0) {
+      targetTone = "text-amber-600 dark:text-amber-400";
+      targetNote = `target ${targetPenCap} head · no pens declared`;
+    } else if (totalCap < targetPenCap) {
+      const short = targetPenCap - totalCap;
+      targetTone = "text-destructive";
+      targetNote = `target ${targetPenCap} head · short by ${short}`;
+    } else {
+      const over = totalCap - targetPenCap;
+      targetTone = "text-primary";
+      targetNote =
+        over === 0
+          ? `target ${targetPenCap} head · met`
+          : `target ${targetPenCap} head · +${over} headroom`;
+    }
+    if (targetBunkFt !== undefined && targetBunkFt > 0) {
+      targetNote += ` · target ${targetBunkFt.toFixed(0)}ft bunk`;
+    }
+  }
+
   return (
     <section className="ring-1 ring-foreground/10 flex flex-col">
       <header className="px-3 py-2 bg-foreground/5 flex items-start justify-between gap-3">
@@ -254,6 +287,9 @@ function GroupSection({
             {totalCap > 0 ? `${stockingPct}% stocked · ${stockingNote}` : "no capacity declared"}
             {bunkInPerCow > 0 ? ` · ${bunkInPerCow} in/cow bunk space` : ""}
           </p>
+          {targetNote ? (
+            <p className={`text-[10px] ${targetTone}`}>{targetNote}</p>
+          ) : null}
         </div>
         {group.id !== "__none__" ? (
           <Button type="button" size="sm" variant="ghost" onClick={onAdd}>
