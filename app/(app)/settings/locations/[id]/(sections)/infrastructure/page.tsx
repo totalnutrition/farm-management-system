@@ -10,13 +10,16 @@ import {
   CapacityDefaultsFallback,
   type CapacityDefaults,
 } from "@/lib/capacity-defaults";
-import { computeCapacityPlan } from "@/lib/capacity-plan";
+import { computeCapacityPlanFromCounts } from "@/lib/capacity-plan";
+import { computeGroupHeadcounts } from "@/lib/group-headcount";
+import type { GroupDef } from "@/lib/group-rules";
 import { ComingSoon } from "@/components/coming-soon";
 import { listBarns } from "../../barns-actions";
 import { BarnsTable } from "../../barns-table";
-import { getGroups, getHerdProfile } from "../../groups-actions";
+import { getGroups } from "../../groups-actions";
 import { listPens } from "../../pens-actions";
 import { PensTable } from "../../pens-table";
+import { CapacityPlanTable } from "../../capacity-plan-table";
 import { listArableParcels } from "../../arable-parcels-actions";
 import { ArableParcelsTable } from "../../arable-parcels-table";
 
@@ -54,8 +57,7 @@ export default async function LocationInfrastructurePage({
     );
   }
 
-  const [profile, groups, barns, pens, capDefaults, animalGroupRows] = await Promise.all([
-    getHerdProfile(id),
+  const [groups, barns, pens, capDefaults, animalGroupRows] = await Promise.all([
     getGroups(id),
     listBarns(id),
     listPens(id),
@@ -96,7 +98,30 @@ export default async function LocationInfrastructurePage({
       }
     : CapacityDefaultsFallback;
 
-  const plan = computeCapacityPlan(profile, groups, defaults);
+  // Target capacity per group is driven by the rule engine over the
+  // active roster — same engine that powers /group-moves. The actual
+  // pen capacity (sum of declared head/bunk on pens you've built) is
+  // shown in the per-group sections below.
+  const groupDefs: GroupDef[] = groups.map((g) => ({
+    id: g.id,
+    label: g.label,
+    group_slug: g.group_slug,
+    group_class: g.group_class,
+    display_order: g.display_order,
+    rule_predicates: g.rule_predicates as Record<string, unknown>,
+  }));
+  const headCounts = await computeGroupHeadcounts(id, groupDefs);
+  const plan = computeCapacityPlanFromCounts(groups, headCounts.byGroup, defaults);
+
+  // Build a per-group map of target pen capacity + bunk ft so the
+  // PensTable can show target alongside declared on each section.
+  const targetByGroup: Record<string, { pen_cap: number; bunk_ft: number }> = {};
+  for (const row of plan.rows) {
+    targetByGroup[row.group_id] = {
+      pen_cap: row.pen_capacity,
+      bunk_ft: row.bunk_total_ft,
+    };
+  }
 
   return (
     <div className="flex flex-col gap-6 py-2">
@@ -107,6 +132,26 @@ export default async function LocationInfrastructurePage({
           the capacity plan&apos;s stall target.
         </p>
       </header>
+      <section className="ring-1 ring-foreground/10 p-4 flex flex-col gap-3">
+        <header className="flex flex-col gap-0.5">
+          <h2 className="text-sm font-medium">Capacity plan</h2>
+          <p className="text-xs text-muted-foreground">
+            Per-group target driven by the rule engine over your active
+            roster: <span className="font-mono">head × stocking %</span> →
+            pen cap, <span className="font-mono">head × bunk in / 12</span> →
+            bunk ft. The pens you declare below should sum up to (at least)
+            this target.
+            {headCounts.unassigned > 0 ? (
+              <span className="block text-amber-600 dark:text-amber-400 mt-1">
+                {headCounts.unassigned} animal
+                {headCounts.unassigned === 1 ? "" : "s"} don&apos;t match any
+                group rule — open Group moves to resolve.
+              </span>
+            ) : null}
+          </p>
+        </header>
+        <CapacityPlanTable plan={plan} />
+      </section>
       <section className="ring-1 ring-foreground/10 p-4 flex flex-col gap-3">
         <h2 className="text-sm font-medium">Barns</h2>
         <BarnsTable
@@ -123,6 +168,7 @@ export default async function LocationInfrastructurePage({
           barns={barns.map((b) => ({ id: b.id, name: b.name }))}
           groups={groups.map((g) => ({ id: g.id, label: g.label }))}
           headcountByGroup={headcountByGroup}
+          targetByGroup={targetByGroup}
         />
       </section>
       {data.manages_crops ? (

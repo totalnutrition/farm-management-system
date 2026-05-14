@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase-admin";
 import {
@@ -11,8 +12,6 @@ import {
   describePredicates,
   suggestStrategySlug,
 } from "@/lib/herd-profile";
-import { CapacityDefaultsFallback } from "@/lib/capacity-defaults";
-import { computeCapacityPlanFromCounts } from "@/lib/capacity-plan";
 import { loadStrategyPresetCards } from "@/lib/group-strategy-presets";
 import { computeGroupHeadcounts } from "@/lib/group-headcount";
 import type { GroupDef } from "@/lib/group-rules";
@@ -20,7 +19,6 @@ import { ComingSoon } from "@/components/coming-soon";
 import { getGroups, getHerdProfile } from "../../groups-actions";
 import { GroupStrategyPicker } from "../../group-strategy-picker";
 import { GroupRuleEditor } from "../../group-rule-editor";
-import { CapacityPlanTable } from "../../capacity-plan-table";
 
 export const metadata = { title: "Location · Herd structure" };
 export const dynamic = "force-dynamic";
@@ -76,40 +74,15 @@ export default async function LocationGroupsPage({
     total: activeAnimals.length,
   };
 
-  const [profile, groups, presets, capDefaults] = await Promise.all([
+  const [profile, groups, presets] = await Promise.all([
     getHerdProfile(id),
     getGroups(id),
     loadStrategyPresetCards(orgId),
-    admin
-      .from("org_capacity_defaults")
-      .select(
-        "fresh_stocking_pct, high_stocking_pct, mid_stocking_pct, low_stocking_pct, dry_close_stocking_pct, dry_far_stocking_pct, fresh_bunk_in, high_bunk_in, mid_bunk_in, low_bunk_in, dry_close_bunk_in, dry_far_bunk_in",
-      )
-      .eq("organization_id", orgId ?? "00000000-0000-0000-0000-000000000000")
-      .maybeSingle()
-      .then(({ data }) => data),
   ]);
 
-  const defaults = capDefaults
-    ? {
-        fresh_stocking_pct: Number(capDefaults.fresh_stocking_pct),
-        high_stocking_pct: Number(capDefaults.high_stocking_pct),
-        mid_stocking_pct: Number(capDefaults.mid_stocking_pct),
-        low_stocking_pct: Number(capDefaults.low_stocking_pct),
-        dry_close_stocking_pct: Number(capDefaults.dry_close_stocking_pct),
-        dry_far_stocking_pct: Number(capDefaults.dry_far_stocking_pct),
-        fresh_bunk_in: Number(capDefaults.fresh_bunk_in),
-        high_bunk_in: Number(capDefaults.high_bunk_in),
-        mid_bunk_in: Number(capDefaults.mid_bunk_in),
-        low_bunk_in: Number(capDefaults.low_bunk_in),
-        dry_close_bunk_in: Number(capDefaults.dry_close_bunk_in),
-        dry_far_bunk_in: Number(capDefaults.dry_far_bunk_in),
-      }
-    : CapacityDefaultsFallback;
-
-  // Run the rule engine over the actual roster to get accurate per-
-  // group head counts. The previous implementation used herd_profile
-  // targets which left most groups at 0 for fresh installs.
+  // Run the rule engine over the active roster to count unassigned
+  // animals (those that match no group rule). The full capacity table
+  // lives on the Infrastructure section now.
   const groupDefs: GroupDef[] = groups.map((g) => ({
     id: g.id,
     label: g.label,
@@ -119,13 +92,6 @@ export default async function LocationGroupsPage({
     rule_predicates: g.rule_predicates as Record<string, unknown>,
   }));
   const headCounts = await computeGroupHeadcounts(id, groupDefs);
-  const capacityPlan = computeCapacityPlanFromCounts(
-    groups,
-    headCounts.byGroup,
-    defaults,
-  );
-  // profile remains in scope for the suggested-slug helper below.
-  void profile;
 
   const suggestedSlug = suggestStrategySlug(profile.target_lactating_count);
   const currentSlug =
@@ -223,31 +189,30 @@ export default async function LocationGroupsPage({
         )}
       </section>
 
-      <section className="ring-1 ring-foreground/10 p-4 flex flex-col gap-3">
-        <header className="flex flex-col gap-0.5">
-          <h2 className="text-sm font-medium">Capacity plan</h2>
-          <p className="text-xs text-muted-foreground">
-            Each row&apos;s <span className="font-medium">Head</span> is the
-            count of active animals the rule engine would place in that
-            group right now (including milk yield for High / Mid / Low).
-            <span className="font-medium"> Pen cap</span> ={" "}
-            <span className="font-mono">head × stocking %</span> — the
-            minimum stall count those pens must provide.{" "}
-            <span className="font-medium">Bunk ft</span> ={" "}
-            <span className="font-mono">head × bunk in/cow ÷ 12</span> — the
-            minimum running feet of feed bunk. Settings → Infrastructure
-            is where you build pens to satisfy these targets.
-            {headCounts.unassigned > 0 ? (
-              <span className="block text-amber-600 dark:text-amber-400 mt-1">
-                {headCounts.unassigned} animal
-                {headCounts.unassigned === 1 ? "" : "s"} don&apos;t match any
-                group rule yet — likely missing milk data or out-of-range
-                facts. Open Group moves to see which.
-              </span>
-            ) : null}
-          </p>
+      <section className="ring-1 ring-foreground/10 p-4 flex flex-col gap-2">
+        <header className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-0.5">
+            <h2 className="text-sm font-medium">Pen capacity</h2>
+            <p className="text-xs text-muted-foreground">
+              Per-group target capacity (head, stalls, bunk feet) lives on
+              Infrastructure — alongside the pens you&apos;ve declared, so
+              you see target vs actual in one place.
+              {headCounts.unassigned > 0 ? (
+                <span className="block text-amber-600 dark:text-amber-400 mt-1">
+                  {headCounts.unassigned} animal
+                  {headCounts.unassigned === 1 ? "" : "s"} don&apos;t match
+                  any group rule yet — open Group moves to see which.
+                </span>
+              ) : null}
+            </p>
+          </div>
+          <Link
+            href={`/settings/locations/${id}/infrastructure`}
+            className="h-8 px-3 inline-flex items-center text-xs ring-1 ring-foreground/10 hover:bg-foreground/5 whitespace-nowrap"
+          >
+            Open Infrastructure →
+          </Link>
         </header>
-        <CapacityPlanTable plan={capacityPlan} />
       </section>
     </div>
   );
