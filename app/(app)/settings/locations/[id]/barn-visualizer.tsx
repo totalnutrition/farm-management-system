@@ -19,7 +19,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import type { Pen } from "@/lib/pens";
 import type { Barn } from "@/lib/barns";
 
-const CANVAS_W = 720; // px — the SVG width we render at
+const DEFAULT_CANVAS_W = 720; // px — full-width view (Settings → Infrastructure)
 const PADDING = 8;
 
 type GroupColor = { fill: string; stroke: string };
@@ -45,6 +45,8 @@ export function BarnVisualizer({
   groupLabel,
   headcountByPen = {},
   onPenClick,
+  canvasWidth = DEFAULT_CANVAS_W,
+  compact = false,
 }: {
   barn: Barn;
   pens: Pen[];
@@ -54,7 +56,12 @@ export function BarnVisualizer({
   headcountByPen?: Record<string, number>;
   /** Override the default ?edit=<pen_id> navigation. */
   onPenClick?: (pen: Pen) => void;
+  /** Override SVG width — use 280–340 for compact farm-plan grids. */
+  canvasWidth?: number;
+  /** Drop internal header + outer ring (caller renders its own). */
+  compact?: boolean;
 }) {
+  const CANVAS_W = canvasWidth;
   const [hoverPen, setHoverPen] = useState<Pen | null>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -136,21 +143,41 @@ export function BarnVisualizer({
   }
 
   return (
-    <section className="ring-1 ring-foreground/10 flex flex-col">
-      <header className="px-3 py-2 bg-foreground/5 flex items-baseline justify-between gap-3">
-        <h3 className="text-sm font-medium">
-          {barn.name}
-          <span className="ml-2 text-[10px] font-normal text-muted-foreground">
-            {ownPens.length} pen{ownPens.length === 1 ? "" : "s"}
-            {barn.length_ft && barn.width_ft
-              ? ` · ${barn.length_ft}ft × ${barn.width_ft}ft`
-              : " · dimensions not set"}
-            {` · ${layout.replace("_", "-")} layout`}
-          </span>
-        </h3>
-      </header>
+    <section
+      className={
+        compact ? "flex flex-col" : "ring-1 ring-foreground/10 flex flex-col"
+      }
+    >
+      {compact ? (
+        <p className="text-[10px] text-muted-foreground px-1 pb-1">
+          {ownPens.length} pen{ownPens.length === 1 ? "" : "s"}
+          {barn.length_ft && barn.width_ft
+            ? ` · ${barn.length_ft}ft × ${barn.width_ft}ft`
+            : " · dimensions not set"}
+          {` · ${layout.replace("_", "-")}`}
+        </p>
+      ) : (
+        <header className="px-3 py-2 bg-foreground/5 flex items-baseline justify-between gap-3">
+          <h3 className="text-sm font-medium">
+            {barn.name}
+            <span className="ml-2 text-[10px] font-normal text-muted-foreground">
+              {ownPens.length} pen{ownPens.length === 1 ? "" : "s"}
+              {barn.length_ft && barn.width_ft
+                ? ` · ${barn.length_ft}ft × ${barn.width_ft}ft`
+                : " · dimensions not set"}
+              {` · ${layout.replace("_", "-")} layout`}
+            </span>
+          </h3>
+        </header>
+      )}
 
-      <div className="p-2 overflow-x-auto bg-background">
+      <div
+        className={
+          compact
+            ? "overflow-x-auto bg-background"
+            : "p-2 overflow-x-auto bg-background"
+        }
+      >
         <svg
           width={CANVAS_W}
           height={canvasH}
