@@ -20,7 +20,6 @@ import {
   ClipboardClockIcon,
   MedicalFileIcon,
   TruckIcon,
-  TaskDaily01Icon,
   Calendar03Icon,
   Package01Icon,
   Notebook01Icon,
@@ -94,8 +93,7 @@ const MENU: MenuGroup[] = [
     label: "Milk",
     roles: ROLES,
     links: [
-      { name: "Milk recording", icon: ClipboardClockIcon,   link: "/milk-recording", roles: ROLES },
-      { name: "Test days",     icon: TaskDaily01Icon,       link: "/test-days",      roles: ROLES },
+      { name: "Milk",          icon: ClipboardClockIcon,    link: "/milk",           roles: ROLES },
     ],
   },
   {
