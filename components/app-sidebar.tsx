@@ -20,10 +20,14 @@ import {
   ClipboardClockIcon,
   MedicalFileIcon,
   TruckIcon,
-  TaskDaily01Icon,
   Calendar03Icon,
-  PackageIcon,
+  Package01Icon,
   Notebook01Icon,
+  SpermIcon,
+  CookBookIcon,
+  AlarmClockIcon,
+  Building02Icon,
+  ShoppingCart01Icon,
 } from "@hugeicons/core-free-icons"
 import { CowFaceIcon } from "@/lib/custom-icons"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
@@ -57,65 +61,84 @@ const MENU: MenuGroup[] = [
     label: "Operations",
     roles: ROLES,
     links: [
-      { name: "Dashboard",    icon: DashboardSquare01Icon, link: "/",            roles: ROLES },
-      { name: "Hot list",     icon: AlertCircleIcon,        link: "/hot-list",    roles: ROLES },
-      { name: "Animals",      icon: CowFaceIcon,            link: "/animals",     roles: ROLES },
+      { name: "Dashboard",     icon: DashboardSquare01Icon, link: "/",               roles: ROLES },
+      { name: "Hot list",      icon: AlertCircleIcon,       link: "/hot-list",       roles: ROLES },
+      { name: "Calendar",      icon: Calendar03Icon,        link: "/calendar",       roles: ROLES },
+    ],
+  },
+  {
+    label: "Herd",
+    roles: ROLES,
+    links: [
+      { name: "Animals",       icon: CowFaceIcon,           link: "/animals",        roles: ROLES },
+      { name: "Pen moves",     icon: TruckIcon,             link: "/pen-moves",      roles: ROLES },
     ],
   },
   {
     label: "Reproduction",
     roles: ROLES,
     links: [
-      { name: "Heats",        icon: ChartLineData02Icon,    link: "/heats",       roles: ROLES },
-      { name: "Breedings",    icon: ChartLineData02Icon,    link: "/breedings",   roles: ROLES },
-      { name: "Preg checks",  icon: ChartLineData02Icon,    link: "/preg-checks", roles: ROLES },
-      { name: "Calvings",     icon: ChartLineData02Icon,    link: "/calvings",    roles: ROLES },
+      { name: "Reproduction",  icon: SpermIcon,             link: "/reproduction",   roles: ROLES },
     ],
   },
   {
     label: "Health",
     roles: ROLES,
     links: [
-      { name: "Health events", icon: MedicalFileIcon,       link: "/health",      roles: ROLES },
-      { name: "Withdrawals",  icon: AlertCircleIcon,        link: "/withdrawals", roles: ROLES },
+      { name: "Health",        icon: MedicalFileIcon,       link: "/health",         roles: ROLES },
     ],
   },
   {
     label: "Milk",
     roles: ROLES,
     links: [
-      { name: "Milk recording", icon: ClipboardClockIcon,   link: "/milk-recording", roles: ROLES },
-      { name: "Test days",    icon: TaskDaily01Icon,        link: "/test-days",    roles: ROLES },
+      { name: "Milk",          icon: ClipboardClockIcon,    link: "/milk",           roles: ROLES },
     ],
   },
   {
-    label: "Movements",
+    label: "Feed & Nutrition",
     roles: ROLES,
     links: [
-      { name: "Pen moves",    icon: TruckIcon,              link: "/pen-moves",   roles: ROLES },
-      { name: "Transactions", icon: PackageIcon,            link: "/transactions",roles: ROLES },
+      { name: "Feeding",       icon: CookBookIcon,          link: "/feeding",        roles: ROLES },
+      { name: "Recipes",       icon: Notebook01Icon,        link: "/recipes",        roles: ROLES },
     ],
   },
   {
     label: "Crops",
     roles: ROLES,
     links: [
-      { name: "Forage & crops", icon: WheatIcon,            link: "/crops",       roles: ROLES },
+      { name: "Forage & crops", icon: WheatIcon,            link: "/crops",          roles: ROLES },
     ],
   },
   {
-    label: "Reports",
+    label: "Inventory",
     roles: ROLES,
     links: [
-      { name: "Reports",      icon: Notebook01Icon,         link: "/reports",     roles: ROLES },
-      { name: "Calendar",     icon: Calendar03Icon,         link: "/calendar",    roles: ROLES },
+      { name: "Stocks",        icon: Package01Icon,         link: "/stocks",         roles: ROLES },
+      { name: "Procurement",   icon: ShoppingCart01Icon,    link: "/procurement",    roles: ROLES },
+      { name: "Vendors",       icon: Building02Icon,        link: "/vendors",        roles: ROLES },
+    ],
+  },
+  {
+    label: "People",
+    roles: ROLES,
+    links: [
+      { name: "People",        icon: AlarmClockIcon,        link: "/people",         roles: ROLES },
+    ],
+  },
+  {
+    label: "Records",
+    roles: ROLES,
+    links: [
+      { name: "Reports",       icon: Notebook01Icon,        link: "/reports",        roles: ROLES },
+      { name: "Transactions",  icon: ChartLineData02Icon,   link: "/transactions",   roles: ROLES },
     ],
   },
   {
     label: "Workspace",
     roles: ROLES,
     links: [
-      { name: "Settings",     icon: Settings02Icon,         link: PathSettings,   roles: ROLES },
+      { name: "Settings",      icon: Settings02Icon,        link: PathSettings,      roles: ROLES },
     ],
   },
 ]

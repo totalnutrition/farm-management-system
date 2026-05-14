@@ -1,14 +1,5 @@
-import { OperationalPlaceholder } from "@/components/operational-placeholder";
-
-export const metadata = { title: "Breedings" };
+import { redirect } from "next/navigation";
 export const dynamic = "force-dynamic";
-
-export default async function Page() {
-  return (
-    <OperationalPlaceholder
-      title="Breedings"
-      description="AI / natural breeding events per cow, with sire NAAB code, technician, semen type, sync protocol."
-      livestockOnly={true}
-    />
-  );
+export default function Page() {
+  redirect("/reproduction?tab=breedings");
 }
