@@ -26,7 +26,6 @@ import {
   SpermIcon,
   CookBookIcon,
   AlarmClockIcon,
-  ReceiptDollarIcon,
   Building02Icon,
   ShoppingCart01Icon,
 } from "@hugeicons/core-free-icons"
@@ -123,8 +122,7 @@ const MENU: MenuGroup[] = [
     label: "People",
     roles: ROLES,
     links: [
-      { name: "Attendance",    icon: AlarmClockIcon,        link: "/attendance",     roles: ROLES },
-      { name: "Payroll",       icon: ReceiptDollarIcon,     link: "/payroll",        roles: ROLES },
+      { name: "People",        icon: AlarmClockIcon,        link: "/people",         roles: ROLES },
     ],
   },
   {
