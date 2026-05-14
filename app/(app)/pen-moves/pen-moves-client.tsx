@@ -254,18 +254,20 @@ function GroupBlockCard({
                           variant="ghost"
                           onClick={() => onAccept(a)}
                           disabled={busy === a.id}
-                          title="Accept"
+                          title={`Move ${a.animal_id} to ${a.suggested_pen_name ?? "suggested pen"}`}
                         >
                           <HugeiconsIcon icon={CheckmarkCircle02Icon} />
+                          Accept
                         </Button>
                         <Button
                           type="button"
                           size="sm"
                           variant="ghost"
                           onClick={() => openOverride(a)}
-                          title="Override pen"
+                          title="Pick a different pen or keep current with a reason"
                         >
                           <HugeiconsIcon icon={CancelCircleIcon} />
+                          Override…
                         </Button>
                       </>
                     ) : (

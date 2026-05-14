@@ -264,18 +264,20 @@ function PendingTab({
                       variant="ghost"
                       onClick={() => onAccept(r)}
                       disabled={busy === r.animal_id}
-                      title="Accept"
+                      title={`Move ${r.animal_label} to ${r.suggested_group_label}`}
                     >
                       <HugeiconsIcon icon={CheckmarkCircle02Icon} />
+                      Accept
                     </Button>
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
                       onClick={() => setOverrideTarget(r)}
-                      title="Override (keep current)"
+                      title="Pick a different group or keep current with a reason"
                     >
                       <HugeiconsIcon icon={CancelCircleIcon} />
+                      Override…
                     </Button>
                   </td>
                 </tr>
