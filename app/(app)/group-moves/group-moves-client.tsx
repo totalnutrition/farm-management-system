@@ -125,6 +125,14 @@ function PendingTab({
   const [, startTransition] = useTransition();
   const [overrideTarget, setOverrideTarget] = useState<PendingRow | null>(null);
 
+  // Per-row destination override. Initialised to the engine's suggestion;
+  // user can pick any group inline and Apply uses that value.
+  const [destinationByAnimal, setDestinationByAnimal] = useState<
+    Record<string, string>
+  >({});
+  const destinationFor = (r: PendingRow) =>
+    destinationByAnimal[r.animal_id] ?? r.suggested_group_id;
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
@@ -141,20 +149,28 @@ function PendingTab({
   }, [rows, search, showOverridden]);
 
   const onAccept = (row: PendingRow) => {
+    const dest = destinationFor(row);
     setBusy(row.animal_id);
     startTransition(async () => {
       const r = await acceptMove({
         animal_id: row.animal_id,
         from_group_id: row.current_group_id,
-        to_group_id: row.suggested_group_id,
-        rule_explanation: row.rule_explanation,
+        to_group_id: dest,
+        rule_explanation:
+          dest === row.suggested_group_id
+            ? row.rule_explanation
+            : `${row.rule_explanation} (manual override → ${groups.find((g) => g.id === dest)?.label ?? "?"})`,
       });
       setBusy(null);
       if (r.error) {
         toast.error(r.error);
         return;
       }
-      toast.success(`Moved ${row.animal_label} → ${row.suggested_group_label}`);
+      const destLabel =
+        dest === row.suggested_group_id
+          ? row.suggested_group_label
+          : groups.find((g) => g.id === dest)?.label ?? "?";
+      toast.success(`${row.animal_label} → ${destLabel}`);
       router.refresh();
     });
   };
@@ -165,15 +181,21 @@ function PendingTab({
       toast.error("Nothing to accept.");
       return;
     }
-    if (!confirm(`Accept ${acceptable.length} suggested move(s)?`)) return;
+    if (!confirm(`Apply ${acceptable.length} move(s)?`)) return;
     startTransition(async () => {
       const r = await bulkAccept({
-        moves: acceptable.map((m) => ({
-          animal_id: m.animal_id,
-          from_group_id: m.current_group_id,
-          to_group_id: m.suggested_group_id,
-          rule_explanation: m.rule_explanation,
-        })),
+        moves: acceptable.map((m) => {
+          const dest = destinationFor(m);
+          return {
+            animal_id: m.animal_id,
+            from_group_id: m.current_group_id,
+            to_group_id: dest,
+            rule_explanation:
+              dest === m.suggested_group_id
+                ? m.rule_explanation
+                : `${m.rule_explanation} (manual override → ${groups.find((g) => g.id === dest)?.label ?? "?"})`,
+          };
+        }),
       });
       if (r.error) {
         toast.error(r.error);
@@ -225,7 +247,7 @@ function PendingTab({
             <tr className="text-left">
               <th className="px-2 py-1.5 font-medium">Cow</th>
               <th className="px-2 py-1.5 font-medium">Current group</th>
-              <th className="px-2 py-1.5 font-medium">Suggested group</th>
+              <th className="px-2 py-1.5 font-medium">Move to</th>
               <th className="px-2 py-1.5 font-medium">Why</th>
               <th className="px-2 py-1.5 font-medium text-right">In current</th>
               <th className="px-2 py-1.5 font-medium text-right">Actions</th>
@@ -239,13 +261,40 @@ function PendingTab({
                 </td>
               </tr>
             ) : (
-              filtered.map((r) => (
+              filtered.map((r) => {
+                const dest = destinationFor(r);
+                const isOverride = dest !== r.suggested_group_id;
+                return (
                 <tr key={r.animal_id} className="border-t border-foreground/10 hover:bg-foreground/[0.025]">
                   <td className="px-2 py-1.5 font-medium">{r.animal_label}</td>
                   <td className="px-2 py-1.5 text-muted-foreground">
                     {r.current_group_label ?? <em>—</em>}
                   </td>
-                  <td className="px-2 py-1.5 font-medium">{r.suggested_group_label}</td>
+                  <td className="px-2 py-1.5">
+                    <Select
+                      value={dest}
+                      onValueChange={(v) =>
+                        setDestinationByAnimal((prev) => ({
+                          ...prev,
+                          [r.animal_id]: v,
+                        }))
+                      }
+                    >
+                      <SelectTrigger
+                        className={`h-7 ${isOverride ? "ring-2 ring-amber-500/60" : ""}`}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {groups.map((g) => (
+                          <SelectItem key={g.id} value={g.id}>
+                            {g.label}
+                            {g.id === r.suggested_group_id ? " (suggested)" : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
                   <td className="px-2 py-1.5 text-muted-foreground text-[11px]">
                     {r.rule_explanation}
                     {r.override_active && r.override_reason ? (
@@ -264,24 +313,25 @@ function PendingTab({
                       variant="ghost"
                       onClick={() => onAccept(r)}
                       disabled={busy === r.animal_id}
-                      title={`Move ${r.animal_label} to ${r.suggested_group_label}`}
+                      title={`Move ${r.animal_label} to ${groups.find((g) => g.id === dest)?.label ?? "selected group"}`}
                     >
                       <HugeiconsIcon icon={CheckmarkCircle02Icon} />
-                      Accept
+                      {isOverride ? "Apply override" : "Accept"}
                     </Button>
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
                       onClick={() => setOverrideTarget(r)}
-                      title="Pick a different group or keep current with a reason"
+                      title="Keep cow in current group with a reason"
                     >
                       <HugeiconsIcon icon={CancelCircleIcon} />
                       Override…
                     </Button>
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>

@@ -199,8 +199,22 @@ export default async function GroupMovesPage() {
       .in("animal_id", animalRows.map((a) => a.id)),
   ]);
   const hasProductionData = (milkingsCount ?? 0) + (testDaysCount ?? 0) > 0;
+  const rulesUseMilk = groups.some((g) => {
+    const p = (g.rule_predicates as Record<string, unknown>) ?? {};
+    return (
+      typeof p.daily_milk_min === "number" ||
+      typeof p.daily_milk_max === "number"
+    );
+  });
 
   void factsHash;
+
+  // Banner only fires when we know we're losing signal:
+  //   - no rule uses daily_milk → tell the user how to enable it
+  //   - rules use daily_milk but no roster data exists → tell user to
+  //     log milkings so the production-based predicates can fire
+  // When both are in place, no banner is needed.
+  const showBanner = !rulesUseMilk || !hasProductionData;
 
   return (
     <div className="flex flex-col gap-4 py-4">
@@ -208,23 +222,23 @@ export default async function GroupMovesPage() {
         <h1 className="font-heading text-lg font-medium">Group moves</h1>
         <p className="text-xs text-muted-foreground">
           {active.name} · the rule engine watches DIM / parity / age / dry /
-          pregnancy and suggests the right group per cow. Accept moves the
-          cow; override keeps her with a reason and suppresses the same
-          suggestion until her facts change.
+          pregnancy {rulesUseMilk ? "+ daily milk yield " : ""}and suggests
+          the right group per cow. Accept moves the cow; override keeps her
+          with a reason and suppresses the same suggestion until her facts
+          change.
         </p>
       </header>
 
-      <section className="ring-1 ring-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
-        <span className="font-medium">Heads-up:</span>{" "}
-        <span className="text-muted-foreground">
-          suggestions use rule predicates (DIM / parity / age / dry /
-          pregnancy). Production-level splits — High / Mid / Low based on
-          daily yield within the same DIM window — need milk data, and
-          {hasProductionData
-            ? " your roster currently has some recorded but the default rules don't use it. Customize group rules in Settings → Groups to add daily-milk thresholds."
-            : " your roster has none recorded yet. Log milkings or test-day results from the Milk hub so the engine can refine its decisions."}
-        </span>
-      </section>
+      {showBanner ? (
+        <section className="ring-1 ring-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
+          <span className="font-medium">Heads-up:</span>{" "}
+          <span className="text-muted-foreground">
+            {!rulesUseMilk
+              ? "your group rules don't use daily-milk thresholds yet — High / Mid / Low are split by DIM only. Edit a group on Settings → Herd structure to add daily_milk_min / daily_milk_max for production-based splits."
+              : "your group rules check daily milk yield, but no milkings or test-day rows exist yet, so that predicate is skipped. Log milkings from the Milk hub and suggestions will refine automatically."}
+          </span>
+        </section>
+      ) : null}
 
       <GroupMovesClient
         pending={pending}
