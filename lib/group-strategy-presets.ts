@@ -12,7 +12,7 @@ export async function loadStrategyPresetCards(
   const { data: rows } = await admin
     .from("org_group_strategy_presets")
     .select(
-      "id, slug, name, description, recommended_min_lactating, recommended_max_lactating",
+      "id, slug, name, description, recommended_min_lactating, recommended_max_lactating, organization_id, is_seed",
     )
     .or(
       `organization_id.is.null,organization_id.eq.${orgId ?? "00000000-0000-0000-0000-000000000000"}`,
@@ -37,5 +37,6 @@ export async function loadStrategyPresetCards(
     group_labels: (groupRows ?? [])
       .filter((g) => g.preset_id === r.id)
       .map((g) => g.group_label as string),
+    is_org_owned: r.organization_id !== null && !r.is_seed,
   }));
 }

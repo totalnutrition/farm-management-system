@@ -144,10 +144,13 @@ export default async function LocationGroupsPage({
         <header className="flex flex-col gap-0.5">
           <h2 className="text-sm font-medium">Active strategy</h2>
           <p className="text-xs text-muted-foreground">
-            Current preset:{" "}
-            <span className="font-medium">{currentSlug ?? "(none — pick one below)"}</span>
-            . Suggested for your herd size:{" "}
-            <span className="font-medium">{suggestedSlug}</span>.
+            {currentSlug ? (
+              <>
+                Current preset: <span className="font-medium">{currentSlug}</span>.
+              </>
+            ) : (
+              <>No strategy applied yet. Pick or duplicate one below.</>
+            )}
           </p>
         </header>
         <GroupStrategyPicker

@@ -272,3 +272,228 @@ export async function updateGroupRules(input: {
   revalidatePath(`/settings/locations/${group.location_id}/groups`);
   return { success: true };
 }
+
+// =============================================================================
+// Strategy preset management (org-scoped CRUD on top of seed presets)
+// =============================================================================
+
+function slugify(s: string): string {
+  return (
+    s
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 64) || "strategy"
+  );
+}
+
+/**
+ * Clone a strategy preset (seed or org-owned) into a new org-owned
+ * preset with a user-given name. The new preset's groups are copied
+ * verbatim (slug / label / class / display_order / rule_predicates).
+ */
+export async function duplicateStrategyPreset(input: {
+  source_preset_id: string;
+  new_name: string;
+}): Promise<Result & { preset_slug?: string }> {
+  const parsed = z
+    .object({
+      source_preset_id: z.uuid(),
+      new_name: z.string().trim().min(1).max(120),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { error: "Invalid input." };
+
+  const user = await requireAnyRole([RoleSuperAdmin, RoleAdmin]);
+  const orgId = getOrganizationIdFromUser(user);
+  const role = getRoleFromUser(user);
+  if (!orgId && role !== RoleSuperAdmin) {
+    return { error: "Your account is not linked to an organization." };
+  }
+  const admin = createAdminClient();
+
+  // Source preset must be visible to this org (seed OR own).
+  const { data: source } = await admin
+    .from("org_group_strategy_presets")
+    .select("id, organization_id, description, recommended_min_lactating, recommended_max_lactating")
+    .eq("id", parsed.data.source_preset_id)
+    .single();
+  if (!source) return { error: "Source preset not found." };
+  if (
+    source.organization_id !== null &&
+    source.organization_id !== orgId &&
+    role !== RoleSuperAdmin
+  ) {
+    return { error: "Source preset is not visible to this organization." };
+  }
+
+  // Find a unique slug within (org, slug).
+  const baseSlug = slugify(parsed.data.new_name);
+  let slug = baseSlug;
+  for (let i = 2; i < 1000; i++) {
+    const { data: collision } = await admin
+      .from("org_group_strategy_presets")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("slug", slug)
+      .maybeSingle();
+    if (!collision) break;
+    slug = `${baseSlug}-${i}`;
+  }
+
+  const { data: created, error: createErr } = await admin
+    .from("org_group_strategy_presets")
+    .insert({
+      organization_id: orgId,
+      slug,
+      name: parsed.data.new_name,
+      description: (source.description as string | null) ?? null,
+      recommended_min_lactating: source.recommended_min_lactating ?? null,
+      recommended_max_lactating: source.recommended_max_lactating ?? null,
+      is_seed: false,
+    })
+    .select("id")
+    .single();
+  if (createErr) return { error: createErr.message };
+
+  // Copy group rows.
+  const { data: srcGroups } = await admin
+    .from("org_group_strategy_preset_groups")
+    .select("group_slug, group_label, group_class, display_order, rule_predicates")
+    .eq("preset_id", parsed.data.source_preset_id)
+    .order("display_order");
+  if ((srcGroups ?? []).length > 0) {
+    const rows = (srcGroups ?? []).map((g) => ({
+      preset_id: created!.id as string,
+      group_slug: g.group_slug as string,
+      group_label: g.group_label as string,
+      group_class: g.group_class as string,
+      display_order: g.display_order as number,
+      rule_predicates: g.rule_predicates as Record<string, unknown>,
+    }));
+    const { error: gErr } = await admin
+      .from("org_group_strategy_preset_groups")
+      .insert(rows);
+    if (gErr) return { error: gErr.message };
+  }
+
+  revalidatePath(`/settings/locations`);
+  return { success: true, preset_slug: slug };
+}
+
+/**
+ * Snapshot the location's current location_groups into a new org-owned
+ * preset. Useful for "save my customised rules as a reusable strategy."
+ */
+export async function saveCurrentAsNewStrategy(input: {
+  location_id: string;
+  new_name: string;
+}): Promise<Result & { preset_slug?: string }> {
+  const parsed = z
+    .object({
+      location_id: z.uuid(),
+      new_name: z.string().trim().min(1).max(120),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { error: "Invalid input." };
+
+  const authz = await authorizeForLocation(parsed.data.location_id);
+  if ("error" in authz) return { error: authz.error };
+
+  const user = await requireAnyRole([RoleSuperAdmin, RoleAdmin]);
+  const orgId = getOrganizationIdFromUser(user);
+  const role = getRoleFromUser(user);
+  if (!orgId && role !== RoleSuperAdmin) {
+    return { error: "Your account is not linked to an organization." };
+  }
+
+  // Load this location's groups.
+  const { data: locGroups } = await authz.admin
+    .from("location_groups")
+    .select("group_slug, label, group_class, display_order, rule_predicates")
+    .eq("location_id", parsed.data.location_id)
+    .order("display_order");
+  if (!locGroups || locGroups.length === 0) {
+    return { error: "No groups on this location yet — nothing to save." };
+  }
+
+  // Unique slug.
+  const baseSlug = slugify(parsed.data.new_name);
+  let slug = baseSlug;
+  for (let i = 2; i < 1000; i++) {
+    const { data: collision } = await authz.admin
+      .from("org_group_strategy_presets")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("slug", slug)
+      .maybeSingle();
+    if (!collision) break;
+    slug = `${baseSlug}-${i}`;
+  }
+
+  const { data: created, error: createErr } = await authz.admin
+    .from("org_group_strategy_presets")
+    .insert({
+      organization_id: orgId,
+      slug,
+      name: parsed.data.new_name,
+      description: "Saved from a location's current groups.",
+      is_seed: false,
+    })
+    .select("id")
+    .single();
+  if (createErr) return { error: createErr.message };
+
+  const rows = locGroups.map((g) => ({
+    preset_id: created!.id as string,
+    group_slug: g.group_slug as string,
+    group_label: g.label as string,
+    group_class: g.group_class as string,
+    display_order: g.display_order as number,
+    rule_predicates: g.rule_predicates as Record<string, unknown>,
+  }));
+  const { error: gErr } = await authz.admin
+    .from("org_group_strategy_preset_groups")
+    .insert(rows);
+  if (gErr) return { error: gErr.message };
+
+  revalidatePath(`/settings/locations/${parsed.data.location_id}/groups`);
+  return { success: true, preset_slug: slug };
+}
+
+export async function deleteOrgStrategyPreset(input: {
+  preset_id: string;
+}): Promise<Result> {
+  const parsed = z.object({ preset_id: z.uuid() }).safeParse(input);
+  if (!parsed.success) return { error: "Invalid input." };
+
+  const user = await requireAnyRole([RoleSuperAdmin, RoleAdmin]);
+  const orgId = getOrganizationIdFromUser(user);
+  const role = getRoleFromUser(user);
+  const admin = createAdminClient();
+
+  const { data: preset } = await admin
+    .from("org_group_strategy_presets")
+    .select("id, organization_id, is_seed")
+    .eq("id", parsed.data.preset_id)
+    .single();
+  if (!preset) return { error: "Preset not found." };
+  if (preset.is_seed) {
+    return { error: "Seed strategies can't be deleted." };
+  }
+  if (role !== RoleSuperAdmin && preset.organization_id !== orgId) {
+    return { error: "Cross-org access denied." };
+  }
+
+  // preset_groups cascade-delete via FK; presets in active use survive
+  // because location_groups only references preset_slug (free text).
+  const { error } = await admin
+    .from("org_group_strategy_presets")
+    .delete()
+    .eq("id", parsed.data.preset_id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/settings/locations`);
+  return { success: true };
+}
