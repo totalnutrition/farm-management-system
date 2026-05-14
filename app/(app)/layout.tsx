@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
+import { AppSidebar, type SidebarBadgeCounts } from "@/components/app-sidebar";
 import { LocationSwitcher } from "@/components/location-switcher";
 import { createClient } from "@/lib/supabase-server";
 import { PathLogin } from "@/lib/misc";
@@ -12,6 +12,7 @@ import {
   listAccessibleLocations,
 } from "@/lib/locations";
 import type { UserRole } from "@/lib/supabase-auth";
+import { computeHotList } from "@/lib/hot-list";
 
 export default async function AppLayout({
   children,
@@ -34,6 +35,19 @@ export default async function AppLayout({
     getActiveLocation(),
   ]);
 
+  const badgeCounts: SidebarBadgeCounts =
+    active && active.manages_livestock
+      ? await (async () => {
+          const hl = await computeHotList(active.id);
+          return {
+            hotList: hl.totalAlerts,
+            groupMoves: hl.counts.pendingGroupMoves,
+            penMoves:
+              hl.counts.pendingPenMoves + hl.counts.groupsMissingPens,
+          };
+        })()
+      : { hotList: 0, groupMoves: 0, penMoves: 0 };
+
   // Sidebar starts collapsed to icon-only; cookie persists user choice
   // after they toggle it.
   const cookieStore = await cookies();
@@ -43,7 +57,10 @@ export default async function AppLayout({
   return (
     <SidebarProvider defaultOpen={sidebarDefaultOpen}>
       <TooltipProvider>
-        <AppSidebar user={{ email: user.email ?? "", name, role }} />
+        <AppSidebar
+          user={{ email: user.email ?? "", name, role }}
+          badgeCounts={badgeCounts}
+        />
         <main className="w-full">
           <div className="flex items-center justify-between gap-2 border-b px-2 py-1">
             <SidebarTrigger />
