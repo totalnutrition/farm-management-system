@@ -540,5 +540,93 @@ export async function generateSampleAnimals(
   revalidatePath(`/`);
   revalidatePath(`/reproduction`);
   revalidatePath(`/group-moves`);
+
+  // Seed realistic milkings for lactating cows so the dashboard, milk
+  // hub and (later) production-based group splits have signal.
+  // Lactation curve: peak ~25 kg around 60-80 DIM, declining ~0.05
+  // kg/day after peak, scaled by parity (multip 1.15×, primip 0.90×).
+  // 3 most-recent days × 2 sessions (AM=1, PM=2) per lactating cow.
+  const lactating = inserted.filter((a) => a.stage === "lactating");
+  if (lactating.length > 0) {
+    const { data: cowMeta } = await authz.admin
+      .from("animals")
+      .select("id, current_lactation, last_calving_date")
+      .in("id", lactating.map((a) => a.id));
+    const today = new Date();
+    const milkings: Record<string, unknown>[] = [];
+    for (const c of cowMeta ?? []) {
+      const last = c.last_calving_date as string | null;
+      if (!last) continue;
+      const parity = (c.current_lactation as number | null) ?? 1;
+      const dim = Math.floor((today.getTime() - new Date(last).getTime()) / 86400000);
+      const parityMul = parity === 1 ? 0.9 : 1.15;
+      // Simple Wood-style curve. Peak ~25 kg at 60 DIM, then declines.
+      const peakDim = 60;
+      const peakKg = 25 * parityMul;
+      const dailyKg =
+        dim < peakDim
+          ? peakKg * (dim / peakDim) ** 0.6
+          : peakKg * Math.exp(-0.003 * (dim - peakDim));
+      const noise = 0.92 + Math.random() * 0.16; // ±8 %
+      const totalKg = Math.max(2, dailyKg * noise);
+      for (let dayOffset = 0; dayOffset < 3; dayOffset++) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - dayOffset);
+        // AM at 06:00, PM at 18:00
+        for (const [session, hour] of [
+          [1, 6],
+          [2, 18],
+        ] as const) {
+          const at = new Date(d);
+          at.setHours(hour, 0, 0, 0);
+          const split = session === 1 ? 0.55 : 0.45;
+          milkings.push({
+            animal_id: c.id as string,
+            location_id: locationId,
+            milking_at: at.toISOString(),
+            milking_session: session,
+            yield_kg: Number((totalKg * split).toFixed(2)),
+          });
+        }
+      }
+    }
+    if (milkings.length > 0) {
+      for (let i = 0; i < milkings.length; i += 500) {
+        const batch = milkings.slice(i, i + 500);
+        const { error } = await authz.admin.from("milkings").insert(batch);
+        if (error) return { error: error.message };
+      }
+    }
+  }
+
+  revalidatePath(`/milk`);
   return { success: true, generated: rows.length, preg_events: pregEvents.length };
+}
+
+// ---------------------------------------------------------------------
+// Bulk delete — wipes every animal at the location plus its child
+// events (cascade from animals.id FK on the children).
+// ---------------------------------------------------------------------
+export async function deleteAllAnimals(locationId: string): Promise<Result & { deleted?: number }> {
+  const authz = await authorize(locationId);
+  if ("error" in authz) return { error: authz.error };
+
+  // pen_moves, group_moves, repro_events, calvings, health_events,
+  // genomics, lactations, scores, test_days, milkings, transactions
+  // all have ON DELETE CASCADE from animals(id) — they go automatically.
+  const { error, count } = await authz.admin
+    .from("animals")
+    .delete({ count: "exact" })
+    .eq("location_id", locationId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/animals`);
+  revalidatePath(`/settings/locations/${locationId}/animals`);
+  revalidatePath(`/`);
+  revalidatePath(`/reproduction`);
+  revalidatePath(`/group-moves`);
+  revalidatePath(`/pen-moves`);
+  revalidatePath(`/milk`);
+  revalidatePath(`/health`);
+  return { success: true, deleted: count ?? 0 };
 }
