@@ -7,6 +7,7 @@ import {
   type AnimalFacts,
   type GroupDef,
 } from "@/lib/group-rules";
+import { recentAvgDailyMilk } from "@/lib/milk-stats";
 import {
   GroupMovesClient,
   type PendingRow,
@@ -112,6 +113,10 @@ export default async function GroupMovesPage() {
     if (!latestPregByAnimal.has(e.animal_id)) latestPregByAnimal.set(e.animal_id, e);
   }
 
+  // Recent average daily milk per cow (7-day window) — feeds the
+  // production-based predicates on High / Mid / Low groups.
+  const avgMilkByAnimal = await recentAvgDailyMilk(active.id);
+
   // Compute pending suggestions
   const pending: PendingRow[] = [];
   for (const a of animalRows) {
@@ -133,6 +138,7 @@ export default async function GroupMovesPage() {
           : null
         : null,
       hospital_flag: false,
+      avg_daily_milk: avgMilkByAnimal.get(a.id) ?? null,
     };
     const sug = suggestGroup(facts, groups, nowMs);
     if (!sug.group_id) continue;

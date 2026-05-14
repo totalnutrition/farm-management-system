@@ -29,6 +29,8 @@ export type AnimalFacts = {
   is_pregnant: boolean;
   days_pregnant: number | null;
   hospital_flag: boolean;
+  /** Recent 7-day average daily kg from milkings, or null if no recent data. */
+  avg_daily_milk: number | null;
 };
 
 export type GroupDef = {
@@ -135,6 +137,30 @@ export function suggestGroup(
       reasons.push(`age ${age}mo` + (ageMin !== null && ageMax !== null ? ` in [${ageMin}, ${ageMax}]` : ageMin !== null ? ` ≥ ${ageMin}` : ` ≤ ${ageMax}`));
     }
 
+    // Daily milk yield (lenient: if predicate exists but cow has no
+    // recent milkings, skip the check rather than failing the rule —
+    // farms transitioning to per-cow recording shouldn't lose all
+    // grouping suggestions until every cow has data).
+    const milkMin = num(p, "daily_milk_min");
+    const milkMax = num(p, "daily_milk_max");
+    if (milkMin !== null || milkMax !== null) {
+      const m = animal.avg_daily_milk;
+      if (m !== null) {
+        if (milkMin !== null && m < milkMin) continue;
+        if (milkMax !== null && m > milkMax) continue;
+        reasons.push(
+          `${m.toFixed(0)} kg/d` +
+            (milkMin !== null && milkMax !== null
+              ? ` in [${milkMin}, ${milkMax}]`
+              : milkMin !== null
+                ? ` ≥ ${milkMin}`
+                : ` ≤ ${milkMax}`),
+        );
+      } else {
+        reasons.push("milk data N/A");
+      }
+    }
+
     return {
       group_id: g.id,
       group_label: g.label,
@@ -151,6 +177,10 @@ export function suggestGroup(
  */
 export function factsHash(animal: AnimalFacts, nowMs: number): string {
   const dim = animal.last_calving_date ? diffDays(animal.last_calving_date, nowMs) : null;
+  const milkBucket =
+    animal.avg_daily_milk === null
+      ? "?"
+      : Math.round(animal.avg_daily_milk / 2); // 2-kg buckets
   return [
     animal.life_stage ?? "",
     animal.current_lactation ?? "",
@@ -158,5 +188,6 @@ export function factsHash(animal: AnimalFacts, nowMs: number): string {
     animal.is_pregnant ? (animal.days_pregnant ?? "") : "",
     ageMonths(animal.birth_date, nowMs),
     animal.hospital_flag ? 1 : 0,
+    milkBucket,
   ].join("|");
 }

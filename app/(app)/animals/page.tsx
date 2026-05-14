@@ -14,6 +14,7 @@ import {
   type AnimalFacts,
   type GroupDef,
 } from "@/lib/group-rules";
+import { recentAvgDailyMilk } from "@/lib/milk-stats";
 
 export const metadata = { title: "Animals" };
 export const dynamic = "force-dynamic";
@@ -105,6 +106,7 @@ export default async function AnimalsPage({
     }
     const nowMs = new Date().getTime();
     const activeRows = rows.filter((r) => r.status === "active");
+    const avgMilkByAnimal = await recentAvgDailyMilk(active.id);
     for (const a of activeRows) {
       if (!a.current_group_id) unassignedGroup += 1;
       if (!a.current_pen_id) unassignedPen += 1;
@@ -122,6 +124,7 @@ export default async function AnimalsPage({
         is_pregnant: isPreg,
         days_pregnant: isPreg ? pc?.days_pregnant ?? null : null,
         hospital_flag: false,
+        avg_daily_milk: avgMilkByAnimal.get(a.id) ?? null,
       };
       const sug = suggestGroup(facts, groupDefs, nowMs);
       if (sug.group_id && sug.group_id !== a.current_group_id) pendingMoves += 1;
