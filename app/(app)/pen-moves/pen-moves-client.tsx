@@ -762,9 +762,8 @@ function BarnsSection({
         <div>
           <h2 className="text-sm font-medium">Barns</h2>
           <p className="text-[10px] text-muted-foreground">
-            Top-down sketch per barn. Pens are shaded by group, click any
-            pen to jump to its group below. Edit barn dimensions on the
-            header buttons.
+            Compact farm-plan view — barns laid out side-by-side, scaled
+            to their dimensions. Click any pen to jump to its group below.
           </p>
         </div>
         <Button type="button" size="sm" variant="outline" onClick={() => setCreating(true)}>
@@ -779,35 +778,56 @@ function BarnsSection({
           inside it.
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {barns.map((b) => (
-            <div key={b.id} className="flex flex-col gap-1">
-              <div className="flex justify-end gap-2 -mb-1">
-                <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(b)}>
-                  Edit
-                </Button>
-                {barns.length > 1 ? (
-                  <Button type="button" size="sm" variant="ghost" onClick={() => setMerging(b)}>
-                    Merge into…
+            <div
+              key={b.id}
+              className="flex flex-col gap-1 ring-1 ring-foreground/10 p-2"
+            >
+              <div className="flex items-center justify-between gap-1">
+                <h3 className="text-xs font-medium truncate" title={b.name}>
+                  {b.name}
+                </h3>
+                <div className="flex gap-0.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-1.5 text-[10px]"
+                    onClick={() => setEditing(b)}
+                  >
+                    Edit
                   </Button>
-                ) : null}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="text-destructive"
-                  onClick={() => setDeleting(b)}
-                >
-                  Delete
-                </Button>
+                  {barns.length > 1 ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-1.5 text-[10px]"
+                      onClick={() => setMerging(b)}
+                    >
+                      Merge
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-1.5 text-[10px] text-destructive"
+                    onClick={() => setDeleting(b)}
+                  >
+                    Delete
+                  </Button>
+                </div>
               </div>
               <BarnVisualizer
                 barn={b}
                 pens={pens.filter((p) => p.barn_id === b.id).map(toVisualizerPen)}
                 groupLabel={labelFor}
                 headcountByPen={headcountByPen}
+                canvasWidth={320}
+                compact
                 onPenClick={(p) => {
-                  // Scroll to the group section for this pen, if it has one.
                   if (!p.group_id) return;
                   const el = document.getElementById(`group-${p.group_id}`);
                   if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
