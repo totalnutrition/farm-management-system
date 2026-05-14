@@ -23,19 +23,28 @@ type LocationGroupLite = {
   rule_predicates: Record<string, unknown>;
 };
 
-const PREDICATE_FIELDS: { key: string; label: string; type: "int" | "bool" }[] =
+const PREDICATE_FIELDS: { key: string; label: string; type: "int" | "num" | "bool"; group: "lact" | "repro" | "age" | "state" }[] =
   [
-    { key: "dim_min", label: "DIM min", type: "int" },
-    { key: "dim_max", label: "DIM max", type: "int" },
-    { key: "parity", label: "Parity =", type: "int" },
-    { key: "parity_min", label: "Parity min", type: "int" },
-    { key: "pregnancy_days_min", label: "Pregnancy days min", type: "int" },
-    { key: "pregnancy_days_max", label: "Pregnancy days max", type: "int" },
-    { key: "age_months_min", label: "Age (mo) min", type: "int" },
-    { key: "age_months_max", label: "Age (mo) max", type: "int" },
-    { key: "dry", label: "Dry = true", type: "bool" },
-    { key: "health_flag", label: "Health flag = true", type: "bool" },
+    { key: "dim_min", label: "DIM min", type: "int", group: "lact" },
+    { key: "dim_max", label: "DIM max", type: "int", group: "lact" },
+    { key: "daily_milk_min", label: "Daily milk min (kg)", type: "num", group: "lact" },
+    { key: "daily_milk_max", label: "Daily milk max (kg)", type: "num", group: "lact" },
+    { key: "parity", label: "Parity =", type: "int", group: "repro" },
+    { key: "parity_min", label: "Parity min", type: "int", group: "repro" },
+    { key: "pregnancy_days_min", label: "Pregnancy days min", type: "int", group: "repro" },
+    { key: "pregnancy_days_max", label: "Pregnancy days max", type: "int", group: "repro" },
+    { key: "age_months_min", label: "Age (mo) min", type: "int", group: "age" },
+    { key: "age_months_max", label: "Age (mo) max", type: "int", group: "age" },
+    { key: "dry", label: "Dry = true", type: "bool", group: "state" },
+    { key: "health_flag", label: "Health flag = true", type: "bool", group: "state" },
   ];
+
+const GROUP_LABEL: Record<string, string> = {
+  lact: "Lactation",
+  repro: "Reproduction",
+  age: "Age",
+  state: "State",
+};
 
 export function GroupRuleEditor({ group }: { group: LocationGroupLite }) {
   const [open, setOpen] = useState(false);
@@ -90,53 +99,67 @@ export function GroupRuleEditor({ group }: { group: LocationGroupLite }) {
         <HugeiconsIcon icon={PencilEdit02Icon} />
         Edit rule
       </Button>
-      <DialogContent>
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Rule — {group.label}</DialogTitle>
           <DialogDescription>
-            Leave fields blank to omit. The engine evaluates all set
-            predicates as AND.
+            Leave fields blank to omit. The engine evaluates set predicates
+            as AND. <span className="font-medium">Daily milk</span> is
+            evaluated against a 7-day average — cows with no recent
+            milkings skip the check (lenient).
           </DialogDescription>
         </DialogHeader>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {PREDICATE_FIELDS.map((f) => {
-            const current = draft[f.key];
-            if (f.type === "bool") {
-              return (
-                <label
-                  key={f.key}
-                  className="flex items-center gap-2 text-xs ring-1 ring-foreground/10 p-2"
-                >
-                  <input
-                    type="checkbox"
-                    checked={current === true}
-                    onChange={(e) => updateField(f.key, e.target.checked)}
-                  />
-                  {f.label}
-                </label>
-              );
-            }
+        <div className="flex flex-col gap-3">
+          {(["lact", "repro", "age", "state"] as const).map((groupKey) => {
+            const fields = PREDICATE_FIELDS.filter((f) => f.group === groupKey);
             return (
-              <div key={f.key} className="flex flex-col gap-1">
-                <label className="text-xs text-muted-foreground">{f.label}</label>
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  value={
-                    typeof current === "number"
-                      ? current
-                      : current === undefined
-                        ? ""
-                        : ""
-                  }
-                  onChange={(e) =>
-                    updateField(
-                      f.key,
-                      e.target.value === "" ? "" : Number(e.target.value),
-                    )
-                  }
-                />
-              </div>
+              <section
+                key={groupKey}
+                className="ring-1 ring-foreground/10 p-3 flex flex-col gap-2"
+              >
+                <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {GROUP_LABEL[groupKey]}
+                </h4>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {fields.map((f) => {
+                    const current = draft[f.key];
+                    if (f.type === "bool") {
+                      return (
+                        <label
+                          key={f.key}
+                          className="flex items-center gap-2 text-xs cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={current === true}
+                            onChange={(e) => updateField(f.key, e.target.checked)}
+                          />
+                          {f.label}
+                        </label>
+                      );
+                    }
+                    return (
+                      <div key={f.key} className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">
+                          {f.label}
+                        </label>
+                        <Input
+                          type="number"
+                          inputMode={f.type === "num" ? "decimal" : "numeric"}
+                          step={f.type === "num" ? "any" : "1"}
+                          value={typeof current === "number" ? current : ""}
+                          onChange={(e) =>
+                            updateField(
+                              f.key,
+                              e.target.value === "" ? "" : Number(e.target.value),
+                            )
+                          }
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
             );
           })}
         </div>
