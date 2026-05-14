@@ -153,18 +153,6 @@ export function AnimalsToolbar({
   return (
     <>
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {hasNoAnimals ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onGenerate(20)}
-            disabled={isPending}
-          >
-            <HugeiconsIcon icon={Sparkles} />
-            {isPending ? "Generating..." : "Generate 20 sample animals"}
-          </Button>
-        ) : null}
         <Button
           type="button"
           variant="outline"
