@@ -28,7 +28,8 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
-import { applyPenMove, bulkApplyPenMoves } from "./actions";
+import { applyPenMove, bulkApplyPenMoves, quickAddPen } from "./actions";
+import { Input } from "@/components/ui/input";
 
 export type AnimalLite = {
   id: string;
@@ -55,6 +56,10 @@ export type GroupBlock = {
   group_label: string;
   pens: PenLite[];
   animals: AnimalLite[];
+  /** Engine-driven target pen capacity for this group (head). */
+  target_pen_cap: number;
+  /** Engine-driven target bunk feet. */
+  target_bunk_ft: number;
 };
 
 export function PenMovesClient({
@@ -106,7 +111,6 @@ function GroupBlockCard({
     const dest = destinationFor(a);
     return dest && dest !== a.current_pen_id;
   });
-  const infraHref = `/settings/locations/${locationId}/infrastructure`;
 
   const onAccept = (a: AnimalLite) => {
     const dest = destinationFor(a);
@@ -171,7 +175,9 @@ function GroupBlockCard({
     setOverrideTo(a.current_pen_id ?? "");
   };
 
-  // ZERO-pen path: render a CTA to add a pen, no table.
+  // ZERO-pen path: inline form to create the first pen(s) here, no
+  // need to bounce to Infrastructure. Suggests an N-pens-of-~50 split
+  // based on the engine-driven target capacity.
   if (block.pens.length === 0) {
     return (
       <section className="ring-1 ring-amber-500/40 bg-amber-500/5 flex flex-col">
@@ -185,15 +191,24 @@ function GroupBlockCard({
               </span>
             </h3>
             <p className="text-[10px] text-muted-foreground">
-              Create one or more pens under this group on Infrastructure
-              first — then come back here to stripe cows across them by
-              parity / DIM.
+              {block.target_pen_cap > 0
+                ? `Target capacity ~${block.target_pen_cap} head${block.target_bunk_ft > 0 ? ` · ${block.target_bunk_ft.toFixed(0)} ft bunk` : ""}. Common pen size ≈ 50 cows → ${Math.max(1, Math.ceil(block.target_pen_cap / 50))} pen(s).`
+                : "Add at least one pen so cows in this group can be assigned."}
             </p>
           </div>
-          <Button asChild type="button" size="sm" variant="outline">
-            <Link href={infraHref}>Add pen on Infrastructure →</Link>
-          </Button>
         </header>
+        <div className="px-3 pb-3">
+          <AddPenInline
+            locationId={locationId}
+            groupId={block.group_id}
+            suggestedCap={
+              block.target_pen_cap > 0
+                ? Math.min(80, Math.max(20, Math.round(block.target_pen_cap / Math.max(1, Math.ceil(block.target_pen_cap / 50)))))
+                : null
+            }
+            defaultName={`${block.group_label} pen 1`}
+          />
+        </div>
       </section>
     );
   }
@@ -232,6 +247,15 @@ function GroupBlockCard({
         {block.pens.map((p) => (
           <PenTile key={p.id} pen={p} />
         ))}
+      </div>
+      <div className="px-3 py-2 border-t border-foreground/10">
+        <AddPenInline
+          locationId={locationId}
+          groupId={block.group_id}
+          suggestedCap={null}
+          defaultName={`${block.group_label} pen ${block.pens.length + 1}`}
+          compact
+        />
       </div>
 
       <div className="overflow-x-auto">
@@ -333,6 +357,120 @@ function GroupBlockCard({
         onClose={() => setOverrideTarget(null)}
       />
     </section>
+  );
+}
+
+function AddPenInline({
+  locationId,
+  groupId,
+  suggestedCap,
+  defaultName,
+  compact = false,
+}: {
+  locationId: string;
+  groupId: string;
+  suggestedCap: number | null;
+  defaultName: string;
+  compact?: boolean;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(defaultName);
+  const [cap, setCap] = useState<string>(suggestedCap ? String(suggestedCap) : "");
+  const [lengthFt, setLengthFt] = useState<string>("");
+  const [widthFt, setWidthFt] = useState<string>("");
+  const [busy, startTransition] = useTransition();
+
+  if (!open) {
+    return (
+      <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
+        + Add pen here
+      </Button>
+    );
+  }
+
+  const onCreate = () => {
+    if (!name.trim()) {
+      toast.error("Name the pen.");
+      return;
+    }
+    startTransition(async () => {
+      const r = await quickAddPen({
+        location_id: locationId,
+        group_id: groupId,
+        name: name.trim(),
+        capacity_head: cap ? Number(cap) : null,
+        length_ft: lengthFt ? Number(lengthFt) : null,
+        width_ft: widthFt ? Number(widthFt) : null,
+      });
+      if (r.error) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(`Pen "${name.trim()}" added.`);
+      setOpen(false);
+      setName(defaultName);
+      setCap(suggestedCap ? String(suggestedCap) : "");
+      setLengthFt("");
+      setWidthFt("");
+      router.refresh();
+    });
+  };
+
+  return (
+    <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2 ${compact ? "" : "py-2"}`}>
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] text-muted-foreground">Name</label>
+        <Input value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] text-muted-foreground">
+          Capacity (head){suggestedCap ? ` — suggested ${suggestedCap}` : ""}
+        </label>
+        <Input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          value={cap}
+          onChange={(e) => setCap(e.target.value)}
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] text-muted-foreground">Length (ft)</label>
+        <Input
+          type="number"
+          step="any"
+          inputMode="decimal"
+          min={0}
+          value={lengthFt}
+          onChange={(e) => setLengthFt(e.target.value)}
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-[10px] text-muted-foreground">Width (ft)</label>
+        <Input
+          type="number"
+          step="any"
+          inputMode="decimal"
+          min={0}
+          value={widthFt}
+          onChange={(e) => setWidthFt(e.target.value)}
+        />
+      </div>
+      <div className="col-span-2 sm:col-span-4 flex gap-2">
+        <Button type="button" size="sm" onClick={onCreate} disabled={busy}>
+          {busy ? "Creating…" : "Create pen"}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setOpen(false)}
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
   );
 }
 
