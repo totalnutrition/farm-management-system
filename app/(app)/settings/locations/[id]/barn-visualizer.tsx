@@ -44,6 +44,7 @@ export function BarnVisualizer({
   pens,
   groupLabel,
   headcountByPen = {},
+  onPenClick,
 }: {
   barn: Barn;
   pens: Pen[];
@@ -51,14 +52,20 @@ export function BarnVisualizer({
   groupLabel: (groupId: string | null) => string;
   /** pen_id → live cow count */
   headcountByPen?: Record<string, number>;
+  /** Override the default ?edit=<pen_id> navigation. */
+  onPenClick?: (pen: Pen) => void;
 }) {
   const [hoverPen, setHoverPen] = useState<Pen | null>(null);
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const openPenEdit = (penId: string) => {
+  const openPenEdit = (pen: Pen) => {
+    if (onPenClick) {
+      onPenClick(pen);
+      return;
+    }
     const q = new URLSearchParams(params.toString());
-    q.set("edit", penId);
+    q.set("edit", pen.id);
     router.push(`${pathname}?${q.toString()}`, { scroll: false });
   };
 
@@ -192,7 +199,7 @@ export function BarnVisualizer({
                 key={pen.id}
                 onMouseEnter={() => setHoverPen(pen)}
                 onMouseLeave={() => setHoverPen(null)}
-                onClick={() => openPenEdit(pen.id)}
+                onClick={() => openPenEdit(pen)}
                 className="cursor-pointer"
               >
                 <rect
