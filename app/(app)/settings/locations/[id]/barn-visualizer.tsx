@@ -1,17 +1,25 @@
 "use client";
 
 /**
- * Renders a top-down SVG view of one barn with its pens drawn inside.
- * Geometry comes from the barn / pen rows. Layout fallbacks:
- *   - if barn.length_ft + width_ft are set, they drive the canvas
- *     aspect ratio; otherwise we use a 2:1 default
- *   - if a pen has length_ft set, the renderer respects it; otherwise
- *     the pen flows to fill its row proportional to capacity_head
- *   - double_side barns put pens with side='left' on top, side='right'
- *     on bottom, with a feed-alley strip in the middle
- *   - single_side puts a single row of pens with the alley on the
- *     bottom edge
- *   - free layout just lays them all out in one flow row
+ * Renders a top-down view of one barn with its pens drawn inside.
+ *
+ * Two orientations:
+ *   - landscape (default, Settings → Infrastructure): long axis runs
+ *     horizontally. Best on a wide page where one barn at a time gets
+ *     the full canvas.
+ *   - portrait (used in the /pen-moves farm-plan grid): long axis runs
+ *     vertically. Lets several narrow tall barn cards sit side-by-side
+ *     across the screen, like a property plan.
+ *
+ * Layouts:
+ *   - single_side  → pens on one side of a feed alley
+ *   - double_side  → pens on both sides of a central feed alley
+ *   - free         → single row/column, pens flow with capacity
+ *
+ * Pens are rendered as draggable HTML divs overlaid on the SVG outline
+ * so we can use native HTML5 drag-and-drop (SVG drag doesn't work
+ * reliably across browsers). Drops are reported via onPenDrop so the
+ * caller can move the pen to this barn.
  */
 
 import { useState } from "react";
@@ -19,25 +27,29 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import type { Pen } from "@/lib/pens";
 import type { Barn } from "@/lib/barns";
 
-const DEFAULT_CANVAS_W = 720; // px — full-width view (Settings → Infrastructure)
+const DEFAULT_CANVAS_LONG = 720;
 const PADDING = 8;
+export const PEN_DRAG_MIME = "application/x-pen-id";
 
 type GroupColor = { fill: string; stroke: string };
 const PALETTE: GroupColor[] = [
-  { fill: "#7c3aed20", stroke: "#7c3aed" }, // violet
-  { fill: "#0ea5e920", stroke: "#0ea5e9" }, // sky
-  { fill: "#10b98120", stroke: "#10b981" }, // emerald
-  { fill: "#f59e0b20", stroke: "#f59e0b" }, // amber
-  { fill: "#ef444420", stroke: "#ef4444" }, // red
-  { fill: "#ec489920", stroke: "#ec4899" }, // pink
-  { fill: "#64748b20", stroke: "#64748b" }, // slate
+  { fill: "#7c3aed20", stroke: "#7c3aed" },
+  { fill: "#0ea5e920", stroke: "#0ea5e9" },
+  { fill: "#10b98120", stroke: "#10b981" },
+  { fill: "#f59e0b20", stroke: "#f59e0b" },
+  { fill: "#ef444420", stroke: "#ef4444" },
+  { fill: "#ec489920", stroke: "#ec4899" },
+  { fill: "#64748b20", stroke: "#64748b" },
 ];
 function colorFor(idOrNull: string | null | undefined): GroupColor {
-  if (!idOrNull) return { fill: "#94a3b820", stroke: "#94a3b8" }; // muted
+  if (!idOrNull) return { fill: "#94a3b820", stroke: "#94a3b8" };
   let h = 0;
-  for (let i = 0; i < idOrNull.length; i++) h = (h * 31 + idOrNull.charCodeAt(i)) | 0;
+  for (let i = 0; i < idOrNull.length; i++)
+    h = (h * 31 + idOrNull.charCodeAt(i)) | 0;
   return PALETTE[Math.abs(h) % PALETTE.length];
 }
+
+export type BarnOrientation = "landscape" | "portrait";
 
 export function BarnVisualizer({
   barn,
@@ -45,24 +57,40 @@ export function BarnVisualizer({
   groupLabel,
   headcountByPen = {},
   onPenClick,
-  canvasWidth = DEFAULT_CANVAS_W,
+  onPenDrop,
+  canvasLong,
   compact = false,
+  orientation: orientationProp,
 }: {
   barn: Barn;
   pens: Pen[];
-  /** id → label, for showing group name on tooltip */
   groupLabel: (groupId: string | null) => string;
-  /** pen_id → live cow count */
   headcountByPen?: Record<string, number>;
-  /** Override the default ?edit=<pen_id> navigation. */
   onPenClick?: (pen: Pen) => void;
-  /** Override SVG width — use 280–340 for compact farm-plan grids. */
-  canvasWidth?: number;
+  /**
+   * Fires when a pen is dropped on this barn. Receives the dragged
+   * pen id (read from PEN_DRAG_MIME) and the side hint detected from
+   * the pointer position (for double_side barns). If undefined, the
+   * barn is not a drop target.
+   */
+  onPenDrop?: (penId: string, side: "left" | "right" | null) => void;
+  /**
+   * Canvas size along the barn's long axis, in px. Defaults to 720
+   * (or 360 in compact mode). In portrait this is the SVG height; in
+   * landscape it's the SVG width.
+   */
+  canvasLong?: number;
   /** Drop internal header + outer ring (caller renders its own). */
   compact?: boolean;
+  /** Orientation override. Defaults to portrait when compact, else landscape. */
+  orientation?: BarnOrientation;
 }) {
-  const CANVAS_W = canvasWidth;
+  const orientation: BarnOrientation =
+    orientationProp ?? (compact ? "portrait" : "landscape");
+  const longPx = canvasLong ?? (compact ? 360 : DEFAULT_CANVAS_LONG);
+
   const [hoverPen, setHoverPen] = useState<Pen | null>(null);
+  const [dropHover, setDropHover] = useState<boolean>(false);
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -76,77 +104,180 @@ export function BarnVisualizer({
     router.push(`${pathname}?${q.toString()}`, { scroll: false });
   };
 
-  // Choose canvas dimensions. Use barn dims if set, else 2:1.
   const lengthFt = barn.length_ft ?? 200;
   const widthFt = barn.width_ft ?? 80;
-  const aspect = widthFt / lengthFt;
-  const canvasH = Math.max(120, Math.min(360, Math.round(CANVAS_W * aspect)));
-  const ftPerPx = lengthFt / (CANVAS_W - 2 * PADDING);
 
-  const layout = (barn.layout ?? "double_side") as "single_side" | "double_side" | "free";
-  const alleyWidthFt = barn.alley_width_ft ?? (layout === "double_side" ? 14 : 12);
-  const alleyHpx = alleyWidthFt / ftPerPx;
+  const ftPerPx = lengthFt / (longPx - 2 * PADDING);
+  const shortPx =
+    Math.round(widthFt / ftPerPx + 2 * PADDING) || (compact ? 140 : 320);
 
-  // Filter pens to this barn.
+  const canvasW = orientation === "portrait" ? shortPx : longPx;
+  const canvasH = orientation === "portrait" ? longPx : shortPx;
+
+  const layout = (barn.layout ?? "double_side") as
+    | "single_side"
+    | "double_side"
+    | "free";
+  const alleyWidthFt =
+    barn.alley_width_ft ?? (layout === "double_side" ? 14 : 12);
+  const alleyShortPx = alleyWidthFt / ftPerPx;
+
   const ownPens = pens
     .filter((p) => p.barn_id === barn.id)
     .sort((a, b) => a.position_index - b.position_index);
 
-  // Helper: compute x positions across the long axis. If pens have
-  // length_ft set, pack them sequentially. Otherwise, divide evenly.
+  type Placed = {
+    rect: { long: number; short: number; longLen: number; shortLen: number };
+    pen: Pen;
+  };
   function layoutRow(
     rowPens: Pen[],
-    rowYpx: number,
-    rowHpx: number,
-  ): { rect: { x: number; y: number; w: number; h: number }; pen: Pen }[] {
-    const sized = rowPens.map((p) => p.length_ft ?? 0);
-    const totalSizedFt = sized.reduce((s, v) => s + v, 0);
+    shortOffset: number,
+    shortLen: number,
+  ): Placed[] {
+    const sizedFt = rowPens.map((p) => p.length_ft ?? 0);
+    const totalSizedFt = sizedFt.reduce((s, v) => s + v, 0);
     const remainingFt = Math.max(0, lengthFt - totalSizedFt);
-    const unsizedCount = sized.filter((v) => v === 0).length;
-    const evenFt = unsizedCount > 0 ? remainingFt / unsizedCount : 0;
-    let cursorPx = PADDING;
-    const out: { rect: { x: number; y: number; w: number; h: number }; pen: Pen }[] = [];
-    for (let i = 0; i < rowPens.length; i++) {
-      const p = rowPens[i];
-      const widthFtPen =
+    const unsized = sizedFt.filter((v) => v === 0).length;
+    const evenFt = unsized > 0 ? remainingFt / unsized : 0;
+    let cursor = PADDING;
+    const out: Placed[] = [];
+    for (const p of rowPens) {
+      const ftAlong =
         p.length_ft ?? (evenFt || lengthFt / Math.max(1, rowPens.length));
-      const wpx = widthFtPen / ftPerPx;
+      const longPxLen = ftAlong / ftPerPx;
       out.push({
-        rect: { x: cursorPx, y: rowYpx, w: wpx, h: rowHpx },
+        rect: {
+          long: cursor,
+          short: shortOffset,
+          longLen: longPxLen,
+          shortLen,
+        },
         pen: p,
       });
-      cursorPx += wpx;
+      cursor += longPxLen;
     }
     return out;
   }
 
-  type Placed = ReturnType<typeof layoutRow>;
-  let placements: Placed = [];
+  let placements: Placed[] = [];
   if (layout === "double_side") {
-    const rowHpx = (canvasH - 2 * PADDING - alleyHpx) / 2;
+    const rowShort = (shortPx - 2 * PADDING - alleyShortPx) / 2;
     const top = ownPens.filter((p) => p.side === "left");
     const bot = ownPens.filter((p) => p.side === "right");
-    const orphan = ownPens.filter((p) => p.side !== "left" && p.side !== "right");
-    // Spread orphans across both sides round-robin so they're visible.
+    const orphan = ownPens.filter(
+      (p) => p.side !== "left" && p.side !== "right",
+    );
     const topAll = [...top, ...orphan.filter((_, i) => i % 2 === 0)];
     const botAll = [...bot, ...orphan.filter((_, i) => i % 2 === 1)];
     placements = [
-      ...layoutRow(topAll, PADDING, rowHpx),
-      ...layoutRow(botAll, PADDING + rowHpx + alleyHpx, rowHpx),
+      ...layoutRow(topAll, PADDING, rowShort),
+      ...layoutRow(botAll, PADDING + rowShort + alleyShortPx, rowShort),
     ];
   } else if (layout === "single_side") {
-    const rowHpx = canvasH - 2 * PADDING - alleyHpx;
-    placements = layoutRow(ownPens, PADDING, rowHpx);
+    const rowShort = shortPx - 2 * PADDING - alleyShortPx;
+    placements = layoutRow(ownPens, PADDING, rowShort);
   } else {
-    // free: single row, fill canvas height.
-    placements = layoutRow(ownPens, PADDING, canvasH - 2 * PADDING);
+    placements = layoutRow(ownPens, PADDING, shortPx - 2 * PADDING);
   }
+
+  function project(rect: Placed["rect"]): {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  } {
+    if (orientation === "portrait") {
+      return {
+        x: rect.short,
+        y: rect.long,
+        w: rect.shortLen,
+        h: rect.longLen,
+      };
+    }
+    return {
+      x: rect.long,
+      y: rect.short,
+      w: rect.longLen,
+      h: rect.shortLen,
+    };
+  }
+
+  const alleyRect = (() => {
+    if (layout === "double_side") {
+      if (orientation === "portrait") {
+        return {
+          x: (canvasW - alleyShortPx) / 2,
+          y: 0,
+          w: alleyShortPx,
+          h: canvasH,
+        };
+      }
+      return {
+        x: 0,
+        y: (canvasH - alleyShortPx) / 2,
+        w: canvasW,
+        h: alleyShortPx,
+      };
+    }
+    if (layout === "single_side") {
+      if (orientation === "portrait") {
+        return {
+          x: canvasW - PADDING - alleyShortPx,
+          y: 0,
+          w: alleyShortPx,
+          h: canvasH,
+        };
+      }
+      return {
+        x: 0,
+        y: canvasH - PADDING - alleyShortPx,
+        w: canvasW,
+        h: alleyShortPx,
+      };
+    }
+    return null;
+  })();
+
+  const sideFromPointer = (
+    e: React.DragEvent<HTMLElement>,
+    bbox: DOMRect,
+  ): "left" | "right" | null => {
+    if (layout !== "double_side") return null;
+    if (orientation === "portrait") {
+      const x = e.clientX - bbox.left;
+      return x < bbox.width / 2 ? "left" : "right";
+    }
+    const y = e.clientY - bbox.top;
+    return y < bbox.height / 2 ? "left" : "right";
+  };
+
+  const onDragOver = (e: React.DragEvent<HTMLElement>) => {
+    if (!onPenDrop) return;
+    if (!e.dataTransfer.types.includes(PEN_DRAG_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropHover(true);
+  };
+  const onDragLeave = () => setDropHover(false);
+  const onDrop = (e: React.DragEvent<HTMLElement>) => {
+    setDropHover(false);
+    if (!onPenDrop) return;
+    const penId = e.dataTransfer.getData(PEN_DRAG_MIME);
+    if (!penId) return;
+    e.preventDefault();
+    const bbox = e.currentTarget.getBoundingClientRect();
+    onPenDrop(penId, sideFromPointer(e, bbox));
+  };
 
   return (
     <section
       className={
         compact ? "flex flex-col" : "ring-1 ring-foreground/10 flex flex-col"
       }
+      onDragOver={onPenDrop ? onDragOver : undefined}
+      onDragLeave={onPenDrop ? onDragLeave : undefined}
+      onDrop={onPenDrop ? onDrop : undefined}
     >
       {compact ? (
         <p className="text-[10px] text-muted-foreground px-1 pb-1">
@@ -172,132 +303,124 @@ export function BarnVisualizer({
       )}
 
       <div
-        className={
-          compact
-            ? "overflow-x-auto bg-background"
-            : "p-2 overflow-x-auto bg-background"
-        }
+        className={`relative bg-background ${compact ? "" : "p-2"} ${
+          dropHover ? "ring-2 ring-primary ring-offset-1" : ""
+        }`}
+        style={{ width: canvasW, height: canvasH, maxWidth: "100%" }}
       >
         <svg
-          width={CANVAS_W}
+          width={canvasW}
           height={canvasH}
-          className="block max-w-full h-auto"
+          className="block absolute inset-0"
           role="img"
           aria-label={`Visual layout of ${barn.name}`}
         >
-          {/* barn outline */}
           <rect
             x={0.5}
             y={0.5}
-            width={CANVAS_W - 1}
+            width={canvasW - 1}
             height={canvasH - 1}
             fill="none"
             stroke="currentColor"
             strokeOpacity={0.25}
             strokeWidth={1}
           />
-          {/* feed alley */}
-          {layout === "double_side" ? (
+          {alleyRect ? (
             <rect
-              x={0}
-              y={(canvasH - alleyHpx) / 2}
-              width={CANVAS_W}
-              height={alleyHpx}
-              fill="currentColor"
-              fillOpacity={0.06}
-            />
-          ) : layout === "single_side" ? (
-            <rect
-              x={0}
-              y={canvasH - PADDING - alleyHpx}
-              width={CANVAS_W}
-              height={alleyHpx}
+              x={alleyRect.x}
+              y={alleyRect.y}
+              width={alleyRect.w}
+              height={alleyRect.h}
               fill="currentColor"
               fillOpacity={0.06}
             />
           ) : null}
-          {/* pens */}
-          {placements.map(({ rect, pen }) => {
-            const c = colorFor(pen.group_id);
-            const head = headcountByPen[pen.id] ?? 0;
-            const cap = pen.capacity_head;
-            return (
-              <g
-                key={pen.id}
-                onMouseEnter={() => setHoverPen(pen)}
-                onMouseLeave={() => setHoverPen(null)}
-                onClick={() => openPenEdit(pen)}
-                className="cursor-pointer"
-              >
-                <rect
-                  x={rect.x}
-                  y={rect.y}
-                  width={Math.max(2, rect.w - 2)}
-                  height={Math.max(2, rect.h - 2)}
-                  fill={c.fill}
-                  stroke={c.stroke}
-                  strokeWidth={hoverPen?.id === pen.id ? 2 : 1}
-                />
-                {rect.w > 60 ? (
-                  <text
-                    x={rect.x + 6}
-                    y={rect.y + 14}
-                    fontSize={11}
-                    fill="currentColor"
-                    fillOpacity={0.85}
-                    fontWeight={500}
-                  >
-                    {pen.name}
-                  </text>
-                ) : null}
-                {rect.w > 60 && rect.h > 30 ? (
-                  <text
-                    x={rect.x + 6}
-                    y={rect.y + 28}
-                    fontSize={10}
-                    fill="currentColor"
-                    fillOpacity={0.6}
-                  >
-                    {head}
-                    {cap !== null ? ` / ${cap}` : ""}
-                  </text>
-                ) : null}
-              </g>
-            );
-          })}
-          {/* alley label */}
-          {layout !== "free" ? (
+          {alleyRect ? (
             <text
-              x={CANVAS_W / 2}
-              y={
-                layout === "double_side"
-                  ? canvasH / 2 + 4
-                  : canvasH - PADDING - alleyHpx / 2 + 4
-              }
-              fontSize={10}
+              x={alleyRect.x + alleyRect.w / 2}
+              y={alleyRect.y + alleyRect.h / 2 + 3}
+              fontSize={9}
               textAnchor="middle"
               fill="currentColor"
               fillOpacity={0.45}
+              transform={
+                orientation === "portrait" && layout !== "free"
+                  ? `rotate(-90 ${alleyRect.x + alleyRect.w / 2} ${
+                      alleyRect.y + alleyRect.h / 2 + 3
+                    })`
+                  : undefined
+              }
             >
               feed alley {alleyWidthFt}ft
             </text>
           ) : null}
         </svg>
+
+        <div className="absolute inset-0">
+          {placements.map(({ rect: r, pen }) => {
+            const p = project(r);
+            const c = colorFor(pen.group_id);
+            const head = headcountByPen[pen.id] ?? 0;
+            const cap = pen.capacity_head;
+            const isHovered = hoverPen?.id === pen.id;
+            return (
+              <div
+                key={pen.id}
+                role="button"
+                tabIndex={0}
+                draggable={!!onPenDrop}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(PEN_DRAG_MIME, pen.id);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onMouseEnter={() => setHoverPen(pen)}
+                onMouseLeave={() => setHoverPen(null)}
+                onClick={() => openPenEdit(pen)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openPenEdit(pen);
+                  }
+                }}
+                title={`${pen.name}${cap !== null ? ` · cap ${cap}` : ""} · ${head} cow${head === 1 ? "" : "s"}`}
+                className={`absolute overflow-hidden text-[10px] leading-tight ${
+                  onPenDrop ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+                }`}
+                style={{
+                  left: p.x,
+                  top: p.y,
+                  width: Math.max(2, p.w - 2),
+                  height: Math.max(2, p.h - 2),
+                  background: c.fill,
+                  border: `${isHovered ? 2 : 1}px solid ${c.stroke}`,
+                  padding: "3px 4px",
+                  boxSizing: "border-box",
+                }}
+              >
+                {p.w > 50 || p.h > 50 ? (
+                  <span className="font-medium block truncate text-foreground/85">
+                    {pen.name}
+                  </span>
+                ) : null}
+                {(p.w > 50 && p.h > 28) || (p.h > 50 && p.w > 28) ? (
+                  <span className="block text-foreground/55 tabular-nums">
+                    {head}
+                    {cap !== null ? ` / ${cap}` : ""}
+                  </span>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {hoverPen ? (
-        <div className="px-3 py-2 bg-foreground/[0.025] text-[11px] text-muted-foreground border-t border-foreground/10">
+        <div className="px-2 py-1 text-[10px] text-muted-foreground border-t border-foreground/10">
           <span className="font-medium text-foreground">{hoverPen.name}</span>
           {" — "}
           <span>{groupLabel(hoverPen.group_id)}</span>
           {hoverPen.capacity_head !== null
             ? ` · cap ${hoverPen.capacity_head}`
-            : ""}
-          {hoverPen.bunk_running_ft !== null
-            ? ` · ${hoverPen.bunk_running_ft}ft bunk`
-            : ""}
-          {hoverPen.length_ft !== null && hoverPen.width_ft !== null
-            ? ` · ${hoverPen.length_ft}ft × ${hoverPen.width_ft}ft`
             : ""}
           {` · ${headcountByPen[hoverPen.id] ?? 0} cow${(headcountByPen[hoverPen.id] ?? 0) === 1 ? "" : "s"} now`}
         </div>

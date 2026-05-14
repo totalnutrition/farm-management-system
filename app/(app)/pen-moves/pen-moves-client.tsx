@@ -1114,23 +1114,50 @@ function BarnsSection({
   headcountByPen: Record<string, number>;
   locationId: string;
 }) {
+  void locationId;
+  const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Barn | null>(null);
   const [deleting, setDeleting] = useState<Barn | null>(null);
   const [merging, setMerging] = useState<Barn | null>(null);
+  const [, startTransition] = useTransition();
 
-  const groupLabelByPen = new Map(pens.map((p) => [p.id, p.group_label] as const));
   const labelFor = (groupId: string | null): string => {
     if (!groupId) return "— no group —";
-    // walk pens to find a label for this group_id
     for (const p of pens) {
       if (p.group_id === groupId) return p.group_label ?? "— no label —";
     }
     return "— no label —";
   };
-  void groupLabelByPen;
 
   const detached = pens.filter((p) => !p.barn_id);
+
+  const handlePenDrop = (
+    penId: string,
+    targetBarnId: string,
+    targetSide: "left" | "right" | null,
+  ) => {
+    const pen = pens.find((p) => p.id === penId);
+    if (!pen) return;
+    if (pen.barn_id === targetBarnId && pen.side === targetSide) return;
+    startTransition(async () => {
+      const r = await updatePenInline({
+        id: penId,
+        name: pen.name,
+        barn_id: targetBarnId,
+        side: targetSide,
+      });
+      if (r.error) {
+        toast.error(r.error);
+        return;
+      }
+      const targetBarn = barns.find((b) => b.id === targetBarnId);
+      toast.success(
+        `"${pen.name}" → ${targetBarn?.name ?? "barn"}${targetSide ? ` (${targetSide})` : ""}`,
+      );
+      router.refresh();
+    });
+  };
 
   return (
     <section className="flex flex-col gap-3">
@@ -1138,8 +1165,9 @@ function BarnsSection({
         <div>
           <h2 className="text-sm font-medium">Barns</h2>
           <p className="text-[10px] text-muted-foreground">
-            Compact farm-plan view — barns laid out side-by-side, scaled
-            to their dimensions. Click any pen to jump to its group below.
+            Property plan — top-down sketches scaled to actual length × width.
+            Drag any pen onto another barn to reassign it. Click a pen to
+            jump to its group below.
           </p>
         </div>
         <Button type="button" size="sm" variant="outline" onClick={() => setCreating(true)}>
@@ -1154,13 +1182,13 @@ function BarnsSection({
           inside it.
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        <div className="flex flex-wrap items-start gap-6">
           {barns.map((b) => (
             <div
               key={b.id}
-              className="flex flex-col gap-1 ring-1 ring-foreground/10 p-2"
+              className="flex flex-col gap-2 ring-1 ring-foreground/10 p-3"
             >
-              <div className="flex items-center justify-between gap-1">
+              <div className="flex items-center justify-between gap-2 min-w-[160px]">
                 <h3 className="text-xs font-medium truncate" title={b.name}>
                   {b.name}
                 </h3>
@@ -1201,13 +1229,14 @@ function BarnsSection({
                 pens={pens.filter((p) => p.barn_id === b.id).map(toVisualizerPen)}
                 groupLabel={labelFor}
                 headcountByPen={headcountByPen}
-                canvasWidth={320}
+                canvasLong={420}
                 compact
                 onPenClick={(p) => {
                   if (!p.group_id) return;
                   const el = document.getElementById(`group-${p.group_id}`);
                   if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
                 }}
+                onPenDrop={(penId, side) => handlePenDrop(penId, b.id, side)}
               />
             </div>
           ))}
