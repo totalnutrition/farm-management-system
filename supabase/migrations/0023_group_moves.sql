@@ -41,7 +41,8 @@ create policy group_moves_select on public.group_moves for select
     or exists (
       select 1 from public.animals a
       join public.locations l on l.id = a.location_id
-      where a.id = animal_id and l.organization_id = public.auth_org_id()
+      where a.id = public.group_moves.animal_id
+        and l.organization_id = public.auth_org_id()
     )
   );
 drop policy if exists group_moves_write on public.group_moves;
@@ -51,7 +52,8 @@ create policy group_moves_write on public.group_moves for all
     or exists (
       select 1 from public.animals a
       join public.locations l on l.id = a.location_id
-      where a.id = animal_id and l.organization_id = public.auth_org_id()
+      where a.id = public.group_moves.animal_id
+        and l.organization_id = public.auth_org_id()
     )
   )
   with check (
@@ -59,7 +61,8 @@ create policy group_moves_write on public.group_moves for all
     or exists (
       select 1 from public.animals a
       join public.locations l on l.id = a.location_id
-      where a.id = animal_id and l.organization_id = public.auth_org_id()
+      where a.id = public.group_moves.animal_id
+        and l.organization_id = public.auth_org_id()
     )
   );
 
