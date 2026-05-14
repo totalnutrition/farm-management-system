@@ -97,27 +97,39 @@ function GroupBlockCard({
   const [overrideTarget, setOverrideTarget] = useState<AnimalLite | null>(null);
   const [overrideTo, setOverrideTo] = useState<string>("");
 
-  const pendingMoves = block.animals.filter(
-    (a) => a.suggested_pen_id && a.suggested_pen_id !== a.current_pen_id,
-  );
+  // Per-row destination override (defaults to engine suggestion).
+  const [destByAnimal, setDestByAnimal] = useState<Record<string, string>>({});
+  const destinationFor = (a: AnimalLite) =>
+    destByAnimal[a.id] ?? a.suggested_pen_id ?? a.current_pen_id ?? "";
+
+  const pendingMoves = block.animals.filter((a) => {
+    const dest = destinationFor(a);
+    return dest && dest !== a.current_pen_id;
+  });
   const infraHref = `/settings/locations/${locationId}/infrastructure`;
 
   const onAccept = (a: AnimalLite) => {
-    if (!a.suggested_pen_id) return;
+    const dest = destinationFor(a);
+    if (!dest || dest === a.current_pen_id) return;
     setBusy(a.id);
+    const overridden = dest !== a.suggested_pen_id;
+    const destName =
+      block.pens.find((p) => p.id === dest)?.name ?? "selected pen";
     startTransition(async () => {
       const r = await applyPenMove({
         animal_id: a.id,
         from_pen_id: a.current_pen_id,
-        to_pen_id: a.suggested_pen_id!,
-        reason: "auto: pen-split by parity / DIM",
+        to_pen_id: dest,
+        reason: overridden
+          ? `manual override → ${destName}`
+          : "auto: pen-split by parity / DIM",
       });
       setBusy(null);
       if (r.error) {
         toast.error(r.error);
         return;
       }
-      toast.success(`${a.animal_id} → ${a.suggested_pen_name}`);
+      toast.success(`${a.animal_id} → ${destName}`);
       router.refresh();
     });
   };
@@ -130,12 +142,20 @@ function GroupBlockCard({
     if (!confirm(`Apply ${pendingMoves.length} pen move(s) in ${block.group_label}?`)) return;
     startTransition(async () => {
       const r = await bulkApplyPenMoves({
-        moves: pendingMoves.map((m) => ({
-          animal_id: m.id,
-          from_pen_id: m.current_pen_id,
-          to_pen_id: m.suggested_pen_id!,
-          reason: "auto: pen-split by parity / DIM",
-        })),
+        moves: pendingMoves.map((m) => {
+          const dest = destinationFor(m);
+          const overridden = dest !== m.suggested_pen_id;
+          const destName =
+            block.pens.find((p) => p.id === dest)?.name ?? "selected pen";
+          return {
+            animal_id: m.id,
+            from_pen_id: m.current_pen_id,
+            to_pen_id: dest,
+            reason: overridden
+              ? `manual override → ${destName}`
+              : "auto: pen-split by parity / DIM",
+          };
+        }),
       });
       if (r.error) {
         toast.error(r.error);
@@ -222,13 +242,15 @@ function GroupBlockCard({
               <th className="px-3 py-1.5 font-medium text-right">Parity</th>
               <th className="px-3 py-1.5 font-medium text-right">DIM</th>
               <th className="px-3 py-1.5 font-medium">Current pen</th>
-              <th className="px-3 py-1.5 font-medium">Suggested pen</th>
+              <th className="px-3 py-1.5 font-medium">Move to</th>
               <th className="px-3 py-1.5 font-medium text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {block.animals.map((a) => {
-              const change = a.suggested_pen_id && a.suggested_pen_id !== a.current_pen_id;
+              const dest = destinationFor(a);
+              const change = dest && dest !== a.current_pen_id;
+              const isOverride = change && dest !== a.suggested_pen_id;
               return (
                 <tr key={a.id} className="border-t border-foreground/10 hover:bg-foreground/[0.025]">
                   <td className="px-3 py-1.5 font-medium">
@@ -242,8 +264,28 @@ function GroupBlockCard({
                   <td className="px-3 py-1.5 text-muted-foreground">
                     {a.current_pen_name ?? <em>—</em>}
                   </td>
-                  <td className={`px-3 py-1.5 ${change ? "font-medium" : "text-muted-foreground"}`}>
-                    {a.suggested_pen_name ?? "—"}
+                  <td className="px-3 py-1.5">
+                    <Select
+                      value={dest || a.current_pen_id || ""}
+                      onValueChange={(v) =>
+                        setDestByAnimal((prev) => ({ ...prev, [a.id]: v }))
+                      }
+                    >
+                      <SelectTrigger
+                        className={`h-7 ${isOverride ? "ring-2 ring-amber-500/60" : ""}`}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {block.pens.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                            {p.id === a.suggested_pen_id ? " (suggested)" : ""}
+                            {p.id === a.current_pen_id ? " (current)" : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </td>
                   <td className="px-3 py-1.5 text-right whitespace-nowrap">
                     {change ? (
@@ -254,17 +296,17 @@ function GroupBlockCard({
                           variant="ghost"
                           onClick={() => onAccept(a)}
                           disabled={busy === a.id}
-                          title={`Move ${a.animal_id} to ${a.suggested_pen_name ?? "suggested pen"}`}
+                          title={`Move ${a.animal_id} to ${block.pens.find((p) => p.id === dest)?.name ?? "selected pen"}`}
                         >
                           <HugeiconsIcon icon={CheckmarkCircle02Icon} />
-                          Accept
+                          {isOverride ? "Apply override" : "Accept"}
                         </Button>
                         <Button
                           type="button"
                           size="sm"
                           variant="ghost"
                           onClick={() => openOverride(a)}
-                          title="Pick a different pen or keep current with a reason"
+                          title="Keep cow in current pen with a reason"
                         >
                           <HugeiconsIcon icon={CancelCircleIcon} />
                           Override…
