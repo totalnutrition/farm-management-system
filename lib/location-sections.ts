@@ -326,10 +326,13 @@ export const LocationSections: LocationSection[] = [
 export function relevantLocationSections(opts: {
   manages_livestock: boolean;
   manages_crops: boolean;
+  /** Include placeholder / unshipped tabs (greyed-out). Default: false. */
+  includeUnshipped?: boolean;
 }): LocationSection[] {
   return LocationSections.filter((s) => {
     if (s.livestockOnly && !opts.manages_livestock) return false;
     if (s.cropsOnly && !opts.manages_crops) return false;
+    if (!opts.includeUnshipped && !s.shipped) return false;
     return true;
   });
 }
