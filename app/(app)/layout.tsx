@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar, type SidebarBadgeCounts } from "@/components/app-sidebar";
+import { WorkspaceTabs } from "@/components/workspace-tabs";
 import { LocationSwitcher } from "@/components/location-switcher";
 import { createClient } from "@/lib/supabase-server";
 import { PathLogin } from "@/lib/misc";
@@ -73,6 +74,7 @@ export default async function AppLayout({
               activeId={active?.id ?? null}
             />
           </div>
+          <WorkspaceTabs />
           <section className="px-2">{children}</section>
         </main>
       </TooltipProvider>

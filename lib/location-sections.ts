@@ -54,12 +54,12 @@ export const LocationSectionGroupLabels: Record<
   string | null
 > = {
   overview: null,
-  setup: "Setup",
-  herd: "Herd",
-  milk: "Milk & sales",
+  setup: "Farm profile",
+  herd: "Herd & targets",
+  milk: "Milk setup",
   feeding: "Feeding",
   infrastructure: "Infrastructure",
-  purchasing: "Purchasing & people",
+  purchasing: "Contacts",
   access: "Access",
   operations: "Operations",
   system: "System",
@@ -116,17 +116,27 @@ export const LocationSections: LocationSection[] = [
   {
     slug: "groups",
     label: "Herd structure",
-    description: "Group strategy, rules, capacity plan.",
+    description: "Group strategy + the rules the engine moves cows by.",
     icon: GroupLayersIcon,
     shipped: true,
     group: "herd",
     livestockOnly: true,
   },
   {
-    slug: "reproduction",
-    label: "Reproduction",
+    slug: "kpis",
+    label: "KPIs & targets",
     description:
-      "VWP, heat detection, preg-check schedule, sync protocols, KPI targets.",
+      "One home for every target — stocking %, bunk space, PR21, CR, SCC, DMI, refusal, days-open. The Hot list + engines read from here.",
+    icon: ChartLineData02Icon,
+    shipped: true,
+    group: "herd",
+    livestockOnly: true,
+  },
+  {
+    slug: "reproduction",
+    label: "Reproduction setup",
+    description:
+      "VWP, heat detection, preg-check schedule. (Targets live in KPIs; protocol selection in Playbook.)",
     icon: ChartLineData02Icon,
     shipped: true,
     group: "herd",
