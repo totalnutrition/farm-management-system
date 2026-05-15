@@ -22,6 +22,13 @@ import { recentAvgDailyMilk } from "@/lib/milk-stats";
 
 const OVERSTOCK_THRESHOLD = 1.15; // > 115% of capacity → flag
 const UNDERSTOCK_THRESHOLD = 0.7; // < 70% of capacity → flag
+const DEFAULT_GESTATION_DAYS = 280;
+const OPEN_THRESHOLD_DIM = 150;
+const LAMENESS_LOCOMOTION_THRESHOLD = 3;
+const LAMENESS_WINDOW_DAYS = 14;
+const TEST_DAY_STALE_DAYS = 30;
+const WITHDRAWAL_EXPIRING_WINDOW_HOURS = 24;
+const DUE_TO_CALVE_WINDOW_DAYS = 14;
 
 export type HotListCounts = {
   /** Cows whose engine-suggested group differs from their current group. */
@@ -40,6 +47,26 @@ export type HotListCounts = {
   understockedPens: number;
   /** Pens with capacity set but zero cows (candidates for delete / merge). */
   emptyPens: number;
+  // ----- Reproduction -----
+  /** Pregnant cows expected to calve within DUE_TO_CALVE_WINDOW_DAYS. */
+  dueToCalve: number;
+  /** Active lactating cows past 150 DIM with no positive preg check. */
+  openOver150: number;
+  // ----- Health -----
+  /** Cows with an active milk-withdrawal hold (do NOT send to tank). */
+  withdrawalHold: number;
+  /** Cows whose milk withdrawal expires within 24 h. */
+  withdrawalExpiring: number;
+  /** Cows scored locomotion ≥ 3 within the last 14 d. */
+  lame: number;
+  // ----- Milk recording (data hygiene) -----
+  /** Bulk-tank reading missing for today. */
+  bulkTankMissingToday: number;
+  /** Last DHI test day across the herd is older than 30 d. */
+  testDayOverdue: number;
+  // ----- Inventory -----
+  /** Stock lines below their reorder level. */
+  stockBelowReorder: number;
 };
 
 export type HotListItem = {
@@ -50,7 +77,15 @@ export type HotListItem = {
     | "cows_without_pen"
     | "overstocked"
     | "understocked"
-    | "empty_pen";
+    | "empty_pen"
+    | "due_to_calve"
+    | "open_over_150"
+    | "withdrawal_hold"
+    | "withdrawal_expiring"
+    | "lame"
+    | "bulk_tank_missing"
+    | "test_day_overdue"
+    | "stock_low";
   label: string;
   detail?: string;
   href: string;
@@ -87,6 +122,14 @@ function emptyResult(): HotList {
       overstockedPens: 0,
       understockedPens: 0,
       emptyPens: 0,
+      dueToCalve: 0,
+      openOver150: 0,
+      withdrawalHold: 0,
+      withdrawalExpiring: 0,
+      lame: 0,
+      bulkTankMissingToday: 0,
+      testDayOverdue: 0,
+      stockBelowReorder: 0,
     },
     categories: [],
     totalAlerts: 0,
@@ -127,7 +170,23 @@ export const computeHotList = cache(
       rule_predicates: Record<string, unknown>;
     };
 
-    const [animalRows, penRows, groupRows, reproRaw, milkMap] = await Promise.all([
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const lameSince = new Date(nowMs - LAMENESS_WINDOW_DAYS * 86400000)
+      .toISOString()
+      .slice(0, 10);
+
+    const [
+      animalRows,
+      penRows,
+      groupRows,
+      reproRaw,
+      milkMap,
+      healthRaw,
+      bulkTodayCount,
+      lastTestDate,
+      stockRaw,
+      dairyRow,
+    ] = await Promise.all([
       admin
         .from("animals")
         .select(
@@ -154,7 +213,50 @@ export const computeHotList = cache(
         .limit(2000)
         .then(({ data }) => (data ?? []) as Record<string, unknown>[]),
       recentAvgDailyMilk(locationId),
+      admin
+        .from("health_events")
+        .select(
+          "id, animal_id, event_date, event_type, diagnosis_text, locomotion_score, withdrawal_milk_end, withdrawal_meat_end",
+        )
+        .gte("event_date", lameSince)
+        .order("event_date", { ascending: false })
+        .limit(2000)
+        .then(({ data }) => (data ?? []) as Record<string, unknown>[]),
+      admin
+        .from("bulk_tank_readings")
+        .select("id", { count: "exact", head: true })
+        .eq("location_id", locationId)
+        .gte("reading_at", todayISO + "T00:00:00Z")
+        .then(
+          ({ count }) => count ?? 0,
+          () => 0,
+        ),
+      admin
+        .from("test_days")
+        .select("test_date")
+        .order("test_date", { ascending: false })
+        .limit(1)
+        .then(({ data }) =>
+          ((data ?? []) as Array<{ test_date: string }>)[0]?.test_date ?? null,
+        ),
+      admin
+        .from("stock_items")
+        .select("id, display_name, kind, unit, on_hand_qty, reorder_level, is_active")
+        .eq("location_id", locationId)
+        .eq("is_active", true)
+        .not("reorder_level", "is", null)
+        .then(({ data }) => (data ?? []) as Record<string, unknown>[]),
+      admin
+        .from("location_dairy_settings")
+        .select("expected_gestation_days, voluntary_waiting_period_days")
+        .eq("location_id", locationId)
+        .maybeSingle()
+        .then(({ data }) => data as Record<string, unknown> | null),
     ]);
+
+    const gestationDays =
+      (dairyRow?.expected_gestation_days as number | undefined) ??
+      DEFAULT_GESTATION_DAYS;
 
     const groups: GroupDef[] = groupRows.map((g) => ({
       id: g.id,
@@ -347,6 +449,164 @@ export const computeHotList = cache(
       }
     }
 
+    // ---- 6. Reproduction-driven alerts ----------------------------
+    const animalLabelById = new Map(
+      animalRows.map((a) => [a.id, `${a.animal_id}${a.name ? ` · ${a.name}` : ""}`]),
+    );
+    const dueToCalveItems: HotListItem[] = [];
+    const openOver150Items: HotListItem[] = [];
+
+    for (const a of animalRows) {
+      const pc = latestPC.get(a.id);
+      const isPreg = pc?.result === "pregnant";
+      if (isPreg && pc?.days_pregnant !== null && pc?.days_pregnant !== undefined) {
+        const daysToCalving = gestationDays - Number(pc.days_pregnant);
+        if (daysToCalving >= 0 && daysToCalving <= DUE_TO_CALVE_WINDOW_DAYS) {
+          dueToCalveItems.push({
+            kind: "due_to_calve",
+            label: animalLabelById.get(a.id) ?? "—",
+            detail: `~${daysToCalving} d to calve`,
+            href: `/animals/${a.id}`,
+          });
+        }
+      }
+      if (
+        (a.current_lactation ?? 0) > 0 &&
+        a.last_calving_date &&
+        !isPreg
+      ) {
+        const dim = Math.floor(
+          (nowMs - new Date(a.last_calving_date).getTime()) / 86400000,
+        );
+        if (dim > OPEN_THRESHOLD_DIM) {
+          openOver150Items.push({
+            kind: "open_over_150",
+            label: animalLabelById.get(a.id) ?? "—",
+            detail: `${dim} DIM`,
+            href: `/animals/${a.id}`,
+          });
+        }
+      }
+    }
+
+    // ---- 7. Health alerts (withdrawal, lameness) ------------------
+    type HE = {
+      id: string;
+      animal_id: string;
+      event_date: string;
+      event_type: string;
+      diagnosis_text: string | null;
+      locomotion_score: number | null;
+      withdrawal_milk_end: string | null;
+      withdrawal_meat_end: string | null;
+    };
+    const healthEvents = healthRaw as unknown as HE[];
+
+    const wdByAnimal = new Map<string, HE>();
+    for (const e of healthEvents) {
+      if (!e.withdrawal_milk_end) continue;
+      const prev = wdByAnimal.get(e.animal_id);
+      if (!prev || new Date(e.withdrawal_milk_end) > new Date(prev.withdrawal_milk_end!))
+        wdByAnimal.set(e.animal_id, e);
+    }
+    const withdrawalHoldItems: HotListItem[] = [];
+    const withdrawalExpiringItems: HotListItem[] = [];
+    const expiringCutoff = nowMs + WITHDRAWAL_EXPIRING_WINDOW_HOURS * 3600_000;
+    for (const e of wdByAnimal.values()) {
+      const endMs = new Date(e.withdrawal_milk_end!).getTime();
+      if (endMs <= nowMs) continue;
+      const cow = animalLabelById.get(e.animal_id);
+      if (!cow) continue;
+      const hrs = Math.round((endMs - nowMs) / 3600_000);
+      const detail = `milk WD: ${hrs < 24 ? `${hrs} h` : `${Math.round(hrs / 24)} d`} left`;
+      if (endMs <= expiringCutoff) {
+        withdrawalExpiringItems.push({
+          kind: "withdrawal_expiring",
+          label: cow,
+          detail,
+          href: `/animals/${e.animal_id}`,
+        });
+      } else {
+        withdrawalHoldItems.push({
+          kind: "withdrawal_hold",
+          label: cow,
+          detail,
+          href: `/animals/${e.animal_id}`,
+        });
+      }
+    }
+
+    const lameByAnimal = new Map<string, HE>();
+    for (const e of healthEvents) {
+      if (e.locomotion_score === null || e.locomotion_score === undefined) continue;
+      if (e.locomotion_score < LAMENESS_LOCOMOTION_THRESHOLD) continue;
+      const prev = lameByAnimal.get(e.animal_id);
+      if (!prev || new Date(e.event_date) > new Date(prev.event_date))
+        lameByAnimal.set(e.animal_id, e);
+    }
+    const lameItems: HotListItem[] = Array.from(lameByAnimal.values()).map((e) => ({
+      kind: "lame",
+      label: animalLabelById.get(e.animal_id) ?? "—",
+      detail: `LS ${e.locomotion_score} on ${e.event_date}`,
+      href: `/animals/${e.animal_id}`,
+    }));
+
+    // ---- 8. Milk-recording hygiene --------------------------------
+    const bulkTankMissingItems: HotListItem[] =
+      bulkTodayCount === 0
+        ? [
+            {
+              kind: "bulk_tank_missing",
+              label: "Bulk-tank reading missing today",
+              detail: "Log the morning reading on /milk.",
+              href: "/milk",
+            },
+          ]
+        : [];
+    const testDayOverdueItems: HotListItem[] = [];
+    if (!lastTestDate) {
+      testDayOverdueItems.push({
+        kind: "test_day_overdue",
+        label: "No DHI test day on record",
+        detail: "Log the first test day on /test-days.",
+        href: "/test-days",
+      });
+    } else {
+      const ageDays = Math.floor(
+        (nowMs - new Date(lastTestDate as string).getTime()) / 86400000,
+      );
+      if (ageDays > TEST_DAY_STALE_DAYS) {
+        testDayOverdueItems.push({
+          kind: "test_day_overdue",
+          label: `Last test day ${ageDays} d ago`,
+          detail: `Industry cadence is ~${TEST_DAY_STALE_DAYS} d.`,
+          href: "/test-days",
+        });
+      }
+    }
+
+    // ---- 9. Inventory ---------------------------------------------
+    type SI = {
+      id: string;
+      display_name: string;
+      kind: string;
+      unit: string;
+      on_hand_qty: number | string;
+      reorder_level: number | string | null;
+    };
+    const stockLowItems: HotListItem[] = (stockRaw as unknown as SI[])
+      .filter((s) => {
+        const reorder = s.reorder_level === null ? null : Number(s.reorder_level);
+        if (reorder === null) return false;
+        return Number(s.on_hand_qty) <= reorder;
+      })
+      .map((s) => ({
+        kind: "stock_low",
+        label: s.display_name,
+        detail: `${Number(s.on_hand_qty)} ${s.unit} (reorder ≤ ${Number(s.reorder_level)})`,
+        href: "/stocks",
+      }));
+
     const counts: HotListCounts = {
       pendingGroupMoves: pendingGroupItems.length,
       pendingPenMoves: pendingPenItems.length,
@@ -356,6 +616,14 @@ export const computeHotList = cache(
       overstockedPens: overstockedItems.length,
       understockedPens: understockedItems.length,
       emptyPens: emptyItems.length,
+      dueToCalve: dueToCalveItems.length,
+      openOver150: openOver150Items.length,
+      withdrawalHold: withdrawalHoldItems.length,
+      withdrawalExpiring: withdrawalExpiringItems.length,
+      lame: lameItems.length,
+      bulkTankMissingToday: bulkTankMissingItems.length,
+      testDayOverdue: testDayOverdueItems.length,
+      stockBelowReorder: stockLowItems.length,
     };
 
     const categories: HotListCategory[] = [];
@@ -434,6 +702,94 @@ export const computeHotList = cache(
         items: emptyItems.slice(0, 5),
         href: "/pen-moves",
         tone: "muted",
+      });
+    }
+    if (counts.withdrawalHold > 0) {
+      categories.push({
+        kind: "withdrawal_hold",
+        title: "On withdrawal hold",
+        description: "Milk from these cows is on a drug-withdrawal hold. Do NOT send to the tank.",
+        count: counts.withdrawalHold,
+        items: withdrawalHoldItems.slice(0, 5),
+        href: "/health",
+        tone: "destructive",
+      });
+    }
+    if (counts.withdrawalExpiring > 0) {
+      categories.push({
+        kind: "withdrawal_expiring",
+        title: "Withdrawal expiring today",
+        description: "Withdrawals end within 24 h — milk can return to the tank tomorrow.",
+        count: counts.withdrawalExpiring,
+        items: withdrawalExpiringItems.slice(0, 5),
+        href: "/health",
+        tone: "amber",
+      });
+    }
+    if (counts.dueToCalve > 0) {
+      categories.push({
+        kind: "due_to_calve",
+        title: "Due to calve",
+        description: `Pregnant cows expected to calve in the next ${DUE_TO_CALVE_WINDOW_DAYS} days.`,
+        count: counts.dueToCalve,
+        items: dueToCalveItems.slice(0, 5),
+        href: "/reproduction",
+        tone: "amber",
+      });
+    }
+    if (counts.openOver150 > 0) {
+      categories.push({
+        kind: "open_over_150",
+        title: "Open > 150 DIM",
+        description: "Lactating cows past 150 days in milk without a positive preg check.",
+        count: counts.openOver150,
+        items: openOver150Items.slice(0, 5),
+        href: "/reproduction",
+        tone: "amber",
+      });
+    }
+    if (counts.lame > 0) {
+      categories.push({
+        kind: "lame",
+        title: "Lame cows",
+        description: `Locomotion score ≥ ${LAMENESS_LOCOMOTION_THRESHOLD} in the last ${LAMENESS_WINDOW_DAYS} days.`,
+        count: counts.lame,
+        items: lameItems.slice(0, 5),
+        href: "/health",
+        tone: "amber",
+      });
+    }
+    if (counts.bulkTankMissingToday > 0) {
+      categories.push({
+        kind: "bulk_tank_missing",
+        title: "Bulk-tank reading missing",
+        description: "No tank reading logged for today yet.",
+        count: counts.bulkTankMissingToday,
+        items: bulkTankMissingItems,
+        href: "/milk",
+        tone: "amber",
+      });
+    }
+    if (counts.testDayOverdue > 0) {
+      categories.push({
+        kind: "test_day_overdue",
+        title: "Test day overdue",
+        description: `DHI cadence target is ${TEST_DAY_STALE_DAYS} days between tests.`,
+        count: counts.testDayOverdue,
+        items: testDayOverdueItems,
+        href: "/test-days",
+        tone: "muted",
+      });
+    }
+    if (counts.stockBelowReorder > 0) {
+      categories.push({
+        kind: "stock_low",
+        title: "Stock below reorder",
+        description: "Inventory items at or below their reorder threshold.",
+        count: counts.stockBelowReorder,
+        items: stockLowItems.slice(0, 5),
+        href: "/stocks",
+        tone: "amber",
       });
     }
 
