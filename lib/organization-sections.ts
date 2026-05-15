@@ -6,6 +6,7 @@ import {
   CreditCardIcon,
   Note04Icon,
   SpermIcon,
+  ClipboardClockIcon,
 } from "@hugeicons/core-free-icons";
 import { PathSettingsOrganization } from "./misc";
 
@@ -51,6 +52,15 @@ export const OrganizationSections: OrganizationSection[] = [
     description: "AI bull catalog — NAAB, breed, transmitted traits.",
     href: `${PathSettingsOrganization}/sires`,
     icon: SpermIcon,
+    shipped: true,
+  },
+  {
+    slug: "protocols",
+    label: "Protocols",
+    description:
+      "Repro, vaccination, treatment, hoof-trim, deworming, dry-off SOPs.",
+    href: `${PathSettingsOrganization}/protocols`,
+    icon: ClipboardClockIcon,
     shipped: true,
   },
   {
