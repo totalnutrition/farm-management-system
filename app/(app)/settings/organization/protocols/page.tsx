@@ -6,6 +6,11 @@ import {
 } from "@/lib/supabase-auth";
 import { RoleSuperAdmin } from "@/lib/misc";
 import {
+  loadAllProtocolSteps,
+  formatStep,
+  type ProtocolStep,
+} from "@/lib/protocols";
+import {
   AddReproProtocolButton,
   AddVaccinationProtocolButton,
   AddTreatmentProtocolButton,
@@ -63,6 +68,7 @@ export default async function ProtocolsPage() {
 
   const admin = createAdminClient();
 
+  const stepsByProtocol = await loadAllProtocolSteps();
   const [repro, vax, treatments, hoof, deworm, dryoff] = await Promise.all([
     loadCatalog<ReproRow>(
       admin,
@@ -127,11 +133,15 @@ export default async function ProtocolsPage() {
         actions={<AddReproProtocolButton />}
       >
         <ProtocolTable
-          cols={["Name", "Type", "Description", ""]}
+          cols={["Name", "Type", "Description + steps", ""]}
           rows={repro.map((r) => [
             <SeedCell key={r.id} name={r.name} isSeed={r.is_seed} />,
             r.protocol_type ?? "—",
-            r.description ?? "—",
+            <DescriptionWithSteps
+              key={`d${r.id}`}
+              description={r.description}
+              steps={stepsByProtocol.get(`repro:${r.id}`) ?? []}
+            />,
             <ReproProtocolActions key={`a${r.id}`} row={r} />,
           ])}
         />
@@ -139,16 +149,20 @@ export default async function ProtocolsPage() {
 
       <Section
         title="Vaccinations"
-        hint="Per-class vaccination schedules — adult annual, pre-breeding heifer, calf series, dry-off mastitis."
+        hint="Per-class vaccination schedules — every step references an actual vaccine + dose + recurrence."
         count={vax.length}
         actions={<AddVaccinationProtocolButton />}
       >
         <ProtocolTable
-          cols={["Name", "Target class", "Description", ""]}
+          cols={["Name", "Target class", "Description + steps", ""]}
           rows={vax.map((v) => [
             <SeedCell key={v.id} name={v.name} isSeed={v.is_seed} />,
             v.target_class,
-            v.description ?? "—",
+            <DescriptionWithSteps
+              key={`d${v.id}`}
+              description={v.description}
+              steps={stepsByProtocol.get(`vaccination:${v.id}`) ?? []}
+            />,
             <VaccinationProtocolActions key={`a${v.id}`} row={v} />,
           ])}
         />
@@ -161,11 +175,15 @@ export default async function ProtocolsPage() {
         actions={<AddTreatmentProtocolButton />}
       >
         <ProtocolTable
-          cols={["Name", "Diagnosis", "Description", ""]}
+          cols={["Name", "Diagnosis", "Description + steps", ""]}
           rows={treatments.map((t) => [
             <SeedCell key={t.id} name={t.name} isSeed={t.is_seed} />,
             t.diagnosis_code ?? "—",
-            t.description ?? "—",
+            <DescriptionWithSteps
+              key={`d${t.id}`}
+              description={t.description}
+              steps={stepsByProtocol.get(`treatment:${t.id}`) ?? []}
+            />,
             <TreatmentProtocolActions key={`a${t.id}`} row={t} />,
           ])}
         />
@@ -178,11 +196,15 @@ export default async function ProtocolsPage() {
         actions={<AddHoofTrimButton />}
       >
         <ProtocolTable
-          cols={["Name", "Target class", "Description", ""]}
+          cols={["Name", "Target class", "Description + steps", ""]}
           rows={hoof.map((h) => [
             <SeedCell key={h.id} name={h.name} isSeed={h.is_seed} />,
             h.target_class,
-            h.description ?? "—",
+            <DescriptionWithSteps
+              key={`d${h.id}`}
+              description={h.description}
+              steps={stepsByProtocol.get(`hoof_trim:${h.id}`) ?? []}
+            />,
             <HoofTrimActions key={`a${h.id}`} row={h} />,
           ])}
         />
@@ -195,11 +217,15 @@ export default async function ProtocolsPage() {
         actions={<AddDewormingButton />}
       >
         <ProtocolTable
-          cols={["Name", "Target class", "Description", ""]}
+          cols={["Name", "Target class", "Description + steps", ""]}
           rows={deworm.map((d) => [
             <SeedCell key={d.id} name={d.name} isSeed={d.is_seed} />,
             d.target_class,
-            d.description ?? "—",
+            <DescriptionWithSteps
+              key={`d${d.id}`}
+              description={d.description}
+              steps={stepsByProtocol.get(`deworming:${d.id}`) ?? []}
+            />,
             <DewormingActions key={`a${d.id}`} row={d} />,
           ])}
         />
@@ -212,11 +238,15 @@ export default async function ProtocolsPage() {
         actions={<AddDryOffButton />}
       >
         <ProtocolTable
-          cols={["Name", "Approach (d)", "Description", ""]}
+          cols={["Name", "Approach (d)", "Description + steps", ""]}
           rows={dryoff.map((d) => [
             <SeedCell key={d.id} name={d.name} isSeed={d.is_seed} />,
             String(d.approach_days),
-            d.description ?? "—",
+            <DescriptionWithSteps
+              key={`d${d.id}`}
+              description={d.description}
+              steps={stepsByProtocol.get(`dry_off:${d.id}`) ?? []}
+            />,
             <DryOffActions key={`a${d.id}`} row={d} />,
           ])}
         />
@@ -316,5 +346,36 @@ function SeedCell({ name, isSeed }: { name: string; isSeed: boolean }) {
         </span>
       ) : null}
     </span>
+  );
+}
+
+function DescriptionWithSteps({
+  description,
+  steps,
+}: {
+  description: string | null;
+  steps: ProtocolStep[];
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      {description ? (
+        <span className="text-xs">{description}</span>
+      ) : (
+        <span className="text-xs text-muted-foreground italic">—</span>
+      )}
+      {steps.length > 0 ? (
+        <ol className="text-[10px] text-muted-foreground flex flex-col gap-px pl-3 mt-0.5">
+          {steps.map((s) => (
+            <li key={s.id} className="list-decimal">
+              {formatStep(s)}
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <span className="text-[10px] italic text-muted-foreground">
+          No steps defined.
+        </span>
+      )}
+    </div>
   );
 }
