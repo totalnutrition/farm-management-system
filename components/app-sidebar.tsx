@@ -1,16 +1,48 @@
 "use client"
 
 import Link from "next/link"
-import { Button } from "./ui/button"
-import { useTransition } from "react"
+import { useRouter } from "next/navigation"
+import { useState, useTransition } from "react"
 import { useTheme } from "next-themes"
+import { Button } from "./ui/button"
+import { Input } from "./ui/input"
 import { FarmInsightLogo } from "./farminsight-logo"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { logout } from "@/app/logout/actions"
-import { PathAdminOrganizations, PathAdminUsers, PathHome, RoleAdmin, RoleSuperAdmin } from "@/lib/misc"
-import { Building03Icon, Moon02Icon, Sun, User, UserGroupIcon } from "@hugeicons/core-free-icons"
-import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu"
+import {
+  PathWork,
+  PathCows,
+  PathAnalyze,
+  PathSetup,
+  PathHome,
+  PathAdminOrganizations,
+  PathAdminUsers,
+  RoleAdmin,
+  RoleSuperAdmin,
+  cowPath,
+} from "@/lib/misc"
+import { Moon02Icon, Sun, User } from "@hugeicons/core-free-icons"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu"
 
 export type SidebarUser = {
   email: string
@@ -18,75 +50,100 @@ export type SidebarUser = {
   role: string | null
 }
 
-const MENU = [
-  {
-    label: "Administration",
-    links: [
-      {
-        name: "User Management",
-        icon: UserGroupIcon,
-        link: PathAdminUsers,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      },
-      {
-        name: "Organizations",
-        icon: Building03Icon,
-        link: PathAdminOrganizations,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      }
-    ],
-    roles: [RoleSuperAdmin, RoleAdmin]
-  }
+// The whole daily loop is four destinations + the command bar (doctrine #8).
+const SPINE = [
+  { name: "Work", link: PathWork },
+  { name: "Cows", link: PathCows },
+  { name: "Analyze", link: PathAnalyze },
+  { name: "Set-up", link: PathSetup },
+]
+
+const ADMIN = [
+  { name: "User Management", link: PathAdminUsers },
+  { name: "Organizations", link: PathAdminOrganizations },
 ]
 
 export function AppSidebar({ user }: { user: SidebarUser }) {
+  const isAdmin = user.role === RoleAdmin || user.role === RoleSuperAdmin
+
   return (
     <Sidebar>
       <SidebarHeader>
         <Link href={PathHome} className="px-2 py-3 text-sidebar-foreground">
           <FarmInsightLogo />
         </Link>
+        <CowLookup />
       </SidebarHeader>
       <SidebarContent>
-        {
-          MENU.map((i) =>
-            (
-              user.role &&
-              i.roles.includes(user.role)
-            ) &&
-            <SidebarGroup key={i.label}>
-              <SidebarGroupLabel>{i.label}</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {
-                    i.links.map((j) =>
-                      (
-                        user.role &&
-                        j.roles.includes(user.role)
-                      ) &&
-                      <SidebarMenuItem key={j.name}>
-                        <SidebarMenuButton asChild>
-                          <Link href={j.link}>
-                            <HugeiconsIcon icon={j.icon} />
-                            <span>{j.name}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    )
-                  }
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          )
-        }
+        <SidebarGroup>
+          <SidebarGroupLabel>Herd</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {SPINE.map((i) => (
+                <SidebarMenuItem key={i.name}>
+                  <SidebarMenuButton asChild>
+                    <Link href={i.link}>
+                      <span>{i.name}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        {isAdmin ? (
+          <SidebarGroup>
+            <SidebarGroupLabel>Administration</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {ADMIN.map((i) => (
+                  <SidebarMenuItem key={i.name}>
+                    <SidebarMenuButton asChild>
+                      <Link href={i.link}>
+                        <span>{i.name}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
       </SidebarContent>
       <SidebarFooter>
-        <div className={`flex flex-row justify-between items-center`}>
+        <div className="flex flex-row justify-between items-center">
           <ThemeToggle />
           <UserMenu user={user} />
         </div>
       </SidebarFooter>
     </Sidebar>
+  )
+}
+
+// Doctrine #8: you ask for the cow, you don't hunt a menu. Enter a tag ->
+// straight to that cow's record; otherwise search the herd.
+function CowLookup() {
+  const router = useRouter()
+  const [q, setQ] = useState("")
+  return (
+    <form
+      className="px-2 pb-2"
+      onSubmit={(e) => {
+        e.preventDefault()
+        const v = q.trim()
+        if (!v) return
+        router.push(cowPath(v))
+      }}
+    >
+      <Input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Find cow by tag…"
+        className="h-8 text-xs"
+        autoComplete="off"
+        inputMode="numeric"
+      />
+    </form>
   )
 }
 
@@ -134,9 +191,7 @@ function ThemeToggle() {
         variant={"ghost"}
         onClick={() => setTheme(theme === "light" ? "dark" : "light")}
       >
-        {
-          theme === "light" ? <HugeiconsIcon icon={Sun} /> : <HugeiconsIcon icon={Moon02Icon} />
-        }
+        {theme === "light" ? <HugeiconsIcon icon={Sun} /> : <HugeiconsIcon icon={Moon02Icon} />}
       </Button>
     </div>
   )
