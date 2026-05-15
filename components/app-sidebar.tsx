@@ -75,6 +75,7 @@ const MENU: MenuGroup[] = [
     links: [
       { name: "Dashboard",     icon: DashboardSquare01Icon, link: "/",               roles: ROLES },
       { name: "Hot list",      icon: AlertCircleIcon,       link: "/hot-list",       roles: ROLES },
+      { name: "Rounds",        icon: ClipboardClockIcon,    link: "/rounds",         roles: ROLES },
       { name: "Calendar",      icon: Calendar03Icon,        link: "/calendar",       roles: ROLES },
     ],
   },
