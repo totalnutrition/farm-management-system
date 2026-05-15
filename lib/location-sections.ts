@@ -94,6 +94,15 @@ export const LocationSections: LocationSection[] = [
     shipped: true,
     group: "overview",
   },
+  {
+    slug: "playbook",
+    label: "Operations playbook",
+    description:
+      "Active strategies, protocols, KPIs and schedules — one place.",
+    icon: ClipboardClockIcon,
+    shipped: true,
+    group: "overview",
+  },
 
   {
     slug: "general",
