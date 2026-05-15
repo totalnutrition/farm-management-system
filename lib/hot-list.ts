@@ -19,16 +19,9 @@ import {
 } from "@/lib/group-rules";
 import { suggestPenSplit, type SplitAnimal, type SplitPen } from "@/lib/pen-rules";
 import { recentAvgDailyMilk } from "@/lib/milk-stats";
+import { loadPlaybook, resolveKpi, KPI_KEYS } from "@/lib/playbook";
 
-const OVERSTOCK_THRESHOLD = 1.15; // > 115% of capacity → flag
-const UNDERSTOCK_THRESHOLD = 0.7; // < 70% of capacity → flag
 const DEFAULT_GESTATION_DAYS = 280;
-const OPEN_THRESHOLD_DIM = 150;
-const LAMENESS_LOCOMOTION_THRESHOLD = 3;
-const LAMENESS_WINDOW_DAYS = 14;
-const TEST_DAY_STALE_DAYS = 30;
-const WITHDRAWAL_EXPIRING_WINDOW_HOURS = 24;
-const DUE_TO_CALVE_WINDOW_DAYS = 14;
 
 export type HotListCounts = {
   /** Cows whose engine-suggested group differs from their current group. */
@@ -169,6 +162,28 @@ export const computeHotList = cache(
       display_order: number;
       rule_predicates: Record<string, unknown>;
     };
+
+    // Resolve all KPI thresholds from this location's playbook (with
+    // hardcoded fallback). loadPlaybook is React.cache'd so this is
+    // free if the playbook page already triggered a load this render.
+    const playbook = await loadPlaybook(locationId);
+    const OVERSTOCK_THRESHOLD = resolveKpi(playbook, KPI_KEYS.stocking_overstock_pct);
+    const UNDERSTOCK_THRESHOLD = resolveKpi(playbook, KPI_KEYS.stocking_understock_pct);
+    const OPEN_THRESHOLD_DIM = resolveKpi(playbook, KPI_KEYS.open_threshold_dim);
+    const LAMENESS_LOCOMOTION_THRESHOLD = resolveKpi(
+      playbook,
+      KPI_KEYS.lameness_locomotion_threshold,
+    );
+    const LAMENESS_WINDOW_DAYS = resolveKpi(playbook, KPI_KEYS.lameness_window_days);
+    const TEST_DAY_STALE_DAYS = resolveKpi(playbook, KPI_KEYS.test_day_stale_days);
+    const WITHDRAWAL_EXPIRING_WINDOW_HOURS = resolveKpi(
+      playbook,
+      KPI_KEYS.withdrawal_expiring_window_hours,
+    );
+    const DUE_TO_CALVE_WINDOW_DAYS = resolveKpi(
+      playbook,
+      KPI_KEYS.due_to_calve_window_days,
+    );
 
     const todayISO = new Date().toISOString().slice(0, 10);
     const lameSince = new Date(nowMs - LAMENESS_WINDOW_DAYS * 86400000)
