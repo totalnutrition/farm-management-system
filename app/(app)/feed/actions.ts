@@ -6,12 +6,82 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { PathFeed } from "@/lib/misc";
 import { FEED_EC } from "@/lib/derive/feed";
+import { computeRation, type Material } from "@/lib/derive/ration";
 
 type Result = { error?: string; success?: boolean };
 
+// ---- materials (ingredient) catalog: `feed` subjects ----------------
+const materialSchema = z.object({
+  name: z.string().trim().min(1, "Material name is required."),
+  dmPct: z.coerce.number().min(1).max(100),
+  costPerKgAsFed: z.coerce.number().min(0),
+  cp: z.coerce.number().min(0).optional(),
+  nel: z.coerce.number().min(0).optional(),
+  ndf: z.coerce.number().min(0).optional(),
+  stockKg: z.coerce.number().min(0).optional(),
+});
+
+export async function createMaterial(
+  input: z.infer<typeof materialSchema>,
+): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+  const parsed = materialSchema.safeParse(input);
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  const v = parsed.data;
+  const admin = createAdminClient();
+  const { error } = await admin.from("subjects").insert({
+    organization_id: orgId,
+    subject_type: "feed",
+    natural_key: v.name,
+    attrs: {
+      dm_pct: v.dmPct,
+      cost: v.costPerKgAsFed,
+      cp: v.cp ?? null,
+      nel: v.nel ?? null,
+      ndf: v.ndf ?? null,
+      stock_kg: v.stockKg ?? 0,
+    },
+    created_by: user.id,
+  });
+  if (error) {
+    if (error.code === "23505")
+      return { error: `Material “${v.name}” already exists.` };
+    return { error: error.message };
+  }
+  revalidatePath(PathFeed);
+  return { success: true };
+}
+
+export async function deleteMaterial(id: string): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("subjects")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", orgId)
+    .eq("subject_type", "feed");
+  if (error) return { error: error.message };
+  revalidatePath(PathFeed);
+  return { success: true };
+}
+
+// ---- ration = a DM-basis recipe over materials ----------------------
 const rationSchema = z.object({
   name: z.string().trim().min(1, "Ration name is required."),
-  costPerKg: z.coerce.number().min(0),
+  recipe: z
+    .array(
+      z.object({
+        material: z.string().trim().min(1),
+        dmKg: z.coerce.number().positive(),
+      }),
+    )
+    .min(1, "Add at least one ingredient."),
 });
 
 export async function createRation(
@@ -24,14 +94,42 @@ export async function createRation(
   const parsed = rationSchema.safeParse(input);
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
-  const { name, costPerKg } = parsed.data;
+  const { name, recipe } = parsed.data;
 
   const admin = createAdminClient();
+  const { data: mats } = await admin
+    .from("subjects")
+    .select("natural_key, attrs")
+    .eq("organization_id", orgId)
+    .eq("subject_type", "feed");
+  const catalog: Record<string, Material> = {};
+  for (const m of mats ?? []) {
+    const a = (m.attrs ?? {}) as Record<string, unknown>;
+    catalog[m.natural_key] = {
+      dmPct: typeof a.dm_pct === "number" ? a.dm_pct : 100,
+      costPerKgAsFed: typeof a.cost === "number" ? a.cost : 0,
+      cp: typeof a.cp === "number" ? a.cp : undefined,
+      nel: typeof a.nel === "number" ? a.nel : undefined,
+      ndf: typeof a.ndf === "number" ? a.ndf : undefined,
+    };
+  }
+  const res = computeRation(recipe, catalog);
+  if (res.missing.length)
+    return { error: `Unknown material(s): ${res.missing.join(", ")}` };
+
+  // store the recipe + the as-fed cost/kg so recordFeeding stays valid
   const { error } = await admin.from("subjects").insert({
     organization_id: orgId,
     subject_type: "ration",
     natural_key: name,
-    attrs: { cost_per_kg: costPerKg },
+    attrs: {
+      recipe,
+      cost_per_kg: res.costPerKgAsFed,
+      dm_kg: res.totalDmKg,
+      cp_pct: res.cpPct,
+      nel: res.nel,
+      ndf_pct: res.ndfPct,
+    },
     created_by: user.id,
   });
   if (error) {
