@@ -13,6 +13,7 @@ export const PathFeed = "/feed";
 export const PathSettings = "/settings";
 export const PathAudit = "/audit";
 export const PathSharing = "/admin/sharing";
+export const PathExtended = "/extended";
 
 export const RoleSuperAdmin = "super_admin";
 export const RoleAdmin = "admin";
