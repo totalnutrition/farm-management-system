@@ -143,6 +143,8 @@ export async function importMilkings(csv: string): Promise<ImportResult> {
     const payload: Record<string, number> = { yield: y };
     if (num(r.fat) !== undefined) payload.fat = num(r.fat)!;
     if (num(r.prot) !== undefined) payload.prot = num(r.prot)!;
+    if (num(r.snf) !== undefined) payload.snf = num(r.snf)!;
+    if (num(r.ts) !== undefined) payload.ts = num(r.ts)!;
     if (num(r.scc) !== undefined) payload.scc = num(r.scc)!;
     toInsert.push({
       organization_id: orgId,

@@ -18,6 +18,8 @@ type MilkPayload = {
   yield?: number; // kg, canonical
   fat?: number;
   prot?: number;
+  snf?: number; // solids-not-fat %
+  ts?: number; // total solids % (if reported directly)
   scc?: number;
   milkingNo?: number;
 };
@@ -39,7 +41,7 @@ function dailyTotals(s: Subject): { date: string; kg: number }[] {
 }
 function latestComponent(
   s: Subject,
-  key: "fat" | "prot" | "scc",
+  key: "fat" | "prot" | "snf" | "ts" | "scc",
 ): number | null {
   for (let i = milkings(s).length - 1; i >= 0; i--) {
     const v = (milkings(s)[i].payload as MilkPayload | undefined)?.[key];
@@ -111,6 +113,24 @@ register({
   item: "PCTP",
   provenance: "confirmed",
   compute: (s) => latestComponent(s, "prot"),
+});
+register({
+  item: "SNF",
+  provenance: "confirmed",
+  note: "solids-not-fat %",
+  compute: (s) => latestComponent(s, "snf"),
+});
+register({
+  item: "TS",
+  provenance: "standard-science",
+  note: "total solids %: reported value, else Fat% + SNF%",
+  compute: (s) => {
+    const ts = latestComponent(s, "ts");
+    if (ts !== null) return ts;
+    const f = latestComponent(s, "fat");
+    const snf = latestComponent(s, "snf");
+    return f !== null && snf !== null ? r1(f + snf) : null;
+  },
 });
 register({
   item: "SCC",

@@ -74,3 +74,25 @@ test("queryable through the same executor", () => {
     { ID: "100", MILK: 39, SCC: 200, LCTGP: "1" },
   ]);
 });
+
+test("SNF and Total Solids components", () => {
+  const s = {
+    events: [
+      { code: 1, date: "2026-05-01" },
+      {
+        code: MILK_EC,
+        date: "2026-05-16",
+        payload: { yield: 30, fat: 3.8, prot: 3.1, snf: 8.7 },
+      },
+    ],
+  };
+  assert.equal(deriveItem("SNF", s, CTX), 8.7);
+  assert.equal(deriveItem("TS", s, CTX), 12.5); // fat 3.8 + snf 8.7
+  const direct = {
+    events: [
+      { code: 1, date: "2026-05-01" },
+      { code: MILK_EC, date: "2026-05-16", payload: { yield: 30, ts: 13.1 } },
+    ],
+  };
+  assert.equal(deriveItem("TS", direct, CTX), 13.1); // reported wins
+});

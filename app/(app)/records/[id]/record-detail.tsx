@@ -46,6 +46,8 @@ const ITEM_LABEL: Record<string, string> = {
   MTOT: "Milk lactation total (kg)",
   PCTF: "Fat %",
   PCTP: "Protein %",
+  SNF: "SNF %",
+  TS: "Total solids %",
   SCC: "SCC (1000s)",
   LS: "Linear score",
   LCTGP: "Lactation group",
@@ -95,6 +97,8 @@ export function RecordDetail({
   const [mKg, setMKg] = useState("");
   const [mFat, setMFat] = useState("");
   const [mProt, setMProt] = useState("");
+  const [mSnf, setMSnf] = useState("");
+  const [mTs, setMTs] = useState("");
   const [mScc, setMScc] = useState("");
 
   const submitMilk = () =>
@@ -105,6 +109,8 @@ export function RecordDetail({
         yieldKg: Number(mKg),
         fat: mFat ? Number(mFat) : undefined,
         prot: mProt ? Number(mProt) : undefined,
+        snf: mSnf ? Number(mSnf) : undefined,
+        ts: mTs ? Number(mTs) : undefined,
         scc: mScc ? Number(mScc) : undefined,
       });
       if (res.error) {
@@ -115,6 +121,8 @@ export function RecordDetail({
       setMKg("");
       setMFat("");
       setMProt("");
+      setMSnf("");
+      setMTs("");
       setMScc("");
       setMOpen(false);
       router.refresh();
@@ -226,6 +234,22 @@ export function RecordDetail({
                       type="number"
                       value={mProt}
                       onChange={(e) => setMProt(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">SNF %</Label>
+                    <Input
+                      type="number"
+                      value={mSnf}
+                      onChange={(e) => setMSnf(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Total solids %</Label>
+                    <Input
+                      type="number"
+                      value={mTs}
+                      onChange={(e) => setMTs(e.target.value)}
                     />
                   </div>
                   <div className="space-y-1">

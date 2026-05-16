@@ -34,6 +34,8 @@ export const ITEMS: { value: string; label: string }[] = [
   { value: "MTOT", label: "Milk lactation total (kg)" },
   { value: "PCTF", label: "Fat %" },
   { value: "PCTP", label: "Protein %" },
+  { value: "SNF", label: "SNF %" },
+  { value: "TS", label: "Total solids %" },
   { value: "SCC", label: "SCC (1000s)" },
   { value: "LS", label: "Linear score" },
   { value: "LCTGP", label: "Lactation group" },

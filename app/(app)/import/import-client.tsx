@@ -18,9 +18,9 @@ const ANIMAL_TEMPLATE =
   "open_heifer,H10,,HO,2024-11-16,0,,,,,,,,,,,born,2026-05-16";
 
 const MILK_TEMPLATE =
-  "animalId,date,yield,fat,prot,scc\r\n" +
-  "1001,2026-05-16,38.5,3.8,3.1,150\r\n" +
-  "1001,2026-05-16,12.0,,,";
+  "animalId,date,yield,fat,prot,snf,ts,scc\r\n" +
+  "1001,2026-05-16,38.5,3.8,3.1,8.7,12.5,150\r\n" +
+  "1001,2026-05-16,12.0,,,,,";
 
 function download(name: string, content: string) {
   const blob = new Blob([content], { type: "text/csv" });
@@ -176,6 +176,10 @@ const MILK_GUIDE: { col: string; req?: string; note: string }[] = [
   { col: "date", req: "required", note: "yyyy-mm-dd of the milking" },
   { col: "yield", req: "required", note: "kg, one row per milking (2×/3×/robotic all sum per day)" },
   { col: "fat / prot", note: "components, % (optional)" },
+  {
+    col: "snf / ts",
+    note: "solids-not-fat % / total solids % (optional; TS derives from fat+snf if blank)",
+  },
   { col: "scc", note: "somatic cell count, 1000s/mL (optional)" },
 ];
 

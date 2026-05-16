@@ -143,6 +143,8 @@ const milkSchema = z.object({
   yieldKg: z.coerce.number().positive("Yield must be > 0."),
   fat: z.coerce.number().min(0).optional(),
   prot: z.coerce.number().min(0).optional(),
+  snf: z.coerce.number().min(0).optional(),
+  ts: z.coerce.number().min(0).optional(),
   scc: z.coerce.number().min(0).optional(),
 });
 
@@ -156,7 +158,8 @@ export async function recordMilking(
   const parsed = milkSchema.safeParse(input);
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
-  const { subjectId, date, yieldKg, fat, prot, scc } = parsed.data;
+  const { subjectId, date, yieldKg, fat, prot, snf, ts, scc } =
+    parsed.data;
 
   const admin = createAdminClient();
   const { data: subj, error: sErr } = await admin
@@ -171,6 +174,8 @@ export async function recordMilking(
   const payload: Record<string, number> = { yield: yieldKg };
   if (fat !== undefined) payload.fat = fat;
   if (prot !== undefined) payload.prot = prot;
+  if (snf !== undefined) payload.snf = snf;
+  if (ts !== undefined) payload.ts = ts;
   if (scc !== undefined) payload.scc = scc;
 
   const { error } = await admin.from("events").insert({
