@@ -20,14 +20,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuCheckboxItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
-import {
   serializeCommand,
   parseCommand,
   type CmpOp,
@@ -39,8 +31,10 @@ import {
   describeConds,
   labelOf,
   ITEMS,
+  ITEM_GROUPS,
   type ConditionValue,
 } from "@/components/condition-builder";
+import { FieldPicker } from "@/components/field-picker";
 import { runQueryAction, type QueryResponse } from "./actions";
 import { toCsv } from "@/lib/csv";
 import { saveView } from "../views/actions";
@@ -236,43 +230,19 @@ export function QueryBuilder() {
             )}
 
             {(verb === "LIST" || verb === "SUM") && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs font-normal"
-                  >
-                    {columns.length
-                      ? `${verb === "SUM" ? "Averaging" : "Columns"} · ${columns.length}`
-                      : verb === "SUM"
-                        ? "Pick columns"
-                        : "Columns"}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="start"
-                  className="max-h-72 overflow-y-auto"
-                >
-                  <DropdownMenuLabel className="text-xs">
-                    {verb === "SUM" ? "Average these" : "Columns to show"}
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {ITEMS.filter((i) => i.value !== "PEN" || verb !== "SUM").map(
-                    (i) => (
-                      <DropdownMenuCheckboxItem
-                        key={i.value}
-                        checked={columns.includes(i.value)}
-                        onCheckedChange={() => toggleCol(i.value)}
-                        onSelect={(e) => e.preventDefault()}
-                        className="text-xs"
-                      >
-                        {i.label}
-                      </DropdownMenuCheckboxItem>
-                    ),
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <FieldPicker
+                multiple
+                items={ITEMS}
+                groups={ITEM_GROUPS}
+                values={columns}
+                onToggle={toggleCol}
+                exclude={
+                  verb === "SUM"
+                    ? (i) => i.value === "PEN"
+                    : undefined
+                }
+                placeholder={verb === "SUM" ? "Averaging" : "Columns"}
+              />
             )}
 
             <ConditionBuilder value={cond} onChange={setCond} />
@@ -286,23 +256,16 @@ export function QueryBuilder() {
                   [g1, setG1] as const,
                   [g2, setG2] as const,
                 ].map(([gv, gs], idx) => (
-                  <Select
+                  <FieldPicker
                     key={idx}
-                    value={gv || "none"}
-                    onValueChange={(v) => gs(v === "none" ? "" : v)}
-                  >
-                    <SelectTrigger className="h-7 w-[120px] text-xs">
-                      <SelectValue placeholder="—" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">—</SelectItem>
-                      {ITEMS.map((i) => (
-                        <SelectItem key={i.value} value={i.value}>
-                          {i.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    items={ITEMS}
+                    groups={ITEM_GROUPS}
+                    value={gv}
+                    onChange={gs}
+                    clearLabel="— none —"
+                    placeholder="—"
+                    triggerClassName="w-[120px]"
+                  />
                 ))}
                 {g1 && (
                   <>
@@ -339,22 +302,14 @@ export function QueryBuilder() {
             )}
 
             <span className="text-xs text-muted-foreground">sort</span>
-            <Select
-              value={sortItem || "none"}
-              onValueChange={(v) => setSortItem(v === "none" ? "" : v)}
-            >
-              <SelectTrigger className="h-7 w-[130px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Animal ID</SelectItem>
-                {ITEMS.map((i) => (
-                  <SelectItem key={i.value} value={i.value}>
-                    {i.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FieldPicker
+              items={ITEMS}
+              groups={ITEM_GROUPS}
+              value={sortItem}
+              onChange={setSortItem}
+              clearLabel="Animal ID"
+              triggerClassName="w-[130px]"
+            />
             <Select
               value={sortDir}
               onValueChange={(v) => setSortDir(v as "asc" | "desc")}

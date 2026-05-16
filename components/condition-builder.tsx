@@ -8,43 +8,59 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FieldPicker } from "@/components/field-picker";
 import { range, type Atom, type CmpOp, type Predicate } from "@/lib/derive/query";
 
 // The single shared catalog of items the engine can compute. Both the
 // Query bar and the Grouping rule editor use this — one generator.
-export const ITEMS: { value: string; label: string }[] = [
-  { value: "ID", label: "Animal ID" },
-  { value: "PEN", label: "Pen (physical)" },
-  { value: "RPRO", label: "Repro status" },
-  { value: "RC", label: "Repro code (#)" },
-  { value: "LACT", label: "Lactation #" },
-  { value: "DIM", label: "Days in milk" },
-  { value: "DDRY", label: "Days dry" },
-  { value: "AGE", label: "Age (months)" },
-  { value: "DCC", label: "Days carrying calf" },
-  { value: "DUE", label: "Days to due" },
-  { value: "DSLH", label: "Days since last heat" },
-  { value: "DOPN", label: "Days open" },
-  { value: "FDAT", label: "Fresh date" },
-  { value: "DDAT", label: "Dry date" },
-  { value: "MILK", label: "Milk today (kg)" },
-  { value: "MAVG", label: "Milk avg 7d (kg)" },
-  { value: "PMILK", label: "Milk prev day (kg)" },
-  { value: "PEAK", label: "Peak milk (kg)" },
-  { value: "MTOT", label: "Milk lactation total (kg)" },
-  { value: "PCTF", label: "Fat %" },
-  { value: "PCTP", label: "Protein %" },
-  { value: "SNF", label: "SNF %" },
-  { value: "TS", label: "Total solids %" },
-  { value: "SCC", label: "SCC (1000s)" },
-  { value: "LS", label: "Linear score" },
-  { value: "LCTGP", label: "Lactation group" },
-  { value: "DNSHIP", label: "Do-not-ship (YES/no)" },
-  { value: "DNSELL", label: "Do-not-sell meat (YES/no)" },
-  { value: "MWHOLD", label: "Milk withhold until" },
-  { value: "LTDAT", label: "Last treatment date" },
-  { value: "FLAGGED", label: "Flagged (YES/no)" },
-  { value: "ATTN", label: "Flagged for" },
+// `group` drives the sectioned, searchable field picker.
+export const ITEM_GROUPS = [
+  "Identity & location",
+  "Reproduction",
+  "Lactation",
+  "Milk yield",
+  "Components & quality",
+  "Health & flags",
+] as const;
+export type ItemGroup = (typeof ITEM_GROUPS)[number];
+
+export const ITEMS: { value: string; label: string; group: ItemGroup }[] = [
+  { value: "ID", label: "Animal ID", group: "Identity & location" },
+  { value: "PEN", label: "Pen (physical)", group: "Identity & location" },
+  { value: "AGE", label: "Age (months)", group: "Identity & location" },
+  { value: "RPRO", label: "Repro status", group: "Reproduction" },
+  { value: "RC", label: "Repro code (#)", group: "Reproduction" },
+  { value: "DCC", label: "Days carrying calf", group: "Reproduction" },
+  { value: "DUE", label: "Days to due", group: "Reproduction" },
+  { value: "DSLH", label: "Days since last heat", group: "Reproduction" },
+  { value: "DOPN", label: "Days open", group: "Reproduction" },
+  { value: "LACT", label: "Lactation #", group: "Lactation" },
+  { value: "DIM", label: "Days in milk", group: "Lactation" },
+  { value: "DDRY", label: "Days dry", group: "Lactation" },
+  { value: "FDAT", label: "Fresh date", group: "Lactation" },
+  { value: "DDAT", label: "Dry date", group: "Lactation" },
+  { value: "LCTGP", label: "Lactation group", group: "Lactation" },
+  { value: "MILK", label: "Milk today (kg)", group: "Milk yield" },
+  { value: "MAVG", label: "Milk avg 7d (kg)", group: "Milk yield" },
+  { value: "PMILK", label: "Milk prev day (kg)", group: "Milk yield" },
+  { value: "PEAK", label: "Peak milk (kg)", group: "Milk yield" },
+  { value: "MTOT", label: "Milk lactation total (kg)", group: "Milk yield" },
+  { value: "PCTF", label: "Fat %", group: "Components & quality" },
+  { value: "PCTP", label: "Protein %", group: "Components & quality" },
+  { value: "SNF", label: "SNF %", group: "Components & quality" },
+  { value: "TS", label: "Total solids %", group: "Components & quality" },
+  { value: "SCC", label: "SCC (1000s)", group: "Components & quality" },
+  { value: "LS", label: "Linear score", group: "Components & quality" },
+  { value: "DNSHIP", label: "Do-not-ship (YES/no)", group: "Health & flags" },
+  {
+    value: "DNSELL",
+    label: "Do-not-sell meat (YES/no)",
+    group: "Health & flags",
+  },
+  { value: "MWHOLD", label: "Milk withhold until", group: "Health & flags" },
+  { value: "LTDAT", label: "Last treatment date", group: "Health & flags" },
+  { value: "FLAGGED", label: "Flagged (YES/no)", group: "Health & flags" },
+  { value: "ATTN", label: "Flagged for", group: "Health & flags" },
 ];
 export const labelOf = (v: string) =>
   ITEMS.find((i) => i.value === v)?.label ?? v;
@@ -130,25 +146,18 @@ export function ConditionBuilder({
               {matchAny ? "or" : "and"}
             </button>
           )}
-          <Select
+          <FieldPicker
+            items={ITEMS}
+            groups={ITEM_GROUPS}
             value={c.item}
-            onValueChange={(v) =>
+            onChange={(v) =>
               setConds(
                 conds.map((x, i) => (i === idx ? { ...x, item: v } : x)),
               )
             }
-          >
-            <SelectTrigger className="h-7 w-[140px] text-xs">
-              <SelectValue placeholder="field" />
-            </SelectTrigger>
-            <SelectContent>
-              {ITEMS.map((i) => (
-                <SelectItem key={i.value} value={i.value}>
-                  {i.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            placeholder="field"
+            triggerClassName="w-[140px]"
+          />
           <Select
             value={c.op}
             onValueChange={(v) =>
