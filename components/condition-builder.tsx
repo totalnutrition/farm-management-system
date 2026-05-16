@@ -77,6 +77,48 @@ export const OPS: { value: string; label: string }[] = [
 export const opLabel = (v: string) =>
   OPS.find((o) => o.value === v)?.label ?? v;
 
+// Field types. The engine only does string-equality for =/<> and
+// numeric ordering for >/<; categorical & date fields therefore get a
+// constrained operator set and a proper value control instead of a
+// free numeric box (which produced nonsense like "Repro status > 3").
+export type FieldKind = "num" | "enum" | "bool" | "date" | "text";
+
+const ENUM_OPTS: Record<string, string[]> = {
+  RPRO: [
+    "VIRGIN",
+    "DNB",
+    "FRESH",
+    "OPEN",
+    "BRED",
+    "PREG",
+    "DRY",
+    "SLD/DIE",
+    "BULLCAF",
+  ],
+  LCTGP: ["H", "1", "2", "3+"],
+};
+const BOOL_ITEMS = new Set(["FLAGGED", "DNSHIP", "DNSELL"]);
+const TEXT_ITEMS = new Set(["ID", "PEN", "ATTN"]);
+const DATE_ITEMS = new Set(["FDAT", "DDAT", "MWHOLD", "LTDAT"]);
+
+export function kindOf(item: string): FieldKind {
+  if (item in ENUM_OPTS) return "enum";
+  if (BOOL_ITEMS.has(item)) return "bool";
+  if (DATE_ITEMS.has(item)) return "date";
+  if (TEXT_ITEMS.has(item)) return "text";
+  return "num";
+}
+export const optionsOf = (item: string): string[] =>
+  BOOL_ITEMS.has(item) ? ["YES", "no"] : (ENUM_OPTS[item] ?? []);
+
+// Only number fields support ordered / between operators; everything
+// else is is / is not (string equality the engine can actually do).
+export function opsFor(item: string): { value: string; label: string }[] {
+  return kindOf(item) === "num"
+    ? OPS
+    : OPS.filter((o) => o.value === "=" || o.value === "<>");
+}
+
 export type Cond = {
   item: string;
   op: string;
@@ -152,7 +194,13 @@ export function ConditionBuilder({
             value={c.item}
             onChange={(v) =>
               setConds(
-                conds.map((x, i) => (i === idx ? { ...x, item: v } : x)),
+                conds.map((x, i) =>
+                  // changing the field resets op/value so a stale
+                  // numeric operator can't linger on a categorical field
+                  i === idx
+                    ? { item: v, op: "=", value: "", value2: "" }
+                    : x,
+                ),
               )
             }
             placeholder="field"
@@ -170,26 +218,60 @@ export function ConditionBuilder({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {OPS.map((o) => (
+              {opsFor(c.item).map((o) => (
                 <SelectItem key={o.value} value={o.value}>
                   {o.label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Input
-            className="h-7 w-16 text-xs"
-            placeholder="value"
-            value={c.value}
-            onChange={(e) =>
+          {(() => {
+            const k = kindOf(c.item);
+            const set = (val: string) =>
               setConds(
                 conds.map((x, i) =>
-                  i === idx ? { ...x, value: e.target.value } : x,
+                  i === idx ? { ...x, value: val } : x,
                 ),
-              )
-            }
-          />
-          {c.op === "between" && (
+              );
+            if (k === "enum" || k === "bool")
+              return (
+                <Select
+                  value={c.value || undefined}
+                  onValueChange={set}
+                >
+                  <SelectTrigger className="h-7 w-[110px] text-xs">
+                    <SelectValue placeholder="value" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {optionsOf(c.item).map((o) => (
+                      <SelectItem key={o} value={o}>
+                        {o}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              );
+            if (k === "date")
+              return (
+                <Input
+                  type="date"
+                  className="h-7 w-[140px] text-xs"
+                  value={c.value}
+                  onChange={(e) => set(e.target.value)}
+                />
+              );
+            return (
+              <Input
+                className={
+                  "h-7 text-xs " + (k === "text" ? "w-28" : "w-16")
+                }
+                placeholder="value"
+                value={c.value}
+                onChange={(e) => set(e.target.value)}
+              />
+            );
+          })()}
+          {c.op === "between" && kindOf(c.item) === "num" && (
             <Input
               className="h-7 w-16 text-xs"
               placeholder="and"
