@@ -45,7 +45,11 @@ export async function runQueryAction(
   const orgId = getOrganizationIdFromUser(user);
   if (!orgId) return { error: "No organization on this account." };
 
-  if (!q || !q.verb || !["LIST", "COUNT", "SUM"].includes(q.verb)) {
+  if (
+    !q ||
+    !q.verb ||
+    !["LIST", "COUNT", "SUM", "PCT"].includes(q.verb)
+  ) {
     return { error: "Invalid query." };
   }
 
