@@ -158,10 +158,15 @@ export async function importMilkings(csv: string): Promise<ImportResult> {
   }
 
   let created = 0;
-  if (toInsert.length) {
-    const { error } = await admin.from("events").insert(toInsert);
-    if (error) return { created: 0, failed: rows.length, errors: [error.message] };
-    created = toInsert.length;
+  for (let i = 0; i < toInsert.length; i += 500) {
+    const slice = toInsert.slice(i, i + 500);
+    const { error } = await admin.from("events").insert(slice);
+    if (error) {
+      failed += slice.length;
+      if (errors.length < 25) errors.push(error.message);
+      continue;
+    }
+    created += slice.length;
   }
   revalidatePath(PathRecords);
   return { created, failed, errors };

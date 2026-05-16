@@ -32,6 +32,22 @@ function download(name: string, content: string) {
   URL.revokeObjectURL(a.href);
 }
 
+const BATCH = 2000;
+
+const esc = (v: string) =>
+  /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+
+function chunkCsv(
+  headers: string[],
+  rows: Record<string, string>[],
+): string {
+  const head = headers.map(esc).join(",");
+  const body = rows.map((r) =>
+    headers.map((h) => esc(r[h] ?? "")).join(","),
+  );
+  return [head, ...body].join("\n");
+}
+
 function Panel({
   title,
   template,
@@ -51,6 +67,9 @@ function Panel({
   const [csv, setCsv] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [res, setRes] = useState<ImportResult | null>(null);
+  const [prog, setProg] = useState<{ done: number; total: number } | null>(
+    null,
+  );
   const [pending, start] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -86,6 +105,7 @@ function Panel({
     setCsv("");
     setFileName(null);
     setRes(null);
+    setProg(null);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -249,18 +269,41 @@ function Panel({
           disabled={pending || !check || !check.ok}
           onClick={() =>
             start(async () => {
-              const r = await run(csv);
-              setRes(r);
-              if (r.created > 0) {
-                toast.success(`Imported ${r.created} row(s).`);
+              if (!check || "parseError" in check || !check.ok) return;
+              const { headers, rows } = check;
+              const agg: ImportResult = {
+                created: 0,
+                failed: 0,
+                errors: [],
+              };
+              setProg({ done: 0, total: rows.length });
+              for (let i = 0; i < rows.length; i += BATCH) {
+                const slice = rows.slice(i, i + BATCH);
+                const r = await run(chunkCsv(headers, slice));
+                agg.created += r.created;
+                agg.failed += r.failed;
+                for (const e of r.errors)
+                  if (agg.errors.length < 25) agg.errors.push(e);
+                setProg({
+                  done: Math.min(i + BATCH, rows.length),
+                  total: rows.length,
+                });
+              }
+              setProg(null);
+              setRes(agg);
+              if (agg.created > 0) {
+                toast.success(`Imported ${agg.created} row(s).`);
                 router.refresh();
               }
-              if (r.failed > 0) toast.error(`${r.failed} row(s) failed.`);
+              if (agg.failed > 0)
+                toast.error(`${agg.failed} row(s) failed.`);
             })
           }
         >
           {pending
-            ? "Importing…"
+            ? prog
+              ? `Importing… ${prog.done}/${prog.total}`
+              : "Importing…"
             : check && check.ok
               ? `Confirm & import ${check.rows.length} row(s)`
               : "Import"}
