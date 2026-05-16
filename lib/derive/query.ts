@@ -74,6 +74,33 @@ export function range(item: string, a: number, b: number): Atom {
   };
 }
 
+// --- DC command serialization (shared by UI "show as command") -----
+function atomToCmd(a: Atom): string {
+  if (a.kind === "cmp") return `${a.item}${a.op}${a.value}`;
+  if (a.kind === "set") return `${a.item}=${a.values.join(";")}`;
+  // range: reconstruct DC text from normalized bounds
+  return a.minInclusive && a.maxInclusive
+    ? `${a.item}=${a.min}-${a.max}` // ascending inclusive
+    : `${a.item}=${a.max}-${a.min}`; // descending exclusive
+}
+
+export function serializeCommand(q: Query): string {
+  const parts: string[] = [q.verb];
+  if (q.items.length) parts.push(q.items.join(" "));
+  if (q.for && q.for.length) {
+    const groups = q.for;
+    const text =
+      groups.length === 1
+        ? groups[0].map(atomToCmd).join(" ")
+        : groups.map((g) => `(${g.map(atomToCmd).join(" ")})`).join("");
+    parts.push(`FOR ${text}`);
+  }
+  if (q.by) {
+    parts.push(q.by.dir === "desc" ? "DOWNBY" : "BY", q.by.item);
+  }
+  return parts.join(" ");
+}
+
 // --- value resolution ------------------------------------------------
 // "ID" is the subject's natural key (DC's default identity / BY ID).
 function resolve(

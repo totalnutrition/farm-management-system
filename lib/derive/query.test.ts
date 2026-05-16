@@ -2,7 +2,12 @@
 // DC-exact predicate/range/sort semantics. Zero-dependency node:test.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runQuery, range, type PopulationMember } from "./query.ts";
+import {
+  runQuery,
+  range,
+  serializeCommand,
+  type PopulationMember,
+} from "./query.ts";
 
 const CTX = { today: "2026-05-16" };
 
@@ -150,6 +155,28 @@ test("SUM gives count + average, ignoring nulls (DC default)", () => {
   };
   assert.equal(r.count, 4);
   assert.equal(r.LACT, 1);
+});
+
+test("serializeCommand round-trips IR to DC syntax", () => {
+  assert.equal(
+    serializeCommand({
+      verb: "LIST",
+      items: ["ID", "PEN", "DIM"],
+      for: [[{ kind: "cmp", item: "LACT", op: ">", value: 1 },
+             { kind: "cmp", item: "DIM", op: "<", value: 70 }]],
+      by: { item: "DIM", dir: "desc" },
+    }),
+    "LIST ID PEN DIM FOR LACT>1 DIM<70 DOWNBY DIM",
+  );
+  // OR groups + the range quirk preserved in the command text
+  assert.equal(
+    serializeCommand({
+      verb: "COUNT",
+      items: [],
+      for: [[range("PEN", 1, 9)], [range("PEN", 9, 1)]],
+    }),
+    "COUNT FOR (PEN=1-9)(PEN=9-1)",
+  );
 });
 
 test("the range quirk is normalized INTO the IR (never leaks)", () => {
