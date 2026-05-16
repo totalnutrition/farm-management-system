@@ -1,3 +1,4 @@
+import "@/lib/derive/items";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { serializeCommand, type Predicate } from "@/lib/derive/query";

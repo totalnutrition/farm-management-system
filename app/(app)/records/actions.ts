@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { PathRecords } from "@/lib/misc";
 import { planSeed } from "@/lib/derive/intake";
+import { MILK_EC } from "@/lib/derive/production";
 
 type Result = { error?: string; success?: boolean };
 
@@ -133,5 +134,56 @@ export async function recordEvent(
 
   revalidatePath(`${PathRecords}/${subjectId}`);
   revalidatePath(PathRecords);
+  return { success: true };
+}
+
+const milkSchema = z.object({
+  subjectId: z.uuid(),
+  date: z.string().trim().min(1, "Date is required."),
+  yieldKg: z.coerce.number().positive("Yield must be > 0."),
+  fat: z.coerce.number().min(0).optional(),
+  prot: z.coerce.number().min(0).optional(),
+  scc: z.coerce.number().min(0).optional(),
+});
+
+export async function recordMilking(
+  input: z.infer<typeof milkSchema>,
+): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+
+  const parsed = milkSchema.safeParse(input);
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  const { subjectId, date, yieldKg, fat, prot, scc } = parsed.data;
+
+  const admin = createAdminClient();
+  const { data: subj, error: sErr } = await admin
+    .from("subjects")
+    .select("id")
+    .eq("id", subjectId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (sErr) return { error: sErr.message };
+  if (!subj) return { error: "Animal not found." };
+
+  const payload: Record<string, number> = { yield: yieldKg };
+  if (fat !== undefined) payload.fat = fat;
+  if (prot !== undefined) payload.prot = prot;
+  if (scc !== undefined) payload.scc = scc;
+
+  const { error } = await admin.from("events").insert({
+    organization_id: orgId,
+    subject_id: subjectId,
+    event_code: MILK_EC,
+    event_date: date,
+    payload,
+    source: "user",
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath(`${PathRecords}/${subjectId}`);
   return { success: true };
 }

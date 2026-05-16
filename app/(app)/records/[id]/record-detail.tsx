@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { recordEvent } from "../actions";
+import { recordEvent, recordMilking } from "../actions";
 
 type ItemValue = number | string | null;
 
@@ -39,6 +39,16 @@ const ITEM_LABEL: Record<string, string> = {
   DOPN: "Days open",
   FDAT: "Fresh date",
   DDAT: "Dry date",
+  MILK: "Milk today (kg)",
+  MAVG: "Milk avg 7d (kg)",
+  PMILK: "Milk prev day (kg)",
+  PEAK: "Peak milk (kg)",
+  MTOT: "Milk lactation total (kg)",
+  PCTF: "Fat %",
+  PCTP: "Protein %",
+  SCC: "SCC (1000s)",
+  LS: "Linear score",
+  LCTGP: "Lactation group",
 };
 
 export function RecordDetail({
@@ -75,6 +85,38 @@ export function RecordDetail({
       setRemark("");
       setCode("");
       setOpen(false);
+      router.refresh();
+    });
+
+  const [mOpen, setMOpen] = useState(false);
+  const [mDate, setMDate] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [mKg, setMKg] = useState("");
+  const [mFat, setMFat] = useState("");
+  const [mProt, setMProt] = useState("");
+  const [mScc, setMScc] = useState("");
+
+  const submitMilk = () =>
+    start(async () => {
+      const res = await recordMilking({
+        subjectId,
+        date: mDate,
+        yieldKg: Number(mKg),
+        fat: mFat ? Number(mFat) : undefined,
+        prot: mProt ? Number(mProt) : undefined,
+        scc: mScc ? Number(mScc) : undefined,
+      });
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Milking recorded.");
+      setMKg("");
+      setMFat("");
+      setMProt("");
+      setMScc("");
+      setMOpen(false);
       router.refresh();
     });
 
@@ -136,6 +178,81 @@ export function RecordDetail({
                 <Button
                   onClick={submit}
                   disabled={pending || !code || !date}
+                >
+                  {pending ? "Saving…" : "Record"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={mOpen} onOpenChange={setMOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline" className="ml-2">
+                Record milking
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Record milking</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Date *</Label>
+                  <Input
+                    type="date"
+                    value={mDate}
+                    onChange={(e) => setMDate(e.target.value)}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Yield (kg) *</Label>
+                    <Input
+                      type="number"
+                      value={mKg}
+                      onChange={(e) => setMKg(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Fat %</Label>
+                    <Input
+                      type="number"
+                      value={mFat}
+                      onChange={(e) => setMFat(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Protein %</Label>
+                    <Input
+                      type="number"
+                      value={mProt}
+                      onChange={(e) => setMProt(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">SCC (1000s)</Label>
+                    <Input
+                      type="number"
+                      value={mScc}
+                      onChange={(e) => setMScc(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  One row per milking — 2×/3×/robotic all sum into the
+                  day’s total automatically.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setMOpen(false)}
+                  disabled={pending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={submitMilk}
+                  disabled={pending || !mKg || !mDate}
                 >
                   {pending ? "Saving…" : "Record"}
                 </Button>

@@ -1,5 +1,7 @@
 "use server";
 
+import "@/lib/derive/items";
+
 import { requireUser, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { runQuery, type Query, type PopulationMember } from "@/lib/derive/query";

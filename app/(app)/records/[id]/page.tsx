@@ -1,3 +1,4 @@
+import "@/lib/derive/items";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase-admin";

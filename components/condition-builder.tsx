@@ -27,6 +27,16 @@ export const ITEMS: { value: string; label: string }[] = [
   { value: "DOPN", label: "Days open" },
   { value: "FDAT", label: "Fresh date" },
   { value: "DDAT", label: "Dry date" },
+  { value: "MILK", label: "Milk today (kg)" },
+  { value: "MAVG", label: "Milk avg 7d (kg)" },
+  { value: "PMILK", label: "Milk prev day (kg)" },
+  { value: "PEAK", label: "Peak milk (kg)" },
+  { value: "MTOT", label: "Milk lactation total (kg)" },
+  { value: "PCTF", label: "Fat %" },
+  { value: "PCTP", label: "Protein %" },
+  { value: "SCC", label: "SCC (1000s)" },
+  { value: "LS", label: "Linear score" },
+  { value: "LCTGP", label: "Lactation group" },
 ];
 export const labelOf = (v: string) =>
   ITEMS.find((i) => i.value === v)?.label ?? v;
