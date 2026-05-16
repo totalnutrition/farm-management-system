@@ -20,6 +20,7 @@ export const PathBarns = "/barns";
 export const PathSires = "/sires";
 export const PathActivity = "/activity";
 export const PathNotifications = "/notifications";
+export const PathCommercial = "/commercial";
 
 export const RoleSuperAdmin = "super_admin";
 export const RoleAdmin = "admin";
