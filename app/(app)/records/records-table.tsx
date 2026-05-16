@@ -14,34 +14,88 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { createAnimal } from "./actions";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { createAnimalIntake } from "./actions";
+
+type Cohort =
+  | "lactating"
+  | "dry"
+  | "bred_heifer"
+  | "open_heifer"
+  | "calf";
+
+const COHORTS: { value: Cohort; label: string }[] = [
+  { value: "lactating", label: "Lactating cow" },
+  { value: "dry", label: "Dry cow" },
+  { value: "bred_heifer", label: "Bred heifer" },
+  { value: "open_heifer", label: "Open heifer" },
+  { value: "calf", label: "Calf" },
+];
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+const blank = {
+  cohort: "lactating" as Cohort,
+  animalId: "",
+  name: "",
+  breed: "",
+  birthDate: "",
+  lactation: "",
+  freshDate: "",
+  lastBredDate: "",
+  serviceSire: "",
+  dueDate: "",
+  dryOffDate: "",
+  pen: "",
+  eid: "",
+  damId: "",
+  sireId: "",
+  registration: "",
+  entryReason: "",
+  entryDate: today(),
+};
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      {children}
+    </div>
+  );
+}
 
 export function AddAnimal() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [naturalKey, setNaturalKey] = useState("");
-  const [name, setName] = useState("");
-  const [birthDate, setBirthDate] = useState("");
-  const [baseLactation, setBaseLactation] = useState("");
+  const [f, setF] = useState(blank);
   const [pending, start] = useTransition();
+  const set = (k: keyof typeof blank, v: string) =>
+    setF((p) => ({ ...p, [k]: v }));
+
+  const calved = f.cohort === "lactating" || f.cohort === "dry";
+  const canBred = calved || f.cohort === "bred_heifer";
 
   const submit = () =>
     start(async () => {
-      const res = await createAnimal({
-        naturalKey,
-        name: name || undefined,
-        birthDate: birthDate || undefined,
-        baseLactation: baseLactation ? Number(baseLactation) : undefined,
+      const res = await createAnimalIntake({
+        ...f,
+        lactation: Number(f.lactation || 0),
       });
-      if (res.error) {
-        toast.error(res.error);
-        return;
-      }
-      toast.success(`Animal ${naturalKey} added.`);
-      setNaturalKey("");
-      setName("");
-      setBirthDate("");
-      setBaseLactation("");
+      if (res.error) return void toast.error(res.error);
+      toast.success(`${f.animalId} registered.`);
+      setF({ ...blank, entryDate: today() });
       setOpen(false);
       router.refresh();
     });
@@ -51,44 +105,184 @@ export function AddAnimal() {
       <DialogTrigger asChild>
         <Button size="sm">Add animal</Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Add animal</DialogTitle>
+          <DialogTitle>Register animal</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Animal ID *</Label>
-            <Input
-              value={naturalKey}
-              onChange={(e) => setNaturalKey(e.target.value)}
-              placeholder="e.g. 1001"
-            />
+
+        <div className="space-y-4">
+          <Field label="Cohort">
+            <Select
+              value={f.cohort}
+              onValueChange={(v) => set("cohort", v as Cohort)}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {COHORTS.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Animal ID *">
+              <Input
+                className="h-8 text-xs"
+                value={f.animalId}
+                onChange={(e) => set("animalId", e.target.value)}
+                placeholder="1001"
+              />
+            </Field>
+            <Field label="Name">
+              <Input
+                className="h-8 text-xs"
+                value={f.name}
+                onChange={(e) => set("name", e.target.value)}
+              />
+            </Field>
+            <Field label="Breed">
+              <Input
+                className="h-8 text-xs"
+                value={f.breed}
+                onChange={(e) => set("breed", e.target.value)}
+                placeholder="HO"
+              />
+            </Field>
+            <Field label="Birth date">
+              <Input
+                type="date"
+                className="h-8 text-xs"
+                value={f.birthDate}
+                onChange={(e) => set("birthDate", e.target.value)}
+              />
+            </Field>
+            <Field label="Lactation #">
+              <Input
+                type="number"
+                min={0}
+                className="h-8 text-xs"
+                value={f.lactation}
+                onChange={(e) => set("lactation", e.target.value)}
+                placeholder={calved ? "1" : "0"}
+              />
+            </Field>
+            <Field label="Pen">
+              <Input
+                className="h-8 text-xs"
+                value={f.pen}
+                onChange={(e) => set("pen", e.target.value)}
+              />
+            </Field>
+
+            {calved && (
+              <Field label="Fresh (last calving) date *">
+                <Input
+                  type="date"
+                  className="h-8 text-xs"
+                  value={f.freshDate}
+                  onChange={(e) => set("freshDate", e.target.value)}
+                />
+              </Field>
+            )}
+            {f.cohort === "dry" && (
+              <Field label="Dry-off date *">
+                <Input
+                  type="date"
+                  className="h-8 text-xs"
+                  value={f.dryOffDate}
+                  onChange={(e) => set("dryOffDate", e.target.value)}
+                />
+              </Field>
+            )}
+            {canBred && (
+              <>
+                <Field
+                  label={`Last bred date${
+                    f.cohort === "bred_heifer" ? " *" : ""
+                  }`}
+                >
+                  <Input
+                    type="date"
+                    className="h-8 text-xs"
+                    value={f.lastBredDate}
+                    onChange={(e) => set("lastBredDate", e.target.value)}
+                  />
+                </Field>
+                <Field label="Service sire">
+                  <Input
+                    className="h-8 text-xs"
+                    value={f.serviceSire}
+                    onChange={(e) => set("serviceSire", e.target.value)}
+                  />
+                </Field>
+                <Field label="Due date (if pregnant)">
+                  <Input
+                    type="date"
+                    className="h-8 text-xs"
+                    value={f.dueDate}
+                    onChange={(e) => set("dueDate", e.target.value)}
+                  />
+                </Field>
+              </>
+            )}
+
+            <Field label="Electronic ID (EID)">
+              <Input
+                className="h-8 text-xs"
+                value={f.eid}
+                onChange={(e) => set("eid", e.target.value)}
+              />
+            </Field>
+            <Field label="Dam ID">
+              <Input
+                className="h-8 text-xs"
+                value={f.damId}
+                onChange={(e) => set("damId", e.target.value)}
+              />
+            </Field>
+            <Field label="Sire ID">
+              <Input
+                className="h-8 text-xs"
+                value={f.sireId}
+                onChange={(e) => set("sireId", e.target.value)}
+              />
+            </Field>
+            <Field label="Registration #">
+              <Input
+                className="h-8 text-xs"
+                value={f.registration}
+                onChange={(e) => set("registration", e.target.value)}
+              />
+            </Field>
+            <Field label="Entry reason">
+              <Input
+                className="h-8 text-xs"
+                value={f.entryReason}
+                onChange={(e) => set("entryReason", e.target.value)}
+                placeholder="born / purchased / existing"
+              />
+            </Field>
+            <Field label="Entry date *">
+              <Input
+                type="date"
+                className="h-8 text-xs"
+                value={f.entryDate}
+                onChange={(e) => set("entryDate", e.target.value)}
+              />
+            </Field>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Birth date</Label>
-            <Input
-              type="date"
-              value={birthDate}
-              onChange={(e) => setBirthDate(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">
-              Lactations before entering the system
-            </Label>
-            <Input
-              type="number"
-              min={0}
-              value={baseLactation}
-              onChange={(e) => setBaseLactation(e.target.value)}
-              placeholder="0"
-            />
-          </div>
+
+          <p className="text-[11px] text-muted-foreground">
+            The snapshot becomes seed events (FRESH/BRED/DRY) so DIM,
+            repro and grouping are correct immediately.
+          </p>
         </div>
+
         <DialogFooter>
           <Button
             variant="outline"
@@ -97,8 +291,11 @@ export function AddAnimal() {
           >
             Cancel
           </Button>
-          <Button onClick={submit} disabled={pending || !naturalKey}>
-            {pending ? "Adding…" : "Add"}
+          <Button
+            onClick={submit}
+            disabled={pending || !f.animalId || !f.entryDate}
+          >
+            {pending ? "Registering…" : "Register"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -5,14 +5,35 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { PathRecords } from "@/lib/misc";
+import { planSeed } from "@/lib/derive/intake";
 
 type Result = { error?: string; success?: boolean };
 
-const animalSchema = z.object({
-  naturalKey: z.string().trim().min(1, "Animal ID is required."),
+const intakeSchema = z.object({
+  cohort: z.enum([
+    "lactating",
+    "dry",
+    "bred_heifer",
+    "open_heifer",
+    "calf",
+  ]),
+  animalId: z.string().trim().min(1, "Animal ID is required."),
   name: z.string().trim().optional(),
+  breed: z.string().trim().optional(),
   birthDate: z.string().trim().optional(),
-  baseLactation: z.coerce.number().int().min(0).optional(),
+  lactation: z.coerce.number().int().min(0),
+  freshDate: z.string().trim().optional(),
+  lastBredDate: z.string().trim().optional(),
+  serviceSire: z.string().trim().optional(),
+  dueDate: z.string().trim().optional(),
+  dryOffDate: z.string().trim().optional(),
+  pen: z.string().trim().optional(),
+  eid: z.string().trim().optional(),
+  damId: z.string().trim().optional(),
+  sireId: z.string().trim().optional(),
+  registration: z.string().trim().optional(),
+  entryReason: z.string().trim().optional(),
+  entryDate: z.string().trim().min(1, "Entry date is required."),
 });
 
 const eventSchema = z.object({
@@ -22,32 +43,54 @@ const eventSchema = z.object({
   remark: z.string().trim().optional(),
 });
 
-export async function createAnimal(
-  input: z.infer<typeof animalSchema>,
+export async function createAnimalIntake(
+  input: z.infer<typeof intakeSchema>,
 ): Promise<Result> {
   const user = await requireAnyRole(["super_admin", "admin"]);
   const orgId = getOrganizationIdFromUser(user);
   if (!orgId) return { error: "No organization on this account." };
 
-  const parsed = animalSchema.safeParse(input);
+  const parsed = intakeSchema.safeParse(input);
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
-  const { naturalKey, name, birthDate, baseLactation } = parsed.data;
 
-  const attrs: Record<string, unknown> = {};
-  if (birthDate) attrs.birth_date = birthDate;
-  if (typeof baseLactation === "number") attrs.base_lactation = baseLactation;
+  const { name, ...snap } = parsed.data;
+  const plan = planSeed(snap);
+  if (plan.problems.length) return { error: plan.problems[0] };
 
   const admin = createAdminClient();
-  const { error } = await admin.from("subjects").insert({
-    organization_id: orgId,
-    subject_type: "animal",
-    natural_key: naturalKey,
-    name: name || null,
-    attrs,
-    created_by: user.id,
-  });
-  if (error) return { error: error.message };
+  const { data: subject, error: sErr } = await admin
+    .from("subjects")
+    .insert({
+      organization_id: orgId,
+      subject_type: "animal",
+      natural_key: snap.animalId,
+      name: name || null,
+      attrs: plan.attrs,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+  if (sErr) {
+    if (sErr.code === "23505")
+      return { error: `Animal ${snap.animalId} already exists.` };
+    return { error: sErr.message };
+  }
+
+  if (plan.events.length) {
+    const { error: eErr } = await admin.from("events").insert(
+      plan.events.map((e) => ({
+        organization_id: orgId,
+        subject_id: subject.id,
+        event_code: e.code,
+        event_date: e.date,
+        payload: e.payload ?? {},
+        source: "user",
+        created_by: user.id,
+      })),
+    );
+    if (eErr) return { error: eErr.message };
+  }
 
   revalidatePath(PathRecords);
   return { success: true };
