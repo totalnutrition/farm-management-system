@@ -11,8 +11,9 @@ export default async function ImportPage() {
       <header>
         <h1 className="font-heading text-lg font-medium">Bulk Import</h1>
         <p className="text-xs text-muted-foreground">
-          Onboard a herd or load milkings from CSV. Download a template,
-          fill it, paste it back.
+          Onboard a herd or load milkings from CSV. Upload a file (or
+          paste) — columns are verified and previewed before anything
+          is written.
         </p>
       </header>
       <ImportClient />

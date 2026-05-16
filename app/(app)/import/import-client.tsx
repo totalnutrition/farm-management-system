@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { parseCsv } from "@/lib/csv-parse";
 import {
   importAnimals,
   importMilkings,
@@ -37,17 +38,66 @@ function Panel({
   templateName,
   run,
   guide,
+  required,
 }: {
   title: string;
   template: string;
   templateName: string;
   run: (csv: string) => Promise<ImportResult>;
   guide: { col: string; req?: string; note: string }[];
+  required: string[];
 }) {
   const router = useRouter();
   const [csv, setCsv] = useState("");
+  const [fileName, setFileName] = useState<string | null>(null);
   const [res, setRes] = useState<ImportResult | null>(null);
   const [pending, start] = useTransition();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const known = useMemo(
+    () => template.split(/\r?\n/)[0].split(",").map((c) => c.trim()),
+    [template],
+  );
+
+  // Client-side dry-run: parse + check column linkages before any
+  // write. The server still re-validates every row (defence in depth).
+  const check = useMemo(() => {
+    const text = csv.trim();
+    if (!text) return null;
+    try {
+      const { headers, rows } = parseCsv(text);
+      const missing = required.filter((r) => !headers.includes(r));
+      const unknown = headers.filter((h) => h && !known.includes(h));
+      const recognized = headers.filter((h) => known.includes(h));
+      return {
+        ok: rows.length > 0 && missing.length === 0,
+        rows,
+        headers,
+        missing,
+        unknown,
+        recognized,
+      };
+    } catch {
+      return { ok: false, parseError: true } as const;
+    }
+  }, [csv, known, required]);
+
+  const reset = () => {
+    setCsv("");
+    setFileName(null);
+    setRes(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const onFile = async (f: File | undefined) => {
+    if (!f) return;
+    setRes(null);
+    setCsv((await f.text()).trim());
+    setFileName(f.name);
+  };
+
+  const preview =
+    check && !("parseError" in check) ? check.rows.slice(0, 5) : [];
 
   return (
     <Card>
@@ -87,15 +137,116 @@ function Panel({
             </table>
           </div>
         </details>
-        <Textarea
-          className="h-40 font-mono text-xs"
-          placeholder="Paste CSV here…"
-          value={csv}
-          onChange={(e) => setCsv(e.target.value)}
-        />
+
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(e) => onFile(e.target.files?.[0])}
+            className="block text-xs file:mr-2 file:rounded file:border file:border-input file:bg-muted file:px-2 file:py-1 file:text-xs hover:file:bg-muted/70"
+          />
+          {fileName && (
+            <span className="text-xs text-muted-foreground">
+              {fileName} · {check && !("parseError" in check)
+                ? `${check.rows.length} row(s)`
+                : ""}
+              <button
+                type="button"
+                onClick={reset}
+                className="ml-2 underline-offset-2 hover:underline"
+              >
+                clear
+              </button>
+            </span>
+          )}
+        </div>
+
+        {!fileName && (
+          <Textarea
+            className="h-40 font-mono text-xs"
+            placeholder="…or paste CSV here"
+            value={csv}
+            onChange={(e) => setCsv(e.target.value)}
+          />
+        )}
+
+        {check && "parseError" in check && (
+          <p className="text-xs text-destructive">
+            Could not parse this file as CSV. Make sure it&apos;s a
+            comma-separated export (Save As → CSV).
+          </p>
+        )}
+
+        {check && !("parseError" in check) && (
+          <div className="space-y-2 rounded border bg-muted/20 p-3 text-xs">
+            <p className="font-medium">
+              Verify before import — {check.rows.length} row(s)
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {check.recognized.map((c) => (
+                <span
+                  key={c}
+                  className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-mono text-emerald-600 dark:text-emerald-400"
+                >
+                  {c}
+                </span>
+              ))}
+              {check.unknown.map((c) => (
+                <span
+                  key={c}
+                  className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-amber-600 dark:text-amber-400"
+                  title="Not a template column — this column will be ignored"
+                >
+                  {c} (ignored)
+                </span>
+              ))}
+            </div>
+            {check.missing.length > 0 && (
+              <p className="text-destructive">
+                Missing required column(s):{" "}
+                <span className="font-mono">
+                  {check.missing.join(", ")}
+                </span>
+              </p>
+            )}
+            {preview.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="text-muted-foreground">
+                    <tr>
+                      {check.recognized.map((c) => (
+                        <th key={c} className="py-1 pr-3 text-left font-mono">
+                          {c}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.map((r, i) => (
+                      <tr key={i} className="border-t border-border/50">
+                        {check.recognized.map((c) => (
+                          <td key={c} className="py-1 pr-3">
+                            {r[c] || "—"}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {check.rows.length > preview.length && (
+                  <p className="mt-1 text-muted-foreground">
+                    …and {check.rows.length - preview.length} more row(s)
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         <Button
           size="sm"
-          disabled={pending || !csv.trim()}
+          disabled={pending || !check || !check.ok}
           onClick={() =>
             start(async () => {
               const r = await run(csv);
@@ -108,7 +259,11 @@ function Panel({
             })
           }
         >
-          {pending ? "Importing…" : "Import"}
+          {pending
+            ? "Importing…"
+            : check && check.ok
+              ? `Confirm & import ${check.rows.length} row(s)`
+              : "Import"}
         </Button>
         {res && (
           <div className="text-xs">
@@ -192,6 +347,7 @@ export function ImportClient() {
         templateName="animals-template.csv"
         run={importAnimals}
         guide={ANIMAL_GUIDE}
+        required={["cohort", "animalId", "lactation", "entryDate"]}
       />
       <Panel
         title="Milkings"
@@ -199,6 +355,7 @@ export function ImportClient() {
         templateName="milk-template.csv"
         run={importMilkings}
         guide={MILK_GUIDE}
+        required={["animalId", "date", "yield"]}
       />
     </div>
   );
