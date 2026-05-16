@@ -41,6 +41,7 @@ import {
   type ConditionValue,
 } from "@/components/condition-builder";
 import { runQueryAction, type QueryResponse } from "./actions";
+import { toCsv } from "@/lib/csv";
 import { saveView } from "../views/actions";
 import { toast } from "sonner";
 
@@ -57,6 +58,7 @@ export function QueryBuilder() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [showCmd, setShowCmd] = useState(false);
   const [result, setResult] = useState<QueryResponse | null>(null);
+  const [asOf, setAsOf] = useState("");
   const [viewName, setViewName] = useState("");
   const [pending, start] = useTransition();
   const [saving, startSave] = useTransition();
@@ -114,7 +116,7 @@ export function QueryBuilder() {
   const run = () =>
     start(async () => {
       if (!effective.ok) return void toast.error(effective.error);
-      setResult(await runQueryAction(effective.query));
+      setResult(await runQueryAction(effective.query, asOf || undefined));
     });
 
   return (
@@ -263,6 +265,16 @@ export function QueryBuilder() {
         <Button size="sm" onClick={run} disabled={pending}>
           {pending ? "Running…" : "Run"}
         </Button>
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          as of
+          <Input
+            className="h-8 w-36 text-xs"
+            type="date"
+            value={asOf}
+            onChange={(e) => setAsOf(e.target.value)}
+            title="Leave blank for today (time-travel: herd as of any date)"
+          />
+        </span>
         <Input
           className="h-8 w-48 text-xs"
           placeholder="save as view…"
@@ -295,27 +307,54 @@ export function QueryBuilder() {
   );
 }
 
+function downloadCsv(rows: Record<string, unknown>[]) {
+  const blob = new Blob([toCsv(rows)], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `query-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function CsvButton({ rows }: { rows: Record<string, unknown>[] }) {
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      className="mb-2"
+      onClick={() => downloadCsv(rows)}
+    >
+      Download CSV
+    </Button>
+  );
+}
+
 function Results({ result }: { result: QueryResponse }) {
   if ("error" in result)
     return <p className="text-sm text-destructive">Error: {result.error}</p>;
   if (result.kind === "count")
     return (
-      <Card>
-        <CardContent className="py-6">
-          <span className="font-heading text-3xl font-semibold">
-            {result.count}
-          </span>
-          <span className="ml-2 text-sm text-muted-foreground">
-            animal{result.count === 1 ? "" : "s"}
-          </span>
-        </CardContent>
-      </Card>
+      <div>
+        <CsvButton rows={[{ count: result.count }]} />
+        <Card>
+          <CardContent className="py-6">
+            <span className="font-heading text-3xl font-semibold">
+              {result.count}
+            </span>
+            <span className="ml-2 text-sm text-muted-foreground">
+              animal{result.count === 1 ? "" : "s"}
+            </span>
+          </CardContent>
+        </Card>
+      </div>
     );
   if (result.kind === "sum")
     return (
-      <Card>
-        <CardContent className="py-4">
-          <Table>
+      <div>
+        <CsvButton rows={[result.sum]} />
+        <Card>
+          <CardContent className="py-4">
+            <Table>
             <TableBody>
               {Object.entries(result.sum).map(([k, v]) => (
                 <TableRow key={k}>
@@ -325,8 +364,9 @@ function Results({ result }: { result: QueryResponse }) {
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     );
   if (result.rows.length === 0)
     return (
@@ -337,9 +377,11 @@ function Results({ result }: { result: QueryResponse }) {
     );
   const cols = Object.keys(result.rows[0]);
   return (
-    <Card>
-      <CardContent className="overflow-x-auto py-4">
-        <Table>
+    <div>
+      <CsvButton rows={result.rows} />
+      <Card>
+        <CardContent className="overflow-x-auto py-4">
+          <Table>
           <TableHeader>
             <TableRow>
               {cols.map((c) => (
@@ -356,8 +398,9 @@ function Results({ result }: { result: QueryResponse }) {
               </TableRow>
             ))}
           </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

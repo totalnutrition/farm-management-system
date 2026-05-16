@@ -10,6 +10,7 @@ export const PathPens = "/pens";
 export const PathMonitor = "/monitor";
 export const PathProtocols = "/protocols";
 export const PathFeed = "/feed";
+export const PathSettings = "/settings";
 
 export const RoleSuperAdmin = "super_admin";
 export const RoleAdmin = "admin";

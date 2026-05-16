@@ -25,7 +25,10 @@ function factsFromAttrs(attrs: unknown): IntakeFacts {
   };
 }
 
-export async function runQueryAction(q: Query): Promise<QueryResponse> {
+export async function runQueryAction(
+  q: Query,
+  asOf?: string,
+): Promise<QueryResponse> {
   const user = await requireUser();
   const orgId = getOrganizationIdFromUser(user);
   if (!orgId) return { error: "No organization on this account." };
@@ -71,7 +74,10 @@ export async function runQueryAction(q: Query): Promise<QueryResponse> {
     },
   }));
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today =
+    asOf && /^\d{4}-\d{2}-\d{2}$/.test(asOf)
+      ? asOf
+      : new Date().toISOString().slice(0, 10);
   const result = runQuery(q, population, { today });
 
   if (typeof result === "number") return { kind: "count", count: result };
