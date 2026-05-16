@@ -9,6 +9,7 @@ import {
   register,
   getFormula,
   provenanceReport,
+  runMachine,
   type Subject,
 } from "./engine.ts";
 
@@ -109,6 +110,47 @@ const GOLDEN: Golden[] = [
     subject: { events: [], facts: { dueDate: "2026-06-15" } },
     expect: { DUE: 30 },
   },
+  {
+    name: "ABORT with DCC>152 starts a new lactation (VAS branch)",
+    subject: {
+      events: [
+        { code: 1, date: "2025-01-01" },
+        { code: 12, date: "2025-09-01", payload: { dcc: 200 } },
+      ],
+    },
+    expect: { LACT: 2, RC: 3, RPRO: "OPEN" },
+  },
+  {
+    name: "ABORT with DCC<152 stays in the same lactation",
+    subject: {
+      events: [
+        { code: 1, date: "2025-01-01" },
+        { code: 12, date: "2025-04-01", payload: { dcc: 90 } },
+      ],
+    },
+    expect: { LACT: 1, RC: 3 },
+  },
+  {
+    name: "ABORT DCC derived from conception date when no payload",
+    subject: {
+      events: [
+        { code: 1, date: "2024-06-01" },
+        { code: 12, date: "2025-02-01" },
+      ],
+      facts: { conceptionDate: "2024-08-01" }, // 184 days carried → new lact
+    },
+    expect: { LACT: 2 },
+  },
+  {
+    name: "ABT? is dormant without a PREG event (no false positives)",
+    subject: {
+      events: [
+        { code: 1, date: "2026-01-01" },
+        { code: 5, date: "2026-03-01" },
+      ],
+    },
+    expect: { ABT: null, RPRO: "BRED" },
+  },
 ];
 
 for (const g of GOLDEN) {
@@ -117,6 +159,27 @@ for (const g of GOLDEN) {
     assert.deepEqual(got, g.expect);
   });
 }
+
+test("runMachine: state-machine cascade structure", () => {
+  // ABORT>152 → +1 lactation bonus, status OPEN, ABT cleared
+  const m = runMachine({
+    events: [
+      { code: 1, date: "2025-01-01" },
+      { code: 12, date: "2025-09-01", payload: { dcc: 200 } },
+    ],
+  });
+  assert.deepEqual(m, { rc: 3, lactBonus: 1, abt: false });
+
+  // normal lactation has no bonus and no ABT flag
+  const n = runMachine({
+    events: [
+      { code: 1, date: "2026-01-01" },
+      { code: 5, date: "2026-03-01" },
+      { code: 11, date: "2026-12-01" },
+    ],
+  });
+  assert.deepEqual(n, { rc: 6, lactBonus: 0, abt: false });
+});
 
 test("provenance is tagged on every formula", () => {
   const rep = provenanceReport();

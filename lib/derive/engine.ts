@@ -85,48 +85,67 @@ export function DDAT(s: Subject): string | null {
 }
 export function LACT(s: Subject): number {
   const base = s.facts?.baseLactation ?? 0;
-  return base + eventsByCode(s, EC.FRESH).length;
+  return (
+    base + eventsByCode(s, EC.FRESH).length + runMachine(s).lactBonus
+  );
 }
 
-// --- the reproductive-code state machine ----------------------------
-// Processes events chronologically applying source-confirmed
-// transitions (VAS Event Definitions). Branch nuances that are not
-// number/text-confirmed are tagged inferred.
-export type RcRule = {
-  code: number;
-  provenance: Provenance;
-  apply: (rc: number, s: Subject, e: Event) => number;
+// --- the reproductive state machine + DC cascades -------------------
+// One chronological pass producing the derived repro state plus the
+// documented DC branches/cascades. Source: VAS Event Definitions +
+// Vet Codes (ABT?). Branches not text-confirmed are tagged inferred.
+export type MachineState = {
+  rc: number; // reproductive code 0..8
+  lactBonus: number; // extra lactations from ABORT with DCC>152
+  abt: boolean; // ABT? vet flag (BRED entered while PREG)
 };
 
-export const RC_RULES: RcRule[] = [
-  { code: EC.FRESH, provenance: "confirmed", apply: () => 2 }, // → FRESH
-  {
-    code: EC.BRED,
-    provenance: "confirmed",
-    // BRED on a PREG animal does NOT demote her; vet flags ABT? (kept PREG)
-    apply: (rc) => (rc === 5 ? 5 : 4),
-  },
-  { code: EC.DRY, provenance: "confirmed", apply: () => 6 }, // → DRY
-  {
-    code: EC.ABORT,
-    provenance: "inferred",
-    // DCC>152 starts a new lactation (handled by LACT); status → OPEN
-    apply: () => 3,
-  },
-  { code: EC.DNB, provenance: "confirmed", apply: () => 1 }, // → DNB
-  { code: EC.DIED, provenance: "confirmed", apply: () => 7 }, // → SLD/DIE
-];
+// VAS Event Definitions: "If DCC > 152 days, a new lactation is started."
+const ABORT_NEW_LACTATION_DCC = 152;
 
-export function RC(s: Subject): number {
+function abortDcc(s: Subject, e: Event): number | null {
+  const p = e.payload as { dcc?: unknown } | undefined;
+  if (p && typeof p.dcc === "number") return p.dcc;
+  const c = s.facts?.conceptionDate;
+  return c ? daysBetween(e.date, c) : null;
+}
+
+export function runMachine(s: Subject): MachineState {
   const ordered = [...s.events].sort(
     (a, b) => toUTC(a.date) - toUTC(b.date),
   );
-  let rc = 0; // virgin/no status
+  const st: MachineState = { rc: 0, lactBonus: 0, abt: false };
   for (const e of ordered) {
-    const rule = RC_RULES.find((r) => r.code === e.code);
-    if (rule) rc = rule.apply(rc, s, e);
+    if (e.code === EC.FRESH) {
+      st.rc = 2; // FRESH
+      st.abt = false;
+    } else if (e.code === EC.BRED) {
+      // BRED on a PREG animal does NOT demote her; raises ABT?
+      if (st.rc === 5) st.abt = true;
+      else {
+        st.rc = 4; // BRED
+        st.abt = false;
+      }
+    } else if (e.code === EC.DRY) {
+      st.rc = 6; // DRY
+    } else if (e.code === EC.ABORT) {
+      const dcc = abortDcc(s, e);
+      if (dcc !== null && dcc > ABORT_NEW_LACTATION_DCC) {
+        st.lactBonus += 1; // DCC>152 → new lactation
+      }
+      st.rc = 3; // → OPEN
+      st.abt = false;
+    } else if (e.code === EC.DNB) {
+      st.rc = 1; // DNB
+    } else if (e.code === EC.DIED) {
+      st.rc = 7; // SLD/DIE (terminal)
+    }
   }
-  return rc;
+  return st;
+}
+
+export function RC(s: Subject): number {
+  return runMachine(s).rc;
 }
 
 const RPRO_TEXT: Record<number, string> = {
@@ -181,6 +200,12 @@ register({
   item: "RPRO",
   provenance: "confirmed",
   compute: (s) => RPRO_TEXT[RC(s)] ?? null,
+});
+register({
+  item: "ABT",
+  provenance: "confirmed",
+  note: "BRED entered while PREG keeps her PREG and raises the ABT? vet flag (VAS Vet Codes)",
+  compute: (s) => (runMachine(s).abt ? "ABT?" : null),
 });
 register({
   item: "DIM",

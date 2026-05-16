@@ -3,9 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -149,36 +147,29 @@ export function QueryBuilder() {
     start(async () => setResult(await runQueryAction(query)));
 
   return (
-    <div className="space-y-5">
-      {/* verb */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Label className="text-xs text-muted-foreground">I want to</Label>
-        <Select value={verb} onValueChange={(v) => setVerb(v as Verb)}>
-          <SelectTrigger className="w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="LIST">Show a list</SelectItem>
-            <SelectItem value="COUNT">Count</SelectItem>
-            <SelectItem value="SUM">Summarize (averages)</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+    <div className="space-y-3">
+      <div className="rounded-md border text-sm">
+        {/* line 1: verb + columns + sort — one dense row */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-b px-3 py-2">
+          <Select value={verb} onValueChange={(v) => setVerb(v as Verb)}>
+            <SelectTrigger className="h-7 w-[120px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="LIST">Show</SelectItem>
+              <SelectItem value="COUNT">Count</SelectItem>
+              <SelectItem value="SUM">Summarize</SelectItem>
+            </SelectContent>
+          </Select>
 
-      {/* columns */}
-      {verb !== "COUNT" && (
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">
-            {verb === "SUM" ? "Average these" : "Showing these columns"}
-          </Label>
-          <div className="flex flex-wrap gap-2">
-            {ITEMS.map((i) => (
+          {verb !== "COUNT" &&
+            ITEMS.map((i) => (
               <button
                 key={i.value}
                 type="button"
                 onClick={() => toggleCol(i.value)}
                 className={
-                  "rounded-full border px-3 py-1 text-xs transition-colors " +
+                  "rounded-full border px-2 py-0.5 text-[11px] leading-tight transition-colors " +
                   (columns.includes(i.value)
                     ? "border-foreground bg-foreground text-background"
                     : "border-border text-muted-foreground hover:bg-muted")
@@ -187,43 +178,18 @@ export function QueryBuilder() {
                 {i.label}
               </button>
             ))}
-          </div>
-        </div>
-      )}
 
-      <Separator />
-
-      {/* conditions */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <Label className="text-xs text-muted-foreground">
-            Only animals where…
-          </Label>
-          {conds.length > 1 && (
-            <button
-              type="button"
-              onClick={() => setMatchAny((m) => !m)}
-              className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-            >
-              match {matchAny ? "ANY" : "ALL"} of these
-            </button>
-          )}
-        </div>
-
-        {conds.map((c, idx) => (
-          <div key={idx} className="flex flex-wrap items-center gap-2">
+          <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+            sort
             <Select
-              value={c.item}
-              onValueChange={(v) =>
-                setConds((cs) =>
-                  cs.map((x, i) => (i === idx ? { ...x, item: v } : x)),
-                )
-              }
+              value={sortItem || "none"}
+              onValueChange={(v) => setSortItem(v === "none" ? "" : v)}
             >
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="field" />
+              <SelectTrigger className="h-7 w-[140px] text-xs">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="none">Animal ID</SelectItem>
                 {ITEMS.map((i) => (
                   <SelectItem key={i.value} value={i.value}>
                     {i.label}
@@ -232,143 +198,160 @@ export function QueryBuilder() {
               </SelectContent>
             </Select>
             <Select
-              value={c.op}
-              onValueChange={(v) =>
-                setConds((cs) =>
-                  cs.map((x, i) => (i === idx ? { ...x, op: v } : x)),
-                )
-              }
+              value={sortDir}
+              onValueChange={(v) => setSortDir(v as "asc" | "desc")}
             >
-              <SelectTrigger className="w-36">
-                <SelectValue placeholder="is" />
+              <SelectTrigger className="h-7 w-[120px] text-xs">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {OPS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
+                <SelectItem value="asc">lowest first</SelectItem>
+                <SelectItem value="desc">highest first</SelectItem>
               </SelectContent>
             </Select>
-            <Input
-              className="w-28"
-              placeholder="value"
-              value={c.value}
-              onChange={(e) =>
-                setConds((cs) =>
-                  cs.map((x, i) =>
-                    i === idx ? { ...x, value: e.target.value } : x,
-                  ),
-                )
-              }
-            />
-            {c.op === "between" && (
+          </span>
+        </div>
+
+        {/* line 2: conditions — compact inline rows */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2">
+          <span className="text-xs text-muted-foreground">where</span>
+          {conds.length === 0 && (
+            <span className="text-xs text-muted-foreground/70">
+              (all animals)
+            </span>
+          )}
+          {conds.map((c, idx) => (
+            <div key={idx} className="flex items-center gap-1">
+              {idx > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setMatchAny((m) => !m)}
+                  className="px-1 text-[11px] font-medium text-muted-foreground hover:underline"
+                >
+                  {matchAny ? "or" : "and"}
+                </button>
+              )}
+              <Select
+                value={c.item}
+                onValueChange={(v) =>
+                  setConds((cs) =>
+                    cs.map((x, i) => (i === idx ? { ...x, item: v } : x)),
+                  )
+                }
+              >
+                <SelectTrigger className="h-7 w-[150px] text-xs">
+                  <SelectValue placeholder="field" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ITEMS.map((i) => (
+                    <SelectItem key={i.value} value={i.value}>
+                      {i.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={c.op}
+                onValueChange={(v) =>
+                  setConds((cs) =>
+                    cs.map((x, i) => (i === idx ? { ...x, op: v } : x)),
+                  )
+                }
+              >
+                <SelectTrigger className="h-7 w-[110px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {OPS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Input
-                className="w-28"
-                placeholder="and"
-                value={c.value2}
+                className="h-7 w-20 text-xs"
+                placeholder="value"
+                value={c.value}
                 onChange={(e) =>
                   setConds((cs) =>
                     cs.map((x, i) =>
-                      i === idx ? { ...x, value2: e.target.value } : x,
+                      i === idx ? { ...x, value: e.target.value } : x,
                     ),
                   )
                 }
               />
-            )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                setConds((cs) => cs.filter((_, i) => i !== idx))
-              }
-            >
-              Remove
-            </Button>
-          </div>
-        ))}
-
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            setConds((cs) => [
-              ...cs,
-              { item: "", op: "=", value: "", value2: "" },
-            ])
-          }
-        >
-          + Add condition
-        </Button>
-      </div>
-
-      <Separator />
-
-      {/* sort */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Label className="text-xs text-muted-foreground">Sort by</Label>
-        <Select
-          value={sortItem || "none"}
-          onValueChange={(v) => setSortItem(v === "none" ? "" : v)}
-        >
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Animal ID (default)</SelectItem>
-            {ITEMS.map((i) => (
-              <SelectItem key={i.value} value={i.value}>
-                {i.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={sortDir}
-          onValueChange={(v) => setSortDir(v as "asc" | "desc")}
-        >
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="asc">lowest first</SelectItem>
-            <SelectItem value="desc">highest first</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* sentence + command */}
-      <Card>
-        <CardContent className="space-y-2 py-4">
-          <p className="text-sm">{sentence}</p>
+              {c.op === "between" && (
+                <Input
+                  className="h-7 w-20 text-xs"
+                  placeholder="and"
+                  value={c.value2}
+                  onChange={(e) =>
+                    setConds((cs) =>
+                      cs.map((x, i) =>
+                        i === idx ? { ...x, value2: e.target.value } : x,
+                      ),
+                    )
+                  }
+                />
+              )}
+              <button
+                type="button"
+                aria-label="remove condition"
+                onClick={() =>
+                  setConds((cs) => cs.filter((_, i) => i !== idx))
+                }
+                className="px-1 text-muted-foreground hover:text-destructive"
+              >
+                ×
+              </button>
+            </div>
+          ))}
           <button
             type="button"
-            onClick={() => setShowCmd((s) => !s)}
-            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+            onClick={() =>
+              setConds((cs) => [
+                ...cs,
+                { item: "", op: "=", value: "", value2: "" },
+              ])
+            }
+            className="rounded border border-dashed px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
           >
-            {showCmd ? "Hide command" : "Show as command"}
+            + condition
           </button>
-          {showCmd && (
-            <pre className="overflow-x-auto rounded bg-muted px-3 py-2 font-mono text-xs">
-              {serializeCommand(query)}
-            </pre>
-          )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
+      {/* slim sentence + inline command */}
+      <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+        <span>{sentence}</span>
+        <button
+          type="button"
+          onClick={() => setShowCmd((s) => !s)}
+          className="underline-offset-2 hover:underline"
+        >
+          · {showCmd ? "hide command" : "command"}
+        </button>
+        {showCmd && (
+          <code className="rounded bg-muted px-2 py-0.5 font-mono text-foreground">
+            {serializeCommand(query)}
+          </code>
+        )}
+      </div>
+
+      {/* actions row */}
       <div className="flex flex-wrap items-center gap-2">
-        <Button onClick={run} disabled={pending}>
+        <Button size="sm" onClick={run} disabled={pending}>
           {pending ? "Running…" : "Run"}
         </Button>
         <Input
-          className="w-52"
-          placeholder="Name to save as view"
+          className="h-8 w-48 text-xs"
+          placeholder="save as view…"
           value={viewName}
           onChange={(e) => setViewName(e.target.value)}
         />
         <Button
+          size="sm"
           variant="outline"
           disabled={saving || !viewName.trim()}
           onClick={() =>
@@ -386,7 +369,7 @@ export function QueryBuilder() {
             })
           }
         >
-          {saving ? "Saving…" : "Save as view"}
+          {saving ? "Saving…" : "Save"}
         </Button>
       </div>
 
