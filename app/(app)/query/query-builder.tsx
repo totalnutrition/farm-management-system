@@ -26,6 +26,14 @@ import {
   type Atom,
   type CmpOp,
 } from "@/lib/derive/query";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { runQueryAction, type QueryResponse } from "./actions";
 import { saveView } from "../views/actions";
 import { toast } from "sonner";
@@ -161,22 +169,43 @@ export function QueryBuilder() {
           </SelectContent>
         </Select>
 
-        {verb !== "COUNT" &&
-          ITEMS.map((i) => (
-            <button
-              key={i.value}
-              type="button"
-              onClick={() => toggleCol(i.value)}
-              className={
-                "rounded-full border px-2 py-0.5 text-[11px] leading-tight transition-colors " +
-                (columns.includes(i.value)
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border text-muted-foreground hover:bg-muted")
-              }
+        {verb !== "COUNT" && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs font-normal"
+              >
+                {columns.length
+                  ? `${verb === "SUM" ? "Averaging" : "Columns"} · ${columns.length}`
+                  : verb === "SUM"
+                    ? "Pick columns"
+                    : "Columns"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="max-h-72 overflow-y-auto"
             >
-              {i.label}
-            </button>
-          ))}
+              <DropdownMenuLabel className="text-xs">
+                {verb === "SUM" ? "Average these" : "Columns to show"}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {ITEMS.map((i) => (
+                <DropdownMenuCheckboxItem
+                  key={i.value}
+                  checked={columns.includes(i.value)}
+                  onCheckedChange={() => toggleCol(i.value)}
+                  onSelect={(e) => e.preventDefault()}
+                  className="text-xs"
+                >
+                  {i.label}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
 
         <span className="text-xs text-muted-foreground">where</span>
         {conds.length === 0 && (
