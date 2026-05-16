@@ -3,6 +3,8 @@ export const PathLogin = "/login";
 export const PathAdminUsers = "/admin/users";
 export const PathAdminOrganizations = "/admin/organizations";
 export const PathQuery = "/query";
+export const PathRecords = "/records";
+export const PathViews = "/views";
 
 export const RoleSuperAdmin = "super_admin";
 export const RoleAdmin = "admin";

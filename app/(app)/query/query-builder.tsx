@@ -29,6 +29,8 @@ import {
   type CmpOp,
 } from "@/lib/derive/query";
 import { runQueryAction, type QueryResponse } from "./actions";
+import { saveView } from "../views/actions";
+import { toast } from "sonner";
 
 // Only items the engine can actually compute are offered (no dead ends).
 const ITEMS: { value: string; label: string }[] = [
@@ -75,7 +77,9 @@ export function QueryBuilder() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [showCmd, setShowCmd] = useState(false);
   const [result, setResult] = useState<QueryResponse | null>(null);
+  const [viewName, setViewName] = useState("");
   const [pending, start] = useTransition();
+  const [saving, startSave] = useTransition();
 
   const query: Query = useMemo(() => {
     const toAtom = (c: Cond): Atom => {
@@ -354,9 +358,37 @@ export function QueryBuilder() {
         </CardContent>
       </Card>
 
-      <Button onClick={run} disabled={pending}>
-        {pending ? "Running…" : "Run"}
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button onClick={run} disabled={pending}>
+          {pending ? "Running…" : "Run"}
+        </Button>
+        <Input
+          className="w-52"
+          placeholder="Name to save as view"
+          value={viewName}
+          onChange={(e) => setViewName(e.target.value)}
+        />
+        <Button
+          variant="outline"
+          disabled={saving || !viewName.trim()}
+          onClick={() =>
+            startSave(async () => {
+              const res = await saveView({
+                name: viewName.trim(),
+                query,
+              });
+              if (res.error) {
+                toast.error(res.error);
+                return;
+              }
+              toast.success(`Saved view “${viewName.trim()}”.`);
+              setViewName("");
+            })
+          }
+        >
+          {saving ? "Saving…" : "Save as view"}
+        </Button>
+      </div>
 
       {result && <Results result={result} />}
     </div>

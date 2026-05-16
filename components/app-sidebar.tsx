@@ -7,8 +7,8 @@ import { useTheme } from "next-themes"
 import { FarmInsightLogo } from "./farminsight-logo"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { logout } from "@/app/logout/actions"
-import { PathAdminOrganizations, PathAdminUsers, PathHome, PathQuery, RoleAdmin, RoleSuperAdmin } from "@/lib/misc"
-import { Building03Icon, Moon02Icon, Search01Icon, Sun, User, UserGroupIcon } from "@hugeicons/core-free-icons"
+import { PathAdminOrganizations, PathAdminUsers, PathHome, PathQuery, PathRecords, PathViews, RoleAdmin, RoleSuperAdmin } from "@/lib/misc"
+import { Building03Icon, ClipboardIcon, Moon02Icon, Search01Icon, Sun, User, UserGroupIcon, ViewIcon } from "@hugeicons/core-free-icons"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu"
 
@@ -23,9 +23,21 @@ const MENU = [
     label: "Herd",
     links: [
       {
+        name: "Records",
+        icon: ClipboardIcon,
+        link: PathRecords,
+        roles: [RoleSuperAdmin, RoleAdmin]
+      },
+      {
         name: "Query",
         icon: Search01Icon,
         link: PathQuery,
+        roles: [RoleSuperAdmin, RoleAdmin]
+      },
+      {
+        name: "Views",
+        icon: ViewIcon,
+        link: PathViews,
         roles: [RoleSuperAdmin, RoleAdmin]
       }
     ],
