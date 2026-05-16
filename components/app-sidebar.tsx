@@ -7,8 +7,8 @@ import { useTheme } from "next-themes"
 import { FarmInsightLogo } from "./farminsight-logo"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { logout } from "@/app/logout/actions"
-import { PathAdminOrganizations, PathAdminUsers, PathHome, PathQuery, PathRecords, PathViews, PathGrouping, PathPens, PathMonitor, PathProtocols, PathFeed, PathSettings, RoleAdmin, RoleSuperAdmin } from "@/lib/misc"
-import { Analytics01Icon, Building03Icon, Calendar03Icon, ClipboardIcon, DistributionIcon, Layers01Icon, Moon02Icon, Search01Icon, Settings01Icon, Sun, User, UserGroupIcon, ViewIcon, WheatIcon } from "@hugeicons/core-free-icons"
+import { PathAdminOrganizations, PathAdminUsers, PathHome, PathQuery, PathRecords, PathViews, PathGrouping, PathPens, PathMonitor, PathProtocols, PathFeed, PathSettings, PathAudit, RoleAdmin, RoleSuperAdmin } from "@/lib/misc"
+import { Analytics01Icon, Building03Icon, Calendar03Icon, ClipboardIcon, DistributionIcon, Layers01Icon, Moon02Icon, Search01Icon, Settings01Icon, Sun, Time01Icon, User, UserGroupIcon, ViewIcon, WheatIcon } from "@hugeicons/core-free-icons"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu"
 
@@ -92,6 +92,12 @@ const MENU = [
         name: "Settings",
         icon: Settings01Icon,
         link: PathSettings,
+        roles: [RoleSuperAdmin, RoleAdmin]
+      },
+      {
+        name: "Audit Log",
+        icon: Time01Icon,
+        link: PathAudit,
         roles: [RoleSuperAdmin, RoleAdmin]
       }
     ],
