@@ -7,7 +7,7 @@ import { useTheme } from "next-themes"
 import { FarmInsightLogo } from "./farminsight-logo"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { logout } from "@/app/logout/actions"
-import { PathAdminOrganizations, PathAdminUsers, PathHome, PathQuery, PathRecords, PathViews, PathGrouping, PathPens, PathMonitor, PathProtocols, PathFeed, PathSettings, PathAudit, PathSharing, PathExtended, PathImport, PathHealth, PathBarns, PathSires, RolesAll, RolesAdmin } from "@/lib/misc"
+import { PathAdminOrganizations, PathAdminUsers, PathHome, PathQuery, PathRecords, PathViews, PathGrouping, PathPens, PathMonitor, PathProtocols, PathFeed, PathSettings, PathAudit, PathSharing, PathExtended, PathImport, PathHealth, PathBarns, PathSires, PathActivity, RolesAll, RolesAdmin } from "@/lib/misc"
 import { Analytics01Icon, Building03Icon, Calendar03Icon, ClipboardIcon, Dna01Icon, DistributionIcon, FileImportIcon, FirstAidKitIcon, Home03Icon, Layers01Icon, Moon02Icon, Search01Icon, Settings01Icon, Sun, Time01Icon, User, UserGroupIcon, ViewIcon, WheatIcon } from "@hugeicons/core-free-icons"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu"
@@ -28,6 +28,7 @@ const MENU = [
       { name: "Pens", icon: Layers01Icon, link: PathPens, roles: RolesAll },
       { name: "Sires & Semen", icon: Dna01Icon, link: PathSires, roles: RolesAll },
       { name: "Grouping", icon: DistributionIcon, link: PathGrouping, roles: RolesAll },
+      { name: "Activity", icon: ClipboardIcon, link: PathActivity, roles: RolesAll },
       { name: "Health", icon: FirstAidKitIcon, link: PathHealth, roles: RolesAll },
       { name: "Protocols", icon: Calendar03Icon, link: PathProtocols, roles: RolesAll },
       { name: "Feed", icon: WheatIcon, link: PathFeed, roles: RolesAll },

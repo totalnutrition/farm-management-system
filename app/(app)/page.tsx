@@ -17,7 +17,7 @@ import {
 } from "@/lib/derive/protocols";
 import { evaluateKpi, type Kpi } from "@/lib/derive/monitor";
 import type { Predicate, PopulationMember } from "@/lib/derive/query";
-import { PathGrouping, PathProtocols, PathMonitor, PathHealth } from "@/lib/misc";
+import { PathGrouping, PathProtocols, PathMonitor, PathHealth, PathActivity } from "@/lib/misc";
 
 export const dynamic = "force-dynamic";
 
@@ -103,6 +103,9 @@ export default async function Home() {
   const dnship = members.filter(
     (m) => deriveItem("DNSHIP", m.subject, { today }) === "YES",
   );
+  const attn = members.filter(
+    (m) => deriveItem("FLAGGED", m.subject, { today }) === "YES",
+  );
   const alerts = (kpis ?? [])
     .map((k) =>
       evaluateKpi(
@@ -126,6 +129,7 @@ export default async function Home() {
     { label: "Pen moves", n: worklist.length, href: PathGrouping, items: worklist.slice(0, 6).map((w) => `${w.id}: ${w.from ?? "—"} → ${w.to}${w.overCapacity ? " (over cap)" : ""}`) },
     { label: "KPI alerts", n: alerts.length, href: PathMonitor, items: alerts.slice(0, 6).map((a) => `${a.name}: ${a.value ?? "—"} vs ${a.goal} [${a.status}]`) },
     { label: "Do-not-ship", n: dnship.length, href: PathHealth, items: dnship.slice(0, 6).map((m) => `${m.id}: milk until ${deriveItem("MWHOLD", m.subject, { today }) ?? "—"}`) },
+    { label: "Needs attention", n: attn.length, href: PathActivity, items: attn.slice(0, 6).map((m) => `${m.id}: ${deriveItem("ATTN", m.subject, { today }) ?? "—"}`) },
   ];
 
   return (

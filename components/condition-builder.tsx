@@ -41,6 +41,8 @@ export const ITEMS: { value: string; label: string }[] = [
   { value: "DNSELL", label: "Do-not-sell meat (YES/no)" },
   { value: "MWHOLD", label: "Milk withhold until" },
   { value: "LTDAT", label: "Last treatment date" },
+  { value: "FLAGGED", label: "Flagged (YES/no)" },
+  { value: "ATTN", label: "Flagged for" },
 ];
 export const labelOf = (v: string) =>
   ITEMS.find((i) => i.value === v)?.label ?? v;

@@ -5,3 +5,4 @@
 import "./feed.ts";
 import "./production.ts";
 import "./health.ts";
+import "./flags.ts";

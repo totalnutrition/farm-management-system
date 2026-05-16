@@ -18,6 +18,7 @@ export const PathImport = "/import";
 export const PathHealth = "/health";
 export const PathBarns = "/barns";
 export const PathSires = "/sires";
+export const PathActivity = "/activity";
 
 export const RoleSuperAdmin = "super_admin";
 export const RoleAdmin = "admin";
