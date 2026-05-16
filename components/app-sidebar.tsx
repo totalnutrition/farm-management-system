@@ -7,7 +7,7 @@ import { useTheme } from "next-themes"
 import { FarmInsightLogo } from "./farminsight-logo"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { logout } from "@/app/logout/actions"
-import { PathAdminOrganizations, PathAdminUsers, PathHome, PathQuery, PathRecords, PathViews, PathGrouping, PathPens, PathMonitor, PathProtocols, PathFeed, PathSettings, PathAudit, RoleAdmin, RoleSuperAdmin } from "@/lib/misc"
+import { PathAdminOrganizations, PathAdminUsers, PathHome, PathQuery, PathRecords, PathViews, PathGrouping, PathPens, PathMonitor, PathProtocols, PathFeed, PathSettings, PathAudit, PathSharing, RolesAll, RolesAdmin } from "@/lib/misc"
 import { Analytics01Icon, Building03Icon, Calendar03Icon, ClipboardIcon, DistributionIcon, Layers01Icon, Moon02Icon, Search01Icon, Settings01Icon, Sun, Time01Icon, User, UserGroupIcon, ViewIcon, WheatIcon } from "@hugeicons/core-free-icons"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu"
@@ -22,86 +22,27 @@ const MENU = [
   {
     label: "Herd",
     links: [
-      {
-        name: "Records",
-        icon: ClipboardIcon,
-        link: PathRecords,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      },
-      {
-        name: "Query",
-        icon: Search01Icon,
-        link: PathQuery,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      },
-      {
-        name: "Pens",
-        icon: Layers01Icon,
-        link: PathPens,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      },
-      {
-        name: "Grouping",
-        icon: DistributionIcon,
-        link: PathGrouping,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      },
-      {
-        name: "Protocols",
-        icon: Calendar03Icon,
-        link: PathProtocols,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      },
-      {
-        name: "Feed",
-        icon: WheatIcon,
-        link: PathFeed,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      },
-      {
-        name: "Monitor",
-        icon: Analytics01Icon,
-        link: PathMonitor,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      },
-      {
-        name: "Views",
-        icon: ViewIcon,
-        link: PathViews,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      }
+      { name: "Records", icon: ClipboardIcon, link: PathRecords, roles: RolesAll },
+      { name: "Query", icon: Search01Icon, link: PathQuery, roles: RolesAll },
+      { name: "Pens", icon: Layers01Icon, link: PathPens, roles: RolesAll },
+      { name: "Grouping", icon: DistributionIcon, link: PathGrouping, roles: RolesAll },
+      { name: "Protocols", icon: Calendar03Icon, link: PathProtocols, roles: RolesAll },
+      { name: "Feed", icon: WheatIcon, link: PathFeed, roles: RolesAll },
+      { name: "Monitor", icon: Analytics01Icon, link: PathMonitor, roles: RolesAll },
+      { name: "Views", icon: ViewIcon, link: PathViews, roles: RolesAll }
     ],
-    roles: [RoleSuperAdmin, RoleAdmin]
+    roles: RolesAll
   },
   {
     label: "Administration",
     links: [
-      {
-        name: "User Management",
-        icon: UserGroupIcon,
-        link: PathAdminUsers,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      },
-      {
-        name: "Organizations",
-        icon: Building03Icon,
-        link: PathAdminOrganizations,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      },
-      {
-        name: "Settings",
-        icon: Settings01Icon,
-        link: PathSettings,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      },
-      {
-        name: "Audit Log",
-        icon: Time01Icon,
-        link: PathAudit,
-        roles: [RoleSuperAdmin, RoleAdmin]
-      }
+      { name: "User Management", icon: UserGroupIcon, link: PathAdminUsers, roles: RolesAdmin },
+      { name: "Organizations", icon: Building03Icon, link: PathAdminOrganizations, roles: RolesAdmin },
+      { name: "External Access", icon: UserGroupIcon, link: PathSharing, roles: RolesAdmin },
+      { name: "Settings", icon: Settings01Icon, link: PathSettings, roles: RolesAdmin },
+      { name: "Audit Log", icon: Time01Icon, link: PathAudit, roles: RolesAdmin }
     ],
-    roles: [RoleSuperAdmin, RoleAdmin]
+    roles: RolesAdmin
   }
 ]
 

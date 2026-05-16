@@ -12,11 +12,35 @@ export const PathProtocols = "/protocols";
 export const PathFeed = "/feed";
 export const PathSettings = "/settings";
 export const PathAudit = "/audit";
+export const PathSharing = "/admin/sharing";
 
 export const RoleSuperAdmin = "super_admin";
 export const RoleAdmin = "admin";
+export const RoleHerdsman = "herdsman";
+export const RoleVet = "vet";
+export const RoleNutritionist = "nutritionist";
+export const RoleFeeder = "feeder";
+export const RoleViewer = "viewer";
 
 export const RoleView: Record<string, string> = {
   [RoleSuperAdmin]: "Super Admin",
   [RoleAdmin]: "Admin",
+  [RoleHerdsman]: "Herdsman",
+  [RoleVet]: "Veterinarian",
+  [RoleNutritionist]: "Nutritionist",
+  [RoleFeeder]: "Feeder",
+  [RoleViewer]: "Viewer",
 };
+
+// Visibility groups (sidebar / page gating). Write-capability per
+// action is tuned incrementally; these govern who can SEE a section.
+export const RolesAll = [
+  RoleSuperAdmin,
+  RoleAdmin,
+  RoleHerdsman,
+  RoleVet,
+  RoleNutritionist,
+  RoleFeeder,
+  RoleViewer,
+];
+export const RolesAdmin = [RoleSuperAdmin, RoleAdmin];

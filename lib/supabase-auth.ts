@@ -4,7 +4,14 @@ import type { User } from "@supabase/supabase-js";
 import { createClient } from "./supabase-server";
 import { PathHome, PathLogin } from "./misc";
 
-export type UserRole = "super_admin" | "admin";
+export type UserRole =
+  | "super_admin"
+  | "admin"
+  | "herdsman"
+  | "vet"
+  | "nutritionist"
+  | "feeder"
+  | "viewer";
 
 export async function getCurrentUser(): Promise<User | null> {
   const supabase = createClient(await cookies());
