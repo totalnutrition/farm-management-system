@@ -37,6 +37,10 @@ export const ITEMS: { value: string; label: string }[] = [
   { value: "SCC", label: "SCC (1000s)" },
   { value: "LS", label: "Linear score" },
   { value: "LCTGP", label: "Lactation group" },
+  { value: "DNSHIP", label: "Do-not-ship (YES/no)" },
+  { value: "DNSELL", label: "Do-not-sell meat (YES/no)" },
+  { value: "MWHOLD", label: "Milk withhold until" },
+  { value: "LTDAT", label: "Last treatment date" },
 ];
 export const labelOf = (v: string) =>
   ITEMS.find((i) => i.value === v)?.label ?? v;

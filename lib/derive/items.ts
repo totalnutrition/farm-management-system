@@ -4,3 +4,4 @@
 // (engine.ts/query.ts) stays clean — it never imports domains.
 import "./feed.ts";
 import "./production.ts";
+import "./health.ts";

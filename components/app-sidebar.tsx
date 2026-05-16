@@ -7,8 +7,8 @@ import { useTheme } from "next-themes"
 import { FarmInsightLogo } from "./farminsight-logo"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { logout } from "@/app/logout/actions"
-import { PathAdminOrganizations, PathAdminUsers, PathHome, PathQuery, PathRecords, PathViews, PathGrouping, PathPens, PathMonitor, PathProtocols, PathFeed, PathSettings, PathAudit, PathSharing, PathExtended, PathImport, RolesAll, RolesAdmin } from "@/lib/misc"
-import { Analytics01Icon, Building03Icon, Calendar03Icon, ClipboardIcon, DistributionIcon, FileImportIcon, Layers01Icon, Moon02Icon, Search01Icon, Settings01Icon, Sun, Time01Icon, User, UserGroupIcon, ViewIcon, WheatIcon } from "@hugeicons/core-free-icons"
+import { PathAdminOrganizations, PathAdminUsers, PathHome, PathQuery, PathRecords, PathViews, PathGrouping, PathPens, PathMonitor, PathProtocols, PathFeed, PathSettings, PathAudit, PathSharing, PathExtended, PathImport, PathHealth, RolesAll, RolesAdmin } from "@/lib/misc"
+import { Analytics01Icon, Building03Icon, Calendar03Icon, ClipboardIcon, DistributionIcon, FileImportIcon, FirstAidKitIcon, Layers01Icon, Moon02Icon, Search01Icon, Settings01Icon, Sun, Time01Icon, User, UserGroupIcon, ViewIcon, WheatIcon } from "@hugeicons/core-free-icons"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu"
 
@@ -26,6 +26,7 @@ const MENU = [
       { name: "Query", icon: Search01Icon, link: PathQuery, roles: RolesAll },
       { name: "Pens", icon: Layers01Icon, link: PathPens, roles: RolesAll },
       { name: "Grouping", icon: DistributionIcon, link: PathGrouping, roles: RolesAll },
+      { name: "Health", icon: FirstAidKitIcon, link: PathHealth, roles: RolesAll },
       { name: "Protocols", icon: Calendar03Icon, link: PathProtocols, roles: RolesAll },
       { name: "Feed", icon: WheatIcon, link: PathFeed, roles: RolesAll },
       { name: "Monitor", icon: Analytics01Icon, link: PathMonitor, roles: RolesAll },

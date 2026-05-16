@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireUser, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { Card, CardContent } from "@/components/ui/card";
-import type { Event } from "@/lib/derive/engine";
+import { deriveItem, type Event } from "@/lib/derive/engine";
 import {
   buildWorklist,
   type Ruleset,
@@ -17,7 +17,7 @@ import {
 } from "@/lib/derive/protocols";
 import { evaluateKpi, type Kpi } from "@/lib/derive/monitor";
 import type { Predicate, PopulationMember } from "@/lib/derive/query";
-import { PathGrouping, PathProtocols, PathMonitor } from "@/lib/misc";
+import { PathGrouping, PathProtocols, PathMonitor, PathHealth } from "@/lib/misc";
 
 export const dynamic = "force-dynamic";
 
@@ -100,6 +100,9 @@ export default async function Home() {
 
   const worklist = buildWorklist(grouping, ruleset, { today }, pens);
   const tasks = buildProtocolTasks(protoPop, protocols, { today });
+  const dnship = members.filter(
+    (m) => deriveItem("DNSHIP", m.subject, { today }) === "YES",
+  );
   const alerts = (kpis ?? [])
     .map((k) =>
       evaluateKpi(
@@ -122,6 +125,7 @@ export default async function Home() {
     { label: "Protocol tasks due", n: tasks.length, href: PathProtocols, items: tasks.slice(0, 6).map((t) => `${t.id} · ${t.protocol}: ${t.step}${t.status === "overdue" ? " (overdue)" : ""}`) },
     { label: "Pen moves", n: worklist.length, href: PathGrouping, items: worklist.slice(0, 6).map((w) => `${w.id}: ${w.from ?? "—"} → ${w.to}${w.overCapacity ? " (over cap)" : ""}`) },
     { label: "KPI alerts", n: alerts.length, href: PathMonitor, items: alerts.slice(0, 6).map((a) => `${a.name}: ${a.value ?? "—"} vs ${a.goal} [${a.status}]`) },
+    { label: "Do-not-ship", n: dnship.length, href: PathHealth, items: dnship.slice(0, 6).map((m) => `${m.id}: milk until ${deriveItem("MWHOLD", m.subject, { today }) ?? "—"}`) },
   ];
 
   return (
