@@ -7,6 +7,7 @@ export const PathRecords = "/records";
 export const PathViews = "/views";
 export const PathGrouping = "/grouping";
 export const PathPens = "/pens";
+export const PathMonitor = "/monitor";
 
 export const RoleSuperAdmin = "super_admin";
 export const RoleAdmin = "admin";

@@ -7,8 +7,8 @@ import { useTheme } from "next-themes"
 import { FarmInsightLogo } from "./farminsight-logo"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { logout } from "@/app/logout/actions"
-import { PathAdminOrganizations, PathAdminUsers, PathHome, PathQuery, PathRecords, PathViews, PathGrouping, PathPens, RoleAdmin, RoleSuperAdmin } from "@/lib/misc"
-import { Building03Icon, ClipboardIcon, DistributionIcon, Layers01Icon, Moon02Icon, Search01Icon, Sun, User, UserGroupIcon, ViewIcon } from "@hugeicons/core-free-icons"
+import { PathAdminOrganizations, PathAdminUsers, PathHome, PathQuery, PathRecords, PathViews, PathGrouping, PathPens, PathMonitor, RoleAdmin, RoleSuperAdmin } from "@/lib/misc"
+import { Analytics01Icon, Building03Icon, ClipboardIcon, DistributionIcon, Layers01Icon, Moon02Icon, Search01Icon, Sun, User, UserGroupIcon, ViewIcon } from "@hugeicons/core-free-icons"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu"
 
@@ -44,6 +44,12 @@ const MENU = [
         name: "Grouping",
         icon: DistributionIcon,
         link: PathGrouping,
+        roles: [RoleSuperAdmin, RoleAdmin]
+      },
+      {
+        name: "Monitor",
+        icon: Analytics01Icon,
+        link: PathMonitor,
         roles: [RoleSuperAdmin, RoleAdmin]
       },
       {
