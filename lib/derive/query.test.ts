@@ -310,3 +310,66 @@ test("serialize∘parse round-trips PCT and the agg switch", () => {
     assert.equal(serializeCommand(parseCommand(cmd)), cmd);
   }
 });
+
+test("group-by produces per-group counts; HAVING filters groups", () => {
+  const pop = [
+    { id: "1", subject: { events: [{ code: 1, date: "2026-04-16" }] } },
+    { id: "2", subject: { events: [{ code: 1, date: "2026-04-16" }] } },
+    {
+      id: "3",
+      subject: {
+        events: [
+          { code: 1, date: "2024-01-01" },
+          { code: 11, date: "2026-04-01" },
+        ],
+      },
+    },
+  ];
+  const g = runQuery(
+    { verb: "COUNT", items: [], groupBy: ["RPRO"] },
+    pop,
+    { today: "2026-05-16" },
+  ) as { grouped: { group: string; count: number }[] };
+  assert.deepEqual(
+    g.grouped.map((r) => [r.group, r.count]).sort(),
+    [["DRY", 1], ["FRESH", 2]],
+  );
+  const h = runQuery(
+    {
+      verb: "COUNT",
+      items: [],
+      groupBy: ["RPRO"],
+      having: { op: ">", value: 1 },
+    },
+    pop,
+    { today: "2026-05-16" },
+  ) as { grouped: { group: string }[] };
+  assert.deepEqual(h.grouped.map((r) => r.group), ["FRESH"]);
+});
+
+test("computed expression item (binary, no precedence)", () => {
+  const pop = [
+    {
+      id: "1",
+      subject: { facts: { baseLactation: 4 }, events: [{ code: 1, date: "2026-04-16" }] },
+    },
+  ];
+  const r = runQuery(
+    { verb: "LIST", items: ["LACT*2", "LACT+1", "DIM/2"] },
+    pop,
+    { today: "2026-05-16" },
+  ) as Array<Record<string, unknown>>;
+  // LACT = 4 (base) + 1 fresh = 5; DIM = 30
+  assert.equal(r[0]["LACT*2"], 10);
+  assert.equal(r[0]["LACT+1"], 6);
+  assert.equal(r[0]["DIM/2"], 15);
+});
+
+test("serialize∘parse round-trips group-by + HAVING", () => {
+  for (const cmd of [
+    "COUNT FOR LACT>0 BY RPRO HAVING >5",
+    "SUM MILK BY PEN LCTGP \\MEDIAN",
+  ]) {
+    assert.equal(serializeCommand(parseCommand(cmd)), cmd);
+  }
+});

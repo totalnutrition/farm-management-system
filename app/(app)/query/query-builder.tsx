@@ -30,6 +30,7 @@ import {
 import {
   serializeCommand,
   parseCommand,
+  type CmpOp,
   type Query,
 } from "@/lib/derive/query";
 import {
@@ -82,24 +83,37 @@ export function QueryBuilder() {
   const [mode, setMode] = useState<"builder" | "command">("builder");
   const [cmdText, setCmdText] = useState("");
   const [agg, setAgg] = useState<AggOpt>("mean");
+  const [g1, setG1] = useState("");
+  const [g2, setG2] = useState("");
+  const [hOp, setHOp] = useState("");
+  const [hVal, setHVal] = useState("");
 
-  const query: Query = useMemo(
-    () =>
+  const query: Query = useMemo(() => {
+    const groupBy = [g1, g2].filter(Boolean);
+    const grp = verb !== "LIST" && groupBy.length ? groupBy : undefined;
+    const having =
+      grp && hOp && hVal !== ""
+        ? { op: hOp as CmpOp, value: Number(hVal) }
+        : undefined;
+    const base =
       verb === "PCT"
-        ? {
-            verb,
-            items: [],
-            pct: condsToPredicate(cond),
-          }
+        ? { verb, items: [] as string[], pct: condsToPredicate(cond) }
         : {
             verb,
             items: verb === "COUNT" ? [] : columns,
             for: condsToPredicate(cond),
-            by: sortItem ? { item: sortItem, dir: sortDir } : undefined,
+            by:
+              !grp && sortItem
+                ? { item: sortItem, dir: sortDir }
+                : undefined,
             ...(verb === "SUM" && agg !== "mean" ? { agg } : {}),
-          },
-    [verb, columns, cond, sortItem, sortDir, agg],
-  );
+          };
+    return {
+      ...base,
+      ...(grp ? { groupBy: grp } : {}),
+      ...(having ? { having } : {}),
+    } as Query;
+  }, [verb, columns, cond, sortItem, sortDir, agg, g1, g2, hOp, hVal]);
 
   const sentence = useMemo(() => {
     if (verb === "PCT")
@@ -263,6 +277,67 @@ export function QueryBuilder() {
 
             <ConditionBuilder value={cond} onChange={setCond} />
 
+            {verb !== "LIST" && (
+              <>
+                <span className="text-xs text-muted-foreground">
+                  group by
+                </span>
+                {[
+                  [g1, setG1] as const,
+                  [g2, setG2] as const,
+                ].map(([gv, gs], idx) => (
+                  <Select
+                    key={idx}
+                    value={gv || "none"}
+                    onValueChange={(v) => gs(v === "none" ? "" : v)}
+                  >
+                    <SelectTrigger className="h-7 w-[120px] text-xs">
+                      <SelectValue placeholder="—" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">—</SelectItem>
+                      {ITEMS.map((i) => (
+                        <SelectItem key={i.value} value={i.value}>
+                          {i.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ))}
+                {g1 && (
+                  <>
+                    <span className="text-xs text-muted-foreground">
+                      having
+                    </span>
+                    <Select
+                      value={hOp || "none"}
+                      onValueChange={(v) => setHOp(v === "none" ? "" : v)}
+                    >
+                      <SelectTrigger className="h-7 w-[90px] text-xs">
+                        <SelectValue placeholder="—" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">—</SelectItem>
+                        {[">", ">=", "<", "<=", "=", "<>"].map((o) => (
+                          <SelectItem key={o} value={o}>
+                            {o}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {hOp && (
+                      <Input
+                        className="h-7 w-16 text-xs"
+                        type="number"
+                        value={hVal}
+                        onChange={(e) => setHVal(e.target.value)}
+                      />
+                    )}
+                  </>
+                )}
+              </>
+            )}
+
             <span className="text-xs text-muted-foreground">sort</span>
             <Select
               value={sortItem || "none"}
@@ -407,6 +482,40 @@ function Results({ result }: { result: QueryResponse }) {
         </Card>
       </div>
     );
+  if (result.kind === "group") {
+    if (result.rows.length === 0)
+      return (
+        <p className="text-sm text-muted-foreground">No groups match.</p>
+      );
+    const cols = Object.keys(result.rows[0]);
+    return (
+      <div>
+        <CsvButton rows={result.rows} />
+        <Card>
+          <CardContent className="overflow-x-auto py-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {cols.map((c) => (
+                    <TableHead key={c}>{labelOf(c)}</TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {result.rows.map((r, i) => (
+                  <TableRow key={i}>
+                    {cols.map((c) => (
+                      <TableCell key={c}>{r[c] ?? "—"}</TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   if (result.kind === "count")
     return (
       <div>

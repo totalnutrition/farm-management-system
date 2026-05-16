@@ -17,6 +17,10 @@ export type QueryResponse =
       denominator: number;
       numerator: number;
       pct: number | null;
+    }
+  | {
+      kind: "group";
+      rows: Array<Record<string, string | number | null>>;
     };
 
 function factsFromAttrs(attrs: unknown): IntakeFacts {
@@ -88,6 +92,12 @@ export async function runQueryAction(
       : new Date().toISOString().slice(0, 10);
   const result = runQuery(q, population, { today });
 
+  if (q.groupBy && q.groupBy.length) {
+    const g = result as {
+      grouped: Array<Record<string, string | number | null>>;
+    };
+    return { kind: "group", rows: g.grouped };
+  }
   if (typeof result === "number") return { kind: "count", count: result };
   if (Array.isArray(result)) return { kind: "list", rows: result };
   if (q.verb === "PCT") {

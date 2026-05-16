@@ -46,6 +46,8 @@ export type Query = {
   by?: Sort; // default: BY ID ascending
   agg?: Agg; // SUM aggregate (default "mean")
   pct?: Predicate; // PCT numerator condition (over the FOR denominator)
+  groupBy?: string[]; // 1 or 2 group items (cross-tab) for COUNT/SUM/PCT
+  having?: { op: CmpOp; value: number }; // post-aggregate group filter
 };
 
 export type Row = Record<string, ItemValue>;
@@ -55,7 +57,20 @@ export type PctResult = {
   numerator: number;
   pct: number | null;
 };
-export type QueryResult = Row[] | number | SumResult | PctResult;
+export type GroupRow = {
+  group: string;
+  count: number;
+  metric: number | null;
+  numerator?: number;
+  [item: string]: string | number | null | undefined;
+};
+export type GroupResult = { grouped: GroupRow[] };
+export type QueryResult =
+  | Row[]
+  | number
+  | SumResult
+  | PctResult
+  | GroupResult;
 
 export type PopulationMember = { id: string; subject: Subject };
 
@@ -105,7 +120,12 @@ export function serializeCommand(q: Query): string {
     parts.push(predText(q.pct));
   if (q.items.length) parts.push(q.items.join(" "));
   if (q.for && q.for.length) parts.push(`FOR ${predText(q.for)}`);
-  if (q.by) parts.push(q.by.dir === "desc" ? "DOWNBY" : "BY", q.by.item);
+  if (q.groupBy && q.groupBy.length)
+    parts.push("BY", q.groupBy.join(" "));
+  else if (q.by)
+    parts.push(q.by.dir === "desc" ? "DOWNBY" : "BY", q.by.item);
+  if (q.having)
+    parts.push("HAVING", `${q.having.op}${q.having.value}`);
   if (q.verb === "SUM" && q.agg && q.agg !== "mean")
     parts.push(`\\${q.agg.toUpperCase()}`);
   return parts.join(" ");
@@ -169,7 +189,7 @@ export function parseCommand(input: string): Query {
   const AGGS = [
     "mean", "total", "min", "max", "range", "median", "stdev", "count",
   ];
-  const isKw = (t: string) => /^(FOR|BY|DOWNBY)$/i.test(t);
+  const isKw = (t: string) => /^(FOR|BY|DOWNBY|HAVING)$/i.test(t);
   const isSw = (t: string) => t.startsWith("\\");
   const stop = (t: string) => isKw(t) || isSw(t);
 
@@ -186,6 +206,8 @@ export function parseCommand(input: string): Query {
   let forPred: Predicate | undefined;
   let by: Sort | undefined;
   let agg: Agg | undefined;
+  let groupBy: string[] | undefined;
+  let having: { op: CmpOp; value: number } | undefined;
   while (i < tokens.length) {
     const tk = tokens[i];
     if (isSw(tk)) {
@@ -203,6 +225,24 @@ export function parseCommand(input: string): Query {
         i++;
       }
       forPred = parsePredicate(pred.join(" "));
+    } else if (kw === "HAVING") {
+      i++;
+      const ht = tokens[i] ?? "";
+      const hm = ht.match(/^(<>|>=|<=|=|>|<)(-?\d+(?:\.\d+)?)$/);
+      if (!hm) throw new Error(`Bad HAVING "${ht}"`);
+      having = { op: hm[1] as CmpOp, value: Number(hm[2]) };
+      i++;
+    } else if (
+      kw === "BY" &&
+      (verb === "COUNT" || verb === "SUM" || verb === "PCT")
+    ) {
+      i++;
+      const g: string[] = [];
+      while (i < tokens.length && !stop(tokens[i])) {
+        g.push(tokens[i].toUpperCase());
+        i++;
+      }
+      if (g.length) groupBy = g;
     } else if (kw === "BY" || kw === "DOWNBY") {
       i++;
       if (i >= tokens.length) throw new Error(`${kw} needs a field`);
@@ -219,18 +259,51 @@ export function parseCommand(input: string): Query {
   const out: Query = { verb, items, for: forPred, by };
   if (agg) out.agg = agg;
   if (pct) out.pct = pct;
+  if (groupBy) out.groupBy = groupBy;
+  if (having) out.having = having;
   return out;
 }
 
 // --- value resolution ------------------------------------------------
 // "ID" is the subject's natural key (DC's default identity / BY ID).
-function resolve(
+// A single binary expression: ITEM|num <op> ITEM|num (no precedence).
+const EXPR = /^(.+?)\s*([+\-*/])\s*(.+)$/;
+function plainResolve(
   item: string,
   m: PopulationMember,
   ctx: DeriveContext,
 ): ItemValue {
   if (item === "ID") return m.id;
   return deriveItem(item, m.subject, ctx);
+}
+function operand(
+  t: string,
+  m: PopulationMember,
+  ctx: DeriveContext,
+): number | null {
+  const lit = Number(t);
+  if (t.trim() !== "" && Number.isFinite(lit) && !/[a-z]/i.test(t))
+    return lit;
+  return asNumber(plainResolve(t.trim().toUpperCase(), m, ctx));
+}
+function resolve(
+  item: string,
+  m: PopulationMember,
+  ctx: DeriveContext,
+): ItemValue {
+  const mx = item.match(EXPR);
+  if (mx && mx[1].trim() && mx[3].trim()) {
+    const a = operand(mx[1], m, ctx);
+    const b = operand(mx[3], m, ctx);
+    if (a === null || b === null) return null;
+    switch (mx[2]) {
+      case "+": return a + b;
+      case "-": return a - b;
+      case "*": return a * b;
+      default: return b === 0 ? null : Math.round((a / b) * 1000) / 1000;
+    }
+  }
+  return plainResolve(item, m, ctx);
 }
 
 function asNumber(v: ItemValue): number | null {
@@ -329,6 +402,77 @@ export function runQuery(
     );
     return sort.dir === "desc" ? -c : c;
   });
+
+  if (
+    q.groupBy &&
+    q.groupBy.length > 0 &&
+    (q.verb === "COUNT" || q.verb === "SUM" || q.verb === "PCT")
+  ) {
+    const gb = q.groupBy;
+    const buckets = new Map<string, PopulationMember[]>();
+    for (const m of selected) {
+      const key = gb
+        .map((g) => {
+          const v = resolve(g, m, ctx);
+          return v === null || v === undefined ? "—" : String(v);
+        })
+        .join(" / ");
+      (buckets.get(key) ?? buckets.set(key, []).get(key)!).push(m);
+    }
+    const aggFn: Agg = q.agg ?? "mean";
+    let rows: GroupRow[] = [...buckets.entries()]
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .map(([group, ms]) => {
+        const row: GroupRow = {
+          group,
+          count: ms.length,
+          metric: ms.length,
+        };
+        if (q.verb === "SUM") {
+          for (const item of q.items) {
+            const nums: number[] = [];
+            for (const m of ms) {
+              const n = asNumber(resolve(item, m, ctx));
+              if (n !== null) nums.push(n);
+            }
+            row[item] = pick(stats(nums), aggFn);
+          }
+          if (q.items.length) {
+            const mv = row[q.items[0]];
+            row.metric = typeof mv === "number" ? mv : null;
+          } else {
+            row.metric = ms.length;
+          }
+        } else if (q.verb === "PCT") {
+          const num = q.pct
+            ? ms.filter((m) =>
+                matchPredicate(q.pct, (it) => resolve(it, m, ctx)),
+              ).length
+            : ms.length;
+          const p =
+            ms.length === 0
+              ? null
+              : Math.round((num / ms.length) * 1000) / 10;
+          row.numerator = num;
+          row.metric = p;
+        }
+        return row;
+      });
+    if (q.having) {
+      const { op, value } = q.having;
+      rows = rows.filter((r) => {
+        const x = r.metric;
+        if (x === null) return false;
+        if (op === "=") return x === value;
+        if (op === "<>") return x !== value;
+        if (op === ">") return x > value;
+        if (op === ">=") return x >= value;
+        if (op === "<") return x < value;
+        return x <= value;
+      });
+    }
+    return { grouped: rows };
+  }
 
   if (q.verb === "COUNT") return selected.length;
 

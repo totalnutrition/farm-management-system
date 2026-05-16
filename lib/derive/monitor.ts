@@ -50,7 +50,9 @@ export function evaluateKpi(
   } else if (Array.isArray(res)) {
     value = res.length;
   } else {
-    const v = res[kpi.metric.kind === "avg" ? kpi.metric.item : "count"];
+    // KPI queries are always plain COUNT/SUM (no groupBy/pct) → SumResult
+    const sum = res as { count: number } & Record<string, number | null>;
+    const v = sum[kpi.metric.kind === "avg" ? kpi.metric.item : "count"];
     value = typeof v === "number" ? v : null;
   }
 

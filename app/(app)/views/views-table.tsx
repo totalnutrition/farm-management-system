@@ -33,7 +33,11 @@ export function ViewsTable({ rows }: { rows: ViewRow[] }) {
           ? `${res.count} animal(s)`
           : res.kind === "sum"
             ? `${res.sum.count} animal(s) summarized`
-            : `${res.rows.length} row(s)`;
+            : res.kind === "pct"
+              ? `${res.pct ?? "—"}% (${res.numerator}/${res.denominator})`
+              : res.kind === "group"
+                ? `${res.rows.length} group(s)`
+                : `${res.rows.length} row(s)`;
       setResult((m) => ({ ...m, [r.id]: summary }));
       toast.success(`${r.name}: ${summary}`);
     });
