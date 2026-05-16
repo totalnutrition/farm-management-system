@@ -28,6 +28,14 @@ export default async function PensPage() {
     .eq("organization_id", orgId)
     .eq("subject_type", "animal");
 
+  const { data: barnSubs } = await admin
+    .from("subjects")
+    .select("natural_key")
+    .eq("organization_id", orgId)
+    .eq("subject_type", "barn")
+    .order("natural_key");
+  const barns = (barnSubs ?? []).map((b) => b.natural_key);
+
   const headcount = new Map<string, number>();
   for (const a of animals ?? []) {
     const pen = (a.attrs as Record<string, unknown> | null)?.pen;
@@ -44,6 +52,7 @@ export default async function PensPage() {
         types: Array.isArray(a.pen_type) ? (a.pen_type as string[]) : [],
         capacity: typeof a.capacity === "number" ? a.capacity : null,
         label: (p.name as string | null) ?? null,
+        barn: typeof a.barn === "string" ? a.barn : null,
         count: headcount.get(p.natural_key) ?? 0,
       };
     })
@@ -58,7 +67,7 @@ export default async function PensPage() {
           grouping worklist.
         </p>
       </header>
-      <PensClient rows={rows} />
+      <PensClient rows={rows} barns={barns} />
     </div>
   );
 }

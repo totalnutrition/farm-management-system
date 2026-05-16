@@ -16,6 +16,8 @@ export const PathSharing = "/admin/sharing";
 export const PathExtended = "/extended";
 export const PathImport = "/import";
 export const PathHealth = "/health";
+export const PathBarns = "/barns";
+export const PathSires = "/sires";
 
 export const RoleSuperAdmin = "super_admin";
 export const RoleAdmin = "admin";

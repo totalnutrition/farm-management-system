@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { createPen, deletePen, PEN_TYPES } from "./actions";
 
 export type PenRow = {
@@ -15,16 +22,24 @@ export type PenRow = {
   types: string[];
   capacity: number | null;
   label: string | null;
+  barn: string | null;
   count: number;
 };
 
-export function PensClient({ rows }: { rows: PenRow[] }) {
+export function PensClient({
+  rows,
+  barns,
+}: {
+  rows: PenRow[];
+  barns: string[];
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [penNo, setPenNo] = useState("");
   const [types, setTypes] = useState<string[]>([]);
   const [capacity, setCapacity] = useState("");
   const [label, setLabel] = useState("");
+  const [barn, setBarn] = useState("");
 
   const toggle = (t: string) =>
     setTypes((s) => (s.includes(t) ? s.filter((x) => x !== t) : [...s, t]));
@@ -36,6 +51,7 @@ export function PensClient({ rows }: { rows: PenRow[] }) {
         types: types as (typeof PEN_TYPES)[number][],
         capacity: capacity ? Number(capacity) : undefined,
         label: label || undefined,
+        barn: barn || undefined,
       });
       if (res.error) return void toast.error(res.error);
       toast.success(`Pen ${penNo} added.`);
@@ -43,6 +59,7 @@ export function PensClient({ rows }: { rows: PenRow[] }) {
       setTypes([]);
       setCapacity("");
       setLabel("");
+      setBarn("");
       router.refresh();
     });
 
@@ -67,6 +84,7 @@ export function PensClient({ rows }: { rows: PenRow[] }) {
               <tr>
                 <th className="px-3 py-2 text-left">Pen</th>
                 <th className="px-3 py-2 text-left">Label</th>
+                <th className="px-3 py-2 text-left">Barn</th>
                 <th className="px-3 py-2 text-left">Types</th>
                 <th className="px-3 py-2 text-left">Capacity</th>
                 <th className="px-3 py-2 text-left">In pen</th>
@@ -78,6 +96,7 @@ export function PensClient({ rows }: { rows: PenRow[] }) {
                 <tr key={r.id} className="border-t">
                   <td className="px-3 py-2 font-medium">{r.penNo}</td>
                   <td className="px-3 py-2">{r.label ?? "—"}</td>
+                  <td className="px-3 py-2">{r.barn ?? "—"}</td>
                   <td className="px-3 py-2 text-xs">
                     {r.types.join(", ")}
                   </td>
@@ -161,6 +180,25 @@ export function PensClient({ rows }: { rows: PenRow[] }) {
               onChange={(e) => setLabel(e.target.value)}
               placeholder="Fresh pen"
             />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Barn</Label>
+            <Select
+              value={barn || "none"}
+              onValueChange={(v) => setBarn(v === "none" ? "" : v)}
+            >
+              <SelectTrigger className="h-8 w-[140px] text-xs">
+                <SelectValue placeholder="none" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {barns.map((b) => (
+                  <SelectItem key={b} value={b}>
+                    {b}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <Button
             size="sm"
