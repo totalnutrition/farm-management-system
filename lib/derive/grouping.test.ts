@@ -80,10 +80,47 @@ test("ordering: a later broad rule never overrides an earlier one", () => {
 
 test("buildWorklist: only physical≠target mismatches are listed", () => {
   const wl = buildWorklist([fresh, dry, virgin], RULES, CTX);
-  // fresh: null → FRESH (listed); dry: DRYLOT==DRYLOT (not); virgin: no rule (not)
   assert.deepEqual(wl, [
-    { id: "200", from: null, to: "FRESH", rule: "Fresh" },
+    { id: "200", from: null, to: "FRESH", rule: "Fresh", overCapacity: false },
   ]);
+});
+
+test("parity split: 1st-lactation vs mature go to different pens", () => {
+  const r: Ruleset = [
+    {
+      name: "Milking",
+      when: P("RC=2;3;4;5"),
+      split: { firstLactation: "MILK-H", mature: "MILK-C" },
+    },
+  ];
+  // fresh (lact 1) → first-lactation pen
+  assert.equal(targetPen(fresh.subject, null, r, CTX).pen, "MILK-H");
+  // a 3rd-lactation fresh cow → mature pen
+  const mature = {
+    events: [
+      { code: 1, date: "2023-01-01" },
+      { code: 11, date: "2023-11-01" },
+      { code: 1, date: "2024-02-01" },
+      { code: 11, date: "2024-12-01" },
+      { code: 1, date: "2026-05-01" },
+    ],
+  };
+  assert.equal(targetPen(mature, null, r, CTX).pen, "MILK-C");
+});
+
+test("capacity is advisory: over-subscribed pen flags its moves", () => {
+  const r: Ruleset = [{ name: "All", when: P("RC=2"), targetPen: "FRESH" }];
+  const e = [{ code: 1, date: "2026-05-01" }];
+  const pop = [
+    { id: "1", pen: null, subject: { events: e } },
+    { id: "2", pen: null, subject: { events: e } },
+  ];
+  const tight = buildWorklist(pop, r, CTX, [{ name: "FRESH", capacity: 1 }]);
+  assert.equal(tight.every((x) => x.overCapacity), true);
+  const roomy = buildWorklist(pop, r, CTX, [
+    { name: "FRESH", capacity: null },
+  ]);
+  assert.equal(roomy.every((x) => !x.overCapacity), true);
 });
 
 test("unknown item in a rule never crashes the worklist", () => {

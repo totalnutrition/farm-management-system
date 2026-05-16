@@ -6,8 +6,14 @@ import {
   buildWorklist,
   type Ruleset,
   type GroupingMember,
+  type Pen,
 } from "@/lib/derive/grouping";
-import { GroupingClient, type RuleRow, type Move } from "./grouping-client";
+import {
+  GroupingClient,
+  type RuleRow,
+  type Move,
+  type PenOption,
+} from "./grouping-client";
 
 export const metadata = { title: "Grouping" };
 export const dynamic = "force-dynamic";
@@ -30,9 +36,26 @@ export default async function GroupingPage() {
     );
 
   const admin = createAdminClient();
+
+  const { data: penRows } = await admin
+    .from("subjects")
+    .select("natural_key, attrs")
+    .eq("organization_id", orgId)
+    .eq("subject_type", "pen");
+  const pens: Pen[] = (penRows ?? []).map((p) => {
+    const a = (p.attrs ?? {}) as Record<string, unknown>;
+    return {
+      name: p.natural_key,
+      capacity: typeof a.capacity === "number" ? a.capacity : null,
+    };
+  });
+  const penOptions: PenOption[] = pens
+    .map((p) => ({ value: p.name }))
+    .sort((x, y) => Number(x.value) - Number(y.value));
+
   const { data: rules } = await admin
     .from("grouping_rules")
-    .select("id, ordinal, name, predicate, target_pen, is_active")
+    .select("id, ordinal, name, predicate, target_pen, split, is_active")
     .eq("organization_id", orgId)
     .order("ordinal");
 
@@ -41,7 +64,10 @@ export default async function GroupingPage() {
     .map((r) => ({
       name: r.name,
       when: r.predicate as Predicate,
-      targetPen: r.target_pen,
+      targetPen: (r.target_pen as string | null) ?? undefined,
+      split: (r.split as { firstLactation: string; mature: string } | null)
+        ? (r.split as { firstLactation: string; mature: string })
+        : undefined,
     }));
 
   const { data: subjects } = await admin
@@ -87,28 +113,40 @@ export default async function GroupingPage() {
   });
 
   const today = new Date().toISOString().slice(0, 10);
-  const worklist: Move[] = buildWorklist(population, ruleset, { today }).map(
-    (w) => ({ ...w, subjectId: idToSubjectId.get(w.id)! }),
-  );
+  const worklist: Move[] = buildWorklist(
+    population,
+    ruleset,
+    { today },
+    pens,
+  ).map((w) => ({ ...w, subjectId: idToSubjectId.get(w.id)! }));
 
-  const ruleRows: RuleRow[] = (rules ?? []).map((r) => ({
-    id: r.id,
-    ordinal: r.ordinal,
-    name: r.name,
-    cond: condText(r.predicate as Predicate),
-    targetPen: r.target_pen,
-  }));
+  const ruleRows: RuleRow[] = (rules ?? []).map((r) => {
+    const sp = r.split as { firstLactation: string; mature: string } | null;
+    return {
+      id: r.id,
+      ordinal: r.ordinal,
+      name: r.name,
+      cond: condText(r.predicate as Predicate),
+      target: sp
+        ? `1st→${sp.firstLactation} · mature→${sp.mature}`
+        : (r.target_pen as string),
+    };
+  });
 
   return (
     <div className="flex flex-col gap-4 py-4">
       <header>
         <h1 className="font-heading text-lg font-medium">Grouping</h1>
         <p className="text-xs text-muted-foreground">
-          Ordered rules decide where each animal should be. The worklist
-          is everyone whose pen doesn’t match yet.
+          Ordered rules decide where each animal should be (first match
+          wins). The worklist is everyone whose pen doesn’t match yet.
         </p>
       </header>
-      <GroupingClient rules={ruleRows} worklist={worklist} />
+      <GroupingClient
+        rules={ruleRows}
+        worklist={worklist}
+        pens={penOptions}
+      />
     </div>
   );
 }

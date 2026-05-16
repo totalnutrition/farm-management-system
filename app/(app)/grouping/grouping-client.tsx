@@ -7,6 +7,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  ConditionBuilder,
+  condsToPredicate,
+  type ConditionValue,
+} from "@/components/condition-builder";
 import { addRule, deleteRule, moveAnimal } from "./actions";
 
 export type RuleRow = {
@@ -14,7 +26,7 @@ export type RuleRow = {
   ordinal: number;
   name: string;
   cond: string;
-  targetPen: string;
+  target: string;
 };
 export type Move = {
   id: string;
@@ -22,29 +34,75 @@ export type Move = {
   from: string | null;
   to: string;
   rule: string;
+  overCapacity: boolean;
 };
+export type PenOption = { value: string };
 
 export function GroupingClient({
   rules,
   worklist,
+  pens,
 }: {
   rules: RuleRow[];
   worklist: Move[];
+  pens: PenOption[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [name, setName] = useState("");
-  const [cond, setCond] = useState("");
+  const [cond, setCond] = useState<ConditionValue>({
+    conds: [],
+    matchAny: false,
+  });
+  const [splitMode, setSplitMode] = useState(false);
   const [pen, setPen] = useState("");
+  const [penFirst, setPenFirst] = useState("");
+  const [penMature, setPenMature] = useState("");
+
+  const penSelect = (
+    value: string,
+    onChange: (v: string) => void,
+    placeholder: string,
+  ) => (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="h-7 w-[130px] text-xs">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {pens.length === 0 ? (
+          <SelectItem value="__none" disabled>
+            no pens yet
+          </SelectItem>
+        ) : (
+          pens.map((p) => (
+            <SelectItem key={p.value} value={p.value}>
+              Pen {p.value}
+            </SelectItem>
+          ))
+        )}
+      </SelectContent>
+    </Select>
+  );
 
   const submit = () =>
     start(async () => {
-      const res = await addRule({ name, condition: cond, targetPen: pen });
+      const predicate = condsToPredicate(cond);
+      if (!predicate)
+        return void toast.error("Add at least one condition.");
+      const res = await addRule({
+        name,
+        predicate,
+        targetPen: splitMode ? undefined : pen,
+        splitFirst: splitMode ? penFirst : undefined,
+        splitMature: splitMode ? penMature : undefined,
+      });
       if (res.error) return void toast.error(res.error);
       toast.success(`Rule “${name}” added.`);
       setName("");
-      setCond("");
+      setCond({ conds: [], matchAny: false });
       setPen("");
+      setPenFirst("");
+      setPenMature("");
       router.refresh();
     });
 
@@ -92,7 +150,7 @@ export function GroupingClient({
                     </td>
                     <td className="px-3 py-2 font-medium">{r.name}</td>
                     <td className="px-3 py-2 font-mono text-xs">{r.cond}</td>
-                    <td className="px-3 py-2">{r.targetPen}</td>
+                    <td className="px-3 py-2">{r.target}</td>
                     <td className="px-3 py-2 text-right">
                       <Button
                         size="sm"
@@ -111,44 +169,50 @@ export function GroupingClient({
         )}
 
         <Card>
-          <CardContent className="flex flex-wrap items-end gap-3 py-4">
-            <div className="space-y-1">
-              <Label className="text-xs">Rule name</Label>
-              <Input
-                className="h-8 w-44 text-xs"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Close-up"
-              />
+          <CardContent className="space-y-3 py-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Rule name</Label>
+                <Input
+                  className="h-7 w-44 text-xs"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Close-up"
+                />
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">
-                When (condition, e.g. RC=6 DCC&gt;219)
-              </Label>
-              <Input
-                className="h-8 w-72 font-mono text-xs"
-                value={cond}
-                onChange={(e) => setCond(e.target.value)}
-                placeholder="RC=2 DIM=0-30"
-                spellCheck={false}
-              />
+            <ConditionBuilder value={cond} onChange={setCond} />
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setSplitMode((s) => !s)}
+                className="text-muted-foreground underline-offset-2 hover:underline"
+              >
+                {splitMode ? "single pen" : "split by parity"}
+              </button>
+              <span className="text-muted-foreground">→</span>
+              {splitMode ? (
+                <>
+                  <span className="text-muted-foreground">1st-lact</span>
+                  {penSelect(penFirst, setPenFirst, "pen")}
+                  <span className="text-muted-foreground">mature</span>
+                  {penSelect(penMature, setPenMature, "pen")}
+                </>
+              ) : (
+                penSelect(pen, setPen, "target pen")
+              )}
+              <Button
+                size="sm"
+                disabled={
+                  pending ||
+                  !name ||
+                  (splitMode ? !penFirst || !penMature : !pen)
+                }
+                onClick={submit}
+              >
+                Add rule
+              </Button>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Target pen</Label>
-              <Input
-                className="h-8 w-32 text-xs"
-                value={pen}
-                onChange={(e) => setPen(e.target.value)}
-                placeholder="FRESH"
-              />
-            </div>
-            <Button
-              size="sm"
-              disabled={pending || !name || !cond || !pen}
-              onClick={submit}
-            >
-              Add rule
-            </Button>
           </CardContent>
         </Card>
       </section>
@@ -178,7 +242,14 @@ export function GroupingClient({
                   <tr key={m.subjectId} className="border-t">
                     <td className="px-3 py-2 font-medium">{m.id}</td>
                     <td className="px-3 py-2">{m.from ?? "—"}</td>
-                    <td className="px-3 py-2 font-medium">{m.to}</td>
+                    <td className="px-3 py-2 font-medium">
+                      {m.to}
+                      {m.overCapacity && (
+                        <span className="ml-2 text-[11px] text-destructive">
+                          over capacity
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {m.rule}
                     </td>

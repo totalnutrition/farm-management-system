@@ -1,0 +1,176 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
+import { createPen, deletePen, PEN_TYPES } from "./actions";
+
+export type PenRow = {
+  id: string;
+  penNo: number;
+  types: string[];
+  capacity: number | null;
+  label: string | null;
+  count: number;
+};
+
+export function PensClient({ rows }: { rows: PenRow[] }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [penNo, setPenNo] = useState("");
+  const [types, setTypes] = useState<string[]>([]);
+  const [capacity, setCapacity] = useState("");
+  const [label, setLabel] = useState("");
+
+  const toggle = (t: string) =>
+    setTypes((s) => (s.includes(t) ? s.filter((x) => x !== t) : [...s, t]));
+
+  const submit = () =>
+    start(async () => {
+      const res = await createPen({
+        penNo: Number(penNo),
+        types: types as (typeof PEN_TYPES)[number][],
+        capacity: capacity ? Number(capacity) : undefined,
+        label: label || undefined,
+      });
+      if (res.error) return void toast.error(res.error);
+      toast.success(`Pen ${penNo} added.`);
+      setPenNo("");
+      setTypes([]);
+      setCapacity("");
+      setLabel("");
+      router.refresh();
+    });
+
+  const remove = (r: PenRow) =>
+    start(async () => {
+      const res = await deletePen(r.id);
+      if (res.error) return void toast.error(res.error);
+      toast.success(`Pen ${r.penNo} deleted.`);
+      router.refresh();
+    });
+
+  return (
+    <div className="space-y-4">
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No pens yet. Add one below.
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-xs text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 text-left">Pen</th>
+                <th className="px-3 py-2 text-left">Label</th>
+                <th className="px-3 py-2 text-left">Types</th>
+                <th className="px-3 py-2 text-left">Capacity</th>
+                <th className="px-3 py-2 text-left">In pen</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-t">
+                  <td className="px-3 py-2 font-medium">{r.penNo}</td>
+                  <td className="px-3 py-2">{r.label ?? "—"}</td>
+                  <td className="px-3 py-2 text-xs">
+                    {r.types.join(", ")}
+                  </td>
+                  <td className="px-3 py-2">{r.capacity ?? "∞"}</td>
+                  <td
+                    className={
+                      "px-3 py-2 " +
+                      (r.capacity != null && r.count > r.capacity
+                        ? "text-destructive"
+                        : "")
+                    }
+                  >
+                    {r.count}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={pending}
+                      onClick={() => remove(r)}
+                    >
+                      Delete
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Card>
+        <CardContent className="flex flex-wrap items-end gap-3 py-4">
+          <div className="space-y-1">
+            <Label className="text-xs">Pen # (1–9999)</Label>
+            <Input
+              className="h-8 w-24 text-xs"
+              type="number"
+              min={1}
+              max={9999}
+              value={penNo}
+              onChange={(e) => setPenNo(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Types</Label>
+            <div className="flex flex-wrap gap-1">
+              {PEN_TYPES.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => toggle(t)}
+                  className={
+                    "rounded-full border px-2 py-0.5 text-[11px] transition-colors " +
+                    (types.includes(t)
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-border text-muted-foreground hover:bg-muted")
+                  }
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Capacity</Label>
+            <Input
+              className="h-8 w-24 text-xs"
+              type="number"
+              min={1}
+              value={capacity}
+              onChange={(e) => setCapacity(e.target.value)}
+              placeholder="∞"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Label</Label>
+            <Input
+              className="h-8 w-40 text-xs"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Fresh pen"
+            />
+          </div>
+          <Button
+            size="sm"
+            disabled={pending || !penNo || types.length === 0}
+            onClick={submit}
+          >
+            Add pen
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

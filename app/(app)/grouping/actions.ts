@@ -5,15 +5,23 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { PathGrouping } from "@/lib/misc";
-import { parsePredicateString } from "@/lib/derive/query";
 
 type Result = { error?: string; success?: boolean };
 
-const ruleSchema = z.object({
-  name: z.string().trim().min(1, "Rule name is required."),
-  condition: z.string().trim().min(1, "Condition is required."),
-  targetPen: z.string().trim().min(1, "Target pen is required."),
-});
+const ruleSchema = z
+  .object({
+    name: z.string().trim().min(1, "Rule name is required."),
+    predicate: z.array(z.array(z.any())).min(1, "Add at least one condition."),
+    targetPen: z.string().trim().optional(),
+    splitFirst: z.string().trim().optional(),
+    splitMature: z.string().trim().optional(),
+  })
+  .refine(
+    (v) =>
+      (v.targetPen && v.targetPen.length > 0) ||
+      (v.splitFirst && v.splitMature),
+    { message: "Choose a target pen, or both parity-split pens." },
+  );
 
 export async function addRule(
   input: z.infer<typeof ruleSchema>,
@@ -25,15 +33,13 @@ export async function addRule(
   const parsed = ruleSchema.safeParse(input);
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
-  const { name, condition, targetPen } = parsed.data;
+  const { name, predicate, targetPen, splitFirst, splitMature } =
+    parsed.data;
 
-  let predicate;
-  try {
-    predicate = parsePredicateString(condition);
-  } catch (e) {
-    return { error: `Condition: ${(e as Error).message}` };
-  }
-  if (!predicate) return { error: "Condition could not be parsed." };
+  const split =
+    splitFirst && splitMature
+      ? { firstLactation: splitFirst, mature: splitMature }
+      : null;
 
   const admin = createAdminClient();
   const { data: last } = await admin
@@ -50,7 +56,8 @@ export async function addRule(
     ordinal,
     name,
     predicate,
-    target_pen: targetPen,
+    target_pen: split ? null : (targetPen as string),
+    split,
     created_by: user.id,
   });
   if (error) {
