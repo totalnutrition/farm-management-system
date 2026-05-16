@@ -9,6 +9,7 @@ export const PathGrouping = "/grouping";
 export const PathPens = "/pens";
 export const PathMonitor = "/monitor";
 export const PathProtocols = "/protocols";
+export const PathFeed = "/feed";
 
 export const RoleSuperAdmin = "super_admin";
 export const RoleAdmin = "admin";
