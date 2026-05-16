@@ -12,9 +12,9 @@ export function FarmInsightLogo({ className }: FarmInsightLogoProps) {
           FI
         </span>
       </div>
-      <div className="flex h-10 flex-col justify-center leading-[1.15]">
-        <span className="font-heading text-base font-semibold tracking-tight">Farm</span>
-        <span className="font-heading text-base font-semibold tracking-tight">Insight</span>
+      <div className="flex h-10 flex-col justify-center leading-tight">
+        <span className="font-heading text-sm font-semibold tracking-tight">Farm</span>
+        <span className="font-heading text-sm font-semibold tracking-tight">Insight</span>
       </div>
     </div>
   )
