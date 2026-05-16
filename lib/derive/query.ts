@@ -101,6 +101,97 @@ export function serializeCommand(q: Query): string {
   return parts.join(" ");
 }
 
+// --- DC command parsing (the power surface → IR) --------------------
+function coerce(v: string): number | string {
+  const n = Number(v);
+  return v !== "" && Number.isFinite(n) ? n : v;
+}
+
+function parseAtom(tok: string): Atom {
+  const m = tok.match(/^([A-Za-z0-9_]+)(<>|>=|<=|=|>|<)(.+)$/);
+  if (!m) throw new Error(`Cannot parse condition "${tok}"`);
+  const item = m[1].toUpperCase();
+  const op = m[2];
+  const rhs = m[3];
+  if (op === "=") {
+    if (rhs.includes(";")) {
+      return { kind: "set", item, values: rhs.split(";").map(coerce) };
+    }
+    const r = rhs.match(/^(-?\d+)-(-?\d+)$/);
+    if (r) return range(item, Number(r[1]), Number(r[2]));
+    return { kind: "cmp", item, op: "=", value: coerce(rhs) };
+  }
+  return { kind: "cmp", item, op: op as CmpOp, value: coerce(rhs) };
+}
+
+function parsePredicate(s: string): Predicate | undefined {
+  const t = s.trim();
+  if (!t) return undefined;
+  let groups: string[];
+  if (t.startsWith("(")) {
+    groups = [];
+    const re = /\(([^()]*)\)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(t))) groups.push(m[1]);
+    if (!groups.length) throw new Error("Unbalanced parentheses in FOR");
+  } else {
+    groups = [t];
+  }
+  return groups.map((g) =>
+    g.trim().split(/\s+/).filter(Boolean).map(parseAtom),
+  );
+}
+
+export function parseCommand(input: string): Query {
+  const raw = input.trim();
+  if (!raw) throw new Error("Empty command");
+  const tokens = raw.split(/\s+/);
+  const v = tokens[0].toUpperCase();
+  const verb: Verb =
+    v === "SHOW"
+      ? "LIST"
+      : v === "LIST" || v === "COUNT" || v === "SUM"
+        ? (v as Verb)
+        : (() => {
+            throw new Error(`Unknown verb "${tokens[0]}"`);
+          })();
+
+  const isKw = (t: string) => /^(FOR|BY|DOWNBY)$/i.test(t);
+  let i = 1;
+  const items: string[] = [];
+  while (i < tokens.length && !isKw(tokens[i])) {
+    items.push(tokens[i].toUpperCase());
+    i++;
+  }
+
+  let forPred: Predicate | undefined;
+  let by: Sort | undefined;
+  while (i < tokens.length) {
+    const kw = tokens[i].toUpperCase();
+    if (kw === "FOR") {
+      i++;
+      const pred: string[] = [];
+      while (i < tokens.length && !isKw(tokens[i])) {
+        pred.push(tokens[i]);
+        i++;
+      }
+      forPred = parsePredicate(pred.join(" "));
+    } else if (kw === "BY" || kw === "DOWNBY") {
+      i++;
+      if (i >= tokens.length) throw new Error(`${kw} needs a field`);
+      by = {
+        item: tokens[i].toUpperCase(),
+        dir: kw === "DOWNBY" ? "desc" : "asc",
+      };
+      i++;
+    } else {
+      i++;
+    }
+  }
+
+  return { verb, items, for: forPred, by };
+}
+
 // --- value resolution ------------------------------------------------
 // "ID" is the subject's natural key (DC's default identity / BY ID).
 function resolve(

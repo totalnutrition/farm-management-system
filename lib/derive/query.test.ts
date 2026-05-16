@@ -6,6 +6,7 @@ import {
   runQuery,
   range,
   serializeCommand,
+  parseCommand,
   type PopulationMember,
 } from "./query.ts";
 
@@ -177,6 +178,63 @@ test("serializeCommand round-trips IR to DC syntax", () => {
     }),
     "COUNT FOR (PEN=1-9)(PEN=9-1)",
   );
+});
+
+test("parseCommand parses the user's example to IR", () => {
+  const q = parseCommand("LIST ID RPRO FOR RC>5 DDRY=5-10 DOWNBY RPRO");
+  assert.deepEqual(q, {
+    verb: "LIST",
+    items: ["ID", "RPRO"],
+    for: [
+      [
+        { kind: "cmp", item: "RC", op: ">", value: 5 },
+        {
+          kind: "range",
+          item: "DDRY",
+          min: 5,
+          max: 10,
+          minInclusive: true,
+          maxInclusive: true,
+        },
+      ],
+    ],
+    by: { item: "RPRO", dir: "desc" },
+  });
+});
+
+test("parseCommand: SHOW→LIST, sets, OR groups, descending range", () => {
+  assert.equal(parseCommand("SHOW ID").verb, "LIST");
+  const set = parseCommand("COUNT FOR RC=0;6");
+  assert.deepEqual(set.for, [
+    [{ kind: "set", item: "RC", values: [0, 6] }],
+  ]);
+  const or = parseCommand("COUNT FOR (PEN=1)(DCC>0)");
+  assert.equal(or.for?.length, 2);
+  const desc = parseCommand("COUNT FOR PEN=9-1");
+  assert.deepEqual(desc.for?.[0][0], {
+    kind: "range",
+    item: "PEN",
+    min: 1,
+    max: 9,
+    minInclusive: false,
+    maxInclusive: false,
+  });
+});
+
+test("serialize ∘ parse round-trips", () => {
+  for (const cmd of [
+    "LIST ID PEN DIM FOR LACT>1 DIM<70 DOWNBY DIM",
+    "COUNT FOR (PEN=1-9)(DCC>0)",
+    "SUM LACT FOR RC=0;6 BY LACT",
+  ]) {
+    assert.equal(serializeCommand(parseCommand(cmd)), cmd);
+  }
+});
+
+test("parseCommand rejects garbage", () => {
+  assert.throws(() => parseCommand(""));
+  assert.throws(() => parseCommand("FROBNICATE ID"));
+  assert.throws(() => parseCommand("LIST FOR RCfoo"));
 });
 
 test("the range quirk is normalized INTO the IR (never leaks)", () => {

@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import {
   serializeCommand,
+  parseCommand,
   range,
   type Query,
   type Atom,
@@ -151,11 +152,76 @@ export function QueryBuilder() {
       c.includes(v) ? c.filter((x) => x !== v) : [...c, v],
     );
 
+  const [mode, setMode] = useState<"builder" | "command">("builder");
+  const [cmdText, setCmdText] = useState("");
+
+  // In command mode the typed text is the source of truth.
+  const effective = useMemo<
+    { ok: true; query: Query } | { ok: false; error: string }
+  >(() => {
+    if (mode === "builder") return { ok: true, query };
+    try {
+      return { ok: true, query: parseCommand(cmdText) };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+  }, [mode, query, cmdText]);
+
+  const switchTo = (m: "builder" | "command") => {
+    if (m === "command") setCmdText(serializeCommand(query));
+    setMode(m);
+  };
+
   const run = () =>
-    start(async () => setResult(await runQueryAction(query)));
+    start(async () => {
+      if (!effective.ok) {
+        toast.error(effective.error);
+        return;
+      }
+      setResult(await runQueryAction(effective.query));
+    });
 
   return (
     <div className="space-y-3">
+      <div className="flex items-center gap-1 text-xs">
+        {(["builder", "command"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => switchTo(m)}
+            className={
+              "rounded px-2 py-0.5 capitalize transition-colors " +
+              (mode === m
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-muted")
+            }
+          >
+            {m}
+          </button>
+        ))}
+      </div>
+
+      {mode === "command" ? (
+        <div className="space-y-1">
+          <Input
+            className="h-9 font-mono text-xs"
+            placeholder="LIST ID RPRO FOR RC>5 DDRY=5-10 DOWNBY RPRO"
+            value={cmdText}
+            onChange={(e) => setCmdText(e.target.value)}
+            spellCheck={false}
+          />
+          {effective.ok ? (
+            <p className="text-[11px] text-muted-foreground">
+              Parses OK · power mode — DC command syntax.
+            </p>
+          ) : (
+            <p className="text-[11px] text-destructive">
+              {effective.error}
+            </p>
+          )}
+        </div>
+      ) : (
+        <>
       {/* one continuous command line (wraps naturally) */}
       <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5 text-sm">
         <Select value={verb} onValueChange={(v) => setVerb(v as Verb)}>
@@ -358,6 +424,8 @@ export function QueryBuilder() {
           </code>
         )}
       </div>
+        </>
+      )}
 
       {/* actions row */}
       <div className="flex flex-wrap items-center gap-2">
@@ -376,9 +444,13 @@ export function QueryBuilder() {
           disabled={saving || !viewName.trim()}
           onClick={() =>
             startSave(async () => {
+              if (!effective.ok) {
+                toast.error(effective.error);
+                return;
+              }
               const res = await saveView({
                 name: viewName.trim(),
-                query,
+                query: effective.query,
               });
               if (res.error) {
                 toast.error(res.error);
