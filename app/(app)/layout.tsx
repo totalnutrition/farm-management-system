@@ -30,7 +30,7 @@ export default async function AppLayout({
       <TooltipProvider>
         <main className="w-full">
           <SidebarTrigger />
-          <section className="px-4">{children}</section>
+          <section className="px-6 py-2">{children}</section>
         </main>
       </TooltipProvider>
       <Toaster position="top-center" />
