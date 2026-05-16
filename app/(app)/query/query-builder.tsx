@@ -148,48 +148,63 @@ export function QueryBuilder() {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-md border text-sm">
-        {/* line 1: verb + columns + sort — one dense row */}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-b px-3 py-2">
-          <Select value={verb} onValueChange={(v) => setVerb(v as Verb)}>
-            <SelectTrigger className="h-7 w-[120px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="LIST">Show</SelectItem>
-              <SelectItem value="COUNT">Count</SelectItem>
-              <SelectItem value="SUM">Summarize</SelectItem>
-            </SelectContent>
-          </Select>
+      {/* one continuous command line (wraps naturally) */}
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5 text-sm">
+        <Select value={verb} onValueChange={(v) => setVerb(v as Verb)}>
+          <SelectTrigger className="h-7 w-[110px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="LIST">Show</SelectItem>
+            <SelectItem value="COUNT">Count</SelectItem>
+            <SelectItem value="SUM">Summarize</SelectItem>
+          </SelectContent>
+        </Select>
 
-          {verb !== "COUNT" &&
-            ITEMS.map((i) => (
+        {verb !== "COUNT" &&
+          ITEMS.map((i) => (
+            <button
+              key={i.value}
+              type="button"
+              onClick={() => toggleCol(i.value)}
+              className={
+                "rounded-full border px-2 py-0.5 text-[11px] leading-tight transition-colors " +
+                (columns.includes(i.value)
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border text-muted-foreground hover:bg-muted")
+              }
+            >
+              {i.label}
+            </button>
+          ))}
+
+        <span className="text-xs text-muted-foreground">where</span>
+        {conds.length === 0 && (
+          <span className="text-xs text-muted-foreground/70">all</span>
+        )}
+        {conds.map((c, idx) => (
+          <div key={idx} className="flex items-center gap-1">
+            {idx > 0 && (
               <button
-                key={i.value}
                 type="button"
-                onClick={() => toggleCol(i.value)}
-                className={
-                  "rounded-full border px-2 py-0.5 text-[11px] leading-tight transition-colors " +
-                  (columns.includes(i.value)
-                    ? "border-foreground bg-foreground text-background"
-                    : "border-border text-muted-foreground hover:bg-muted")
-                }
+                onClick={() => setMatchAny((m) => !m)}
+                className="px-0.5 text-[11px] font-medium text-muted-foreground hover:underline"
               >
-                {i.label}
+                {matchAny ? "or" : "and"}
               </button>
-            ))}
-
-          <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
-            sort
+            )}
             <Select
-              value={sortItem || "none"}
-              onValueChange={(v) => setSortItem(v === "none" ? "" : v)}
+              value={c.item}
+              onValueChange={(v) =>
+                setConds((cs) =>
+                  cs.map((x, i) => (i === idx ? { ...x, item: v } : x)),
+                )
+              }
             >
               <SelectTrigger className="h-7 w-[140px] text-xs">
-                <SelectValue />
+                <SelectValue placeholder="field" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Animal ID</SelectItem>
                 {ITEMS.map((i) => (
                   <SelectItem key={i.value} value={i.value}>
                     {i.label}
@@ -198,128 +213,104 @@ export function QueryBuilder() {
               </SelectContent>
             </Select>
             <Select
-              value={sortDir}
-              onValueChange={(v) => setSortDir(v as "asc" | "desc")}
+              value={c.op}
+              onValueChange={(v) =>
+                setConds((cs) =>
+                  cs.map((x, i) => (i === idx ? { ...x, op: v } : x)),
+                )
+              }
             >
-              <SelectTrigger className="h-7 w-[120px] text-xs">
+              <SelectTrigger className="h-7 w-[100px] text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="asc">lowest first</SelectItem>
-                <SelectItem value="desc">highest first</SelectItem>
+                {OPS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-          </span>
-        </div>
-
-        {/* line 2: conditions — compact inline rows */}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2">
-          <span className="text-xs text-muted-foreground">where</span>
-          {conds.length === 0 && (
-            <span className="text-xs text-muted-foreground/70">
-              (all animals)
-            </span>
-          )}
-          {conds.map((c, idx) => (
-            <div key={idx} className="flex items-center gap-1">
-              {idx > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setMatchAny((m) => !m)}
-                  className="px-1 text-[11px] font-medium text-muted-foreground hover:underline"
-                >
-                  {matchAny ? "or" : "and"}
-                </button>
-              )}
-              <Select
-                value={c.item}
-                onValueChange={(v) =>
-                  setConds((cs) =>
-                    cs.map((x, i) => (i === idx ? { ...x, item: v } : x)),
-                  )
-                }
-              >
-                <SelectTrigger className="h-7 w-[150px] text-xs">
-                  <SelectValue placeholder="field" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ITEMS.map((i) => (
-                    <SelectItem key={i.value} value={i.value}>
-                      {i.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={c.op}
-                onValueChange={(v) =>
-                  setConds((cs) =>
-                    cs.map((x, i) => (i === idx ? { ...x, op: v } : x)),
-                  )
-                }
-              >
-                <SelectTrigger className="h-7 w-[110px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {OPS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <Input
+              className="h-7 w-16 text-xs"
+              placeholder="value"
+              value={c.value}
+              onChange={(e) =>
+                setConds((cs) =>
+                  cs.map((x, i) =>
+                    i === idx ? { ...x, value: e.target.value } : x,
+                  ),
+                )
+              }
+            />
+            {c.op === "between" && (
               <Input
-                className="h-7 w-20 text-xs"
-                placeholder="value"
-                value={c.value}
+                className="h-7 w-16 text-xs"
+                placeholder="and"
+                value={c.value2}
                 onChange={(e) =>
                   setConds((cs) =>
                     cs.map((x, i) =>
-                      i === idx ? { ...x, value: e.target.value } : x,
+                      i === idx ? { ...x, value2: e.target.value } : x,
                     ),
                   )
                 }
               />
-              {c.op === "between" && (
-                <Input
-                  className="h-7 w-20 text-xs"
-                  placeholder="and"
-                  value={c.value2}
-                  onChange={(e) =>
-                    setConds((cs) =>
-                      cs.map((x, i) =>
-                        i === idx ? { ...x, value2: e.target.value } : x,
-                      ),
-                    )
-                  }
-                />
-              )}
-              <button
-                type="button"
-                aria-label="remove condition"
-                onClick={() =>
-                  setConds((cs) => cs.filter((_, i) => i !== idx))
-                }
-                className="px-1 text-muted-foreground hover:text-destructive"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={() =>
-              setConds((cs) => [
-                ...cs,
-                { item: "", op: "=", value: "", value2: "" },
-              ])
-            }
-            className="rounded border border-dashed px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
-          >
-            + condition
-          </button>
-        </div>
+            )}
+            <button
+              type="button"
+              aria-label="remove condition"
+              onClick={() =>
+                setConds((cs) => cs.filter((_, i) => i !== idx))
+              }
+              className="px-0.5 text-muted-foreground hover:text-destructive"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() =>
+            setConds((cs) => [
+              ...cs,
+              { item: "", op: "=", value: "", value2: "" },
+            ])
+          }
+          className="rounded border border-dashed px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
+        >
+          + condition
+        </button>
+
+        <span className="text-xs text-muted-foreground">sort</span>
+        <Select
+          value={sortItem || "none"}
+          onValueChange={(v) => setSortItem(v === "none" ? "" : v)}
+        >
+          <SelectTrigger className="h-7 w-[130px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Animal ID</SelectItem>
+            {ITEMS.map((i) => (
+              <SelectItem key={i.value} value={i.value}>
+                {i.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={sortDir}
+          onValueChange={(v) => setSortDir(v as "asc" | "desc")}
+        >
+          <SelectTrigger className="h-7 w-[110px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="asc">lowest first</SelectItem>
+            <SelectItem value="desc">highest first</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* slim sentence + inline command */}
