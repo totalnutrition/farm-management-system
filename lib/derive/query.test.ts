@@ -249,3 +249,64 @@ test("the range quirk is normalized INTO the IR (never leaks)", () => {
     minInclusive: false, maxInclusive: false,
   });
 });
+
+test("PCT: numerator over the FOR denominator", () => {
+  const pop = [
+    { id: "1", subject: { events: [{ code: 1, date: "2026-04-16" }] } }, // RC2 lact1
+    { id: "2", subject: { events: [{ code: 1, date: "2026-04-16" }, { code: 5, date: "2026-05-01" }] } }, // RC4
+    { id: "3", subject: { events: [] } }, // RC0
+  ];
+  const r = runQuery(
+    {
+      verb: "PCT",
+      items: [],
+      pct: [[{ kind: "cmp", item: "RC", op: "=", value: 4 }]],
+      for: [[{ kind: "cmp", item: "LACT", op: ">", value: 0 }]],
+    },
+    pop,
+    { today: "2026-05-16" },
+  ) as { denominator: number; numerator: number; pct: number };
+  assert.deepEqual(r, { denominator: 2, numerator: 1, pct: 50 });
+});
+
+test("SUM aggregate is selectable (median/min/max/total/stdev)", () => {
+  const pop = [10, 20, 30, 40].map((n, i) => ({
+    id: String(i),
+    subject: { facts: { baseLactation: n }, events: [] },
+  }));
+  const q = (agg: "mean" | "median" | "min" | "max" | "total" | "range") =>
+    (
+      runQuery(
+        { verb: "SUM", items: ["LACT"], agg },
+        pop,
+        { today: "2026-05-16" },
+      ) as { LACT: number | null }
+    ).LACT;
+  assert.equal(q("mean"), 25);
+  assert.equal(q("median"), 25);
+  assert.equal(q("min"), 10);
+  assert.equal(q("max"), 40);
+  assert.equal(q("total"), 100);
+  assert.equal(q("range"), 30);
+});
+
+test("SUM default stays mean (back-compat)", () => {
+  const pop = [2, 4].map((n, i) => ({
+    id: String(i),
+    subject: { facts: { baseLactation: n }, events: [] },
+  }));
+  const r = runQuery({ verb: "SUM", items: ["LACT"] }, pop, {
+    today: "2026-05-16",
+  }) as { count: number; LACT: number | null };
+  assert.deepEqual(r, { count: 2, LACT: 3 });
+});
+
+test("serialize∘parse round-trips PCT and the agg switch", () => {
+  for (const cmd of [
+    "PCT RC=4 FOR LACT>0",
+    "SUM MILK FOR DDAT=0 \\MEDIAN",
+    "SUM DIM \\STDEV",
+  ]) {
+    assert.equal(serializeCommand(parseCommand(cmd)), cmd);
+  }
+});

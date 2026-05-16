@@ -45,7 +45,24 @@ import { toCsv } from "@/lib/csv";
 import { saveView } from "../views/actions";
 import { toast } from "sonner";
 
-type Verb = "LIST" | "COUNT" | "SUM";
+type Verb = "LIST" | "COUNT" | "SUM" | "PCT";
+type AggOpt =
+  | "mean"
+  | "total"
+  | "min"
+  | "max"
+  | "range"
+  | "median"
+  | "stdev";
+const AGGS: AggOpt[] = [
+  "mean",
+  "total",
+  "min",
+  "max",
+  "range",
+  "median",
+  "stdev",
+];
 
 export function QueryBuilder() {
   const [verb, setVerb] = useState<Verb>("LIST");
@@ -64,20 +81,35 @@ export function QueryBuilder() {
   const [saving, startSave] = useTransition();
   const [mode, setMode] = useState<"builder" | "command">("builder");
   const [cmdText, setCmdText] = useState("");
+  const [agg, setAgg] = useState<AggOpt>("mean");
 
   const query: Query = useMemo(
-    () => ({
-      verb,
-      items: verb === "COUNT" ? [] : columns,
-      for: condsToPredicate(cond),
-      by: sortItem ? { item: sortItem, dir: sortDir } : undefined,
-    }),
-    [verb, columns, cond, sortItem, sortDir],
+    () =>
+      verb === "PCT"
+        ? {
+            verb,
+            items: [],
+            pct: condsToPredicate(cond),
+          }
+        : {
+            verb,
+            items: verb === "COUNT" ? [] : columns,
+            for: condsToPredicate(cond),
+            by: sortItem ? { item: sortItem, dir: sortDir } : undefined,
+            ...(verb === "SUM" && agg !== "mean" ? { agg } : {}),
+          },
+    [verb, columns, cond, sortItem, sortDir, agg],
   );
 
   const sentence = useMemo(() => {
+    if (verb === "PCT")
+      return `What % of animals${describeConds(cond) || " (all)"}?`;
     const verbText =
-      verb === "LIST" ? "Show" : verb === "COUNT" ? "Count" : "Summarize";
+      verb === "LIST"
+        ? "Show"
+        : verb === "COUNT"
+          ? "Count"
+          : `Summarize (${agg})`;
     const cols =
       verb === "COUNT"
         ? "animals"
@@ -90,7 +122,7 @@ export function QueryBuilder() {
         sortDir === "asc" ? "lowest" : "highest"
       } first)`;
     return s + ".";
-  }, [verb, columns, cond, sortItem, sortDir]);
+  }, [verb, columns, cond, sortItem, sortDir, agg]);
 
   const toggleCol = (v: string) =>
     setColumns((c) =>
@@ -167,10 +199,29 @@ export function QueryBuilder() {
                 <SelectItem value="LIST">Show</SelectItem>
                 <SelectItem value="COUNT">Count</SelectItem>
                 <SelectItem value="SUM">Summarize</SelectItem>
+                <SelectItem value="PCT">Percentage</SelectItem>
               </SelectContent>
             </Select>
 
-            {verb !== "COUNT" && (
+            {verb === "SUM" && (
+              <Select
+                value={agg}
+                onValueChange={(v) => setAgg(v as AggOpt)}
+              >
+                <SelectTrigger className="h-7 w-[110px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AGGS.map((a) => (
+                    <SelectItem key={a} value={a}>
+                      {a}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {(verb === "LIST" || verb === "SUM") && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -332,6 +383,30 @@ function CsvButton({ rows }: { rows: Record<string, unknown>[] }) {
 function Results({ result }: { result: QueryResponse }) {
   if ("error" in result)
     return <p className="text-sm text-destructive">Error: {result.error}</p>;
+  if (result.kind === "pct")
+    return (
+      <div>
+        <CsvButton
+          rows={[
+            {
+              pct: result.pct,
+              numerator: result.numerator,
+              denominator: result.denominator,
+            },
+          ]}
+        />
+        <Card>
+          <CardContent className="py-6">
+            <span className="font-heading text-3xl font-semibold">
+              {result.pct ?? "—"}%
+            </span>
+            <span className="ml-2 text-sm text-muted-foreground">
+              {result.numerator} of {result.denominator}
+            </span>
+          </CardContent>
+        </Card>
+      </div>
+    );
   if (result.kind === "count")
     return (
       <div>

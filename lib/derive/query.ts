@@ -11,8 +11,10 @@ import {
   type DeriveContext,
   type ItemValue,
 } from "./engine.ts";
+import { stats, pick, type Agg } from "./stats.ts";
 
-export type Verb = "LIST" | "COUNT" | "SUM";
+export type { Agg } from "./stats.ts";
+export type Verb = "LIST" | "COUNT" | "SUM" | "PCT";
 export type CmpOp = "=" | "<>" | ">" | ">=" | "<" | "<=";
 
 // One filter atom. `range` stores explicit normalized bounds — the
@@ -42,11 +44,18 @@ export type Query = {
   items: string[]; // display items (LIST) / aggregated items (SUM)
   for?: Predicate;
   by?: Sort; // default: BY ID ascending
+  agg?: Agg; // SUM aggregate (default "mean")
+  pct?: Predicate; // PCT numerator condition (over the FOR denominator)
 };
 
 export type Row = Record<string, ItemValue>;
 export type SumResult = { count: number } & Record<string, number | null>;
-export type QueryResult = Row[] | number | SumResult;
+export type PctResult = {
+  denominator: number;
+  numerator: number;
+  pct: number | null;
+};
+export type QueryResult = Row[] | number | SumResult | PctResult;
 
 export type PopulationMember = { id: string; subject: Subject };
 
@@ -84,20 +93,21 @@ function atomToCmd(a: Atom): string {
     : `${a.item}=${a.max}-${a.min}`; // descending exclusive
 }
 
+function predText(p: Predicate): string {
+  return p.length === 1
+    ? p[0].map(atomToCmd).join(" ")
+    : p.map((g) => `(${g.map(atomToCmd).join(" ")})`).join("");
+}
+
 export function serializeCommand(q: Query): string {
   const parts: string[] = [q.verb];
+  if (q.verb === "PCT" && q.pct && q.pct.length)
+    parts.push(predText(q.pct));
   if (q.items.length) parts.push(q.items.join(" "));
-  if (q.for && q.for.length) {
-    const groups = q.for;
-    const text =
-      groups.length === 1
-        ? groups[0].map(atomToCmd).join(" ")
-        : groups.map((g) => `(${g.map(atomToCmd).join(" ")})`).join("");
-    parts.push(`FOR ${text}`);
-  }
-  if (q.by) {
-    parts.push(q.by.dir === "desc" ? "DOWNBY" : "BY", q.by.item);
-  }
+  if (q.for && q.for.length) parts.push(`FOR ${predText(q.for)}`);
+  if (q.by) parts.push(q.by.dir === "desc" ? "DOWNBY" : "BY", q.by.item);
+  if (q.verb === "SUM" && q.agg && q.agg !== "mean")
+    parts.push(`\\${q.agg.toUpperCase()}`);
   return parts.join(" ");
 }
 
@@ -150,28 +160,45 @@ export function parseCommand(input: string): Query {
   const verb: Verb =
     v === "SHOW"
       ? "LIST"
-      : v === "LIST" || v === "COUNT" || v === "SUM"
+      : v === "LIST" || v === "COUNT" || v === "SUM" || v === "PCT"
         ? (v as Verb)
         : (() => {
             throw new Error(`Unknown verb "${tokens[0]}"`);
           })();
 
+  const AGGS = [
+    "mean", "total", "min", "max", "range", "median", "stdev", "count",
+  ];
   const isKw = (t: string) => /^(FOR|BY|DOWNBY)$/i.test(t);
+  const isSw = (t: string) => t.startsWith("\\");
+  const stop = (t: string) => isKw(t) || isSw(t);
+
   let i = 1;
-  const items: string[] = [];
-  while (i < tokens.length && !isKw(tokens[i])) {
-    items.push(tokens[i].toUpperCase());
+  const head: string[] = [];
+  while (i < tokens.length && !stop(tokens[i])) {
+    head.push(tokens[i]);
     i++;
   }
+  const items = verb === "PCT" ? [] : head.map((t) => t.toUpperCase());
+  const pct =
+    verb === "PCT" && head.length ? parsePredicate(head.join(" ")) : undefined;
 
   let forPred: Predicate | undefined;
   let by: Sort | undefined;
+  let agg: Agg | undefined;
   while (i < tokens.length) {
-    const kw = tokens[i].toUpperCase();
+    const tk = tokens[i];
+    if (isSw(tk)) {
+      const a = tk.slice(1).toLowerCase();
+      if (AGGS.includes(a)) agg = a as Agg;
+      i++;
+      continue;
+    }
+    const kw = tk.toUpperCase();
     if (kw === "FOR") {
       i++;
       const pred: string[] = [];
-      while (i < tokens.length && !isKw(tokens[i])) {
+      while (i < tokens.length && !stop(tokens[i])) {
         pred.push(tokens[i]);
         i++;
       }
@@ -189,7 +216,10 @@ export function parseCommand(input: string): Query {
     }
   }
 
-  return { verb, items, for: forPred, by };
+  const out: Query = { verb, items, for: forPred, by };
+  if (agg) out.agg = agg;
+  if (pct) out.pct = pct;
+  return out;
 }
 
 // --- value resolution ------------------------------------------------
@@ -302,19 +332,33 @@ export function runQuery(
 
   if (q.verb === "COUNT") return selected.length;
 
+  if (q.verb === "PCT") {
+    const denominator = selected.length;
+    const numerator = q.pct
+      ? selected.filter((m) =>
+          matchPredicate(q.pct, (item) => resolve(item, m, ctx)),
+        ).length
+      : denominator;
+    return {
+      denominator,
+      numerator,
+      pct:
+        denominator === 0
+          ? null
+          : Math.round((numerator / denominator) * 1000) / 10,
+    };
+  }
+
   if (q.verb === "SUM") {
+    const agg: Agg = q.agg ?? "mean";
     const out: SumResult = { count: selected.length };
     for (const item of q.items) {
-      let sum = 0;
-      let n = 0;
+      const nums: number[] = [];
       for (const m of selected) {
         const v = asNumber(resolve(item, m, ctx));
-        if (v !== null) {
-          sum += v; // DC default ignores missing/zero-less values
-          n += 1;
-        }
+        if (v !== null) nums.push(v); // DC default ignores missing values
       }
-      out[item] = n === 0 ? null : sum / n;
+      out[item] = pick(stats(nums), agg);
     }
     return out;
   }

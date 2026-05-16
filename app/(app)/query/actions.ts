@@ -11,7 +11,13 @@ export type QueryResponse =
   | { error: string }
   | { kind: "list"; rows: Array<Record<string, string | number | null>> }
   | { kind: "count"; count: number }
-  | { kind: "sum"; sum: Record<string, number | null> };
+  | { kind: "sum"; sum: Record<string, number | null> }
+  | {
+      kind: "pct";
+      denominator: number;
+      numerator: number;
+      pct: number | null;
+    };
 
 function factsFromAttrs(attrs: unknown): IntakeFacts {
   const a = (attrs ?? {}) as Record<string, unknown>;
@@ -84,6 +90,22 @@ export async function runQueryAction(
 
   if (typeof result === "number") return { kind: "count", count: result };
   if (Array.isArray(result)) return { kind: "list", rows: result };
-  const { count, ...rest } = result;
+  if (q.verb === "PCT") {
+    const p = result as {
+      denominator: number;
+      numerator: number;
+      pct: number | null;
+    };
+    return {
+      kind: "pct",
+      denominator: p.denominator,
+      numerator: p.numerator,
+      pct: p.pct,
+    };
+  }
+  const { count, ...rest } = result as { count: number } & Record<
+    string,
+    number | null
+  >;
   return { kind: "sum", sum: { count, ...rest } };
 }
