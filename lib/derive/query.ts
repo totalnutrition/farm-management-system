@@ -245,16 +245,31 @@ function looseEq(v: ItemValue, target: number | string): boolean {
   return String(v) === String(target);
 }
 
+// Generic predicate evaluation, reusable anywhere a per-item value
+// resolver can be supplied (executor, grouping engine, …).
+export function matchPredicate(
+  pred: Predicate | undefined,
+  get: (item: string) => ItemValue,
+): boolean {
+  if (!pred || pred.length === 0) return true;
+  // OR of AND-groups
+  return pred.some((group) =>
+    group.every((atom) => evalAtom(atom, get(atom.item))),
+  );
+}
+
+// Parse a bare DC FOR-style predicate string ("RC=6 DCC>219", OR via
+// () groups / ; sets). Exposed for rule authoring.
+export function parsePredicateString(s: string): Predicate | undefined {
+  return parsePredicate(s);
+}
+
 function matches(
   pred: Predicate | undefined,
   m: PopulationMember,
   ctx: DeriveContext,
 ): boolean {
-  if (!pred || pred.length === 0) return true;
-  // OR of AND-groups
-  return pred.some((group) =>
-    group.every((atom) => evalAtom(atom, resolve(atom.item, m, ctx))),
-  );
+  return matchPredicate(pred, (item) => resolve(item, m, ctx));
 }
 
 // --- sorting (default BY ID ascending) ------------------------------
