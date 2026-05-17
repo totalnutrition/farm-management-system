@@ -87,20 +87,23 @@ export default async function RecordsPage() {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-xs text-muted-foreground">
+          <table className="w-full border-collapse text-xs tabular-nums">
+            <thead className="border-b bg-muted/50 text-[11px] uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-2 text-left">Animal ID</th>
-                <th className="px-3 py-2 text-left">Name</th>
-                <th className="px-3 py-2 text-left">Repro status</th>
-                <th className="px-3 py-2 text-left">Lactation</th>
-                <th className="px-3 py-2 text-left">Days in milk</th>
+                <th className="px-2 py-1 text-left font-medium">Animal ID</th>
+                <th className="px-2 py-1 text-left font-medium">Name</th>
+                <th className="px-2 py-1 text-left font-medium">Repro</th>
+                <th className="px-2 py-1 text-right font-medium">Lact</th>
+                <th className="px-2 py-1 text-right font-medium">DIM</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-t hover:bg-muted/30">
-                  <td className="px-3 py-2">
+                <tr
+                  key={r.id}
+                  className="border-b border-border/40 hover:bg-muted/30"
+                >
+                  <td className="px-2 py-0.5">
                     <Link
                       href={`/records/${r.id}`}
                       className="font-medium underline-offset-2 hover:underline"
@@ -108,10 +111,10 @@ export default async function RecordsPage() {
                       {r.naturalKey}
                     </Link>
                   </td>
-                  <td className="px-3 py-2">{r.name ?? "—"}</td>
-                  <td className="px-3 py-2">{r.rpro ?? "—"}</td>
-                  <td className="px-3 py-2">{r.lact ?? "—"}</td>
-                  <td className="px-3 py-2">{r.dim ?? "—"}</td>
+                  <td className="px-2 py-0.5">{r.name ?? "—"}</td>
+                  <td className="px-2 py-0.5">{r.rpro ?? "—"}</td>
+                  <td className="px-2 py-0.5 text-right">{r.lact ?? "—"}</td>
+                  <td className="px-2 py-0.5 text-right">{r.dim ?? "—"}</td>
                 </tr>
               ))}
             </tbody>

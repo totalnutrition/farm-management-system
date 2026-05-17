@@ -149,4 +149,13 @@
   html {
     @apply font-sans;
   }
+  /* DairyComp-style dense data tables by default */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+  th,
+  td {
+    padding: 2px 8px;
+    line-height: 1.15rem;
+  }
 }

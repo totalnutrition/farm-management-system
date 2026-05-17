@@ -148,26 +148,26 @@ export function GroupingClient({
           </p>
         ) : (
           <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-xs text-muted-foreground">
+            <table className="w-full border-collapse text-xs tabular-nums">
+              <thead className="border-b bg-muted/50 text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-2 text-left">#</th>
-                  <th className="px-3 py-2 text-left">Name</th>
-                  <th className="px-3 py-2 text-left">When</th>
-                  <th className="px-3 py-2 text-left">→ Pen</th>
-                  <th className="px-3 py-2" />
+                  <th className="px-2 py-1 text-left font-medium">#</th>
+                  <th className="px-2 py-1 text-left font-medium">Name</th>
+                  <th className="px-2 py-1 text-left font-medium">When</th>
+                  <th className="px-2 py-1 text-left font-medium">→ Pen</th>
+                  <th className="px-2 py-1" />
                 </tr>
               </thead>
               <tbody>
                 {rules.map((r) => (
-                  <tr key={r.id} className="border-t">
-                    <td className="px-3 py-2 text-muted-foreground">
+                  <tr key={r.id} className="border-b border-border/40 hover:bg-muted/30">
+                    <td className="px-2 py-0.5 text-muted-foreground">
                       {r.ordinal}
                     </td>
-                    <td className="px-3 py-2 font-medium">{r.name}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{r.cond}</td>
-                    <td className="px-3 py-2">{r.target}</td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-2 py-0.5 font-medium">{r.name}</td>
+                    <td className="px-2 py-0.5 font-mono">{r.cond}</td>
+                    <td className="px-2 py-0.5">{r.target}</td>
+                    <td className="px-2 py-0.5 text-right">
                       <Button
                         size="sm"
                         variant="ghost"
@@ -243,22 +243,22 @@ export function GroupingClient({
           </p>
         ) : (
           <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-xs text-muted-foreground">
+            <table className="w-full border-collapse text-xs tabular-nums">
+              <thead className="border-b bg-muted/50 text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-2 text-left">Animal</th>
-                  <th className="px-3 py-2 text-left">From</th>
-                  <th className="px-3 py-2 text-left">→ To</th>
-                  <th className="px-3 py-2 text-left">Rule</th>
-                  <th className="px-3 py-2" />
+                  <th className="px-2 py-1 text-left font-medium">Animal</th>
+                  <th className="px-2 py-1 text-left font-medium">From</th>
+                  <th className="px-2 py-1 text-left font-medium">→ To</th>
+                  <th className="px-2 py-1 text-left font-medium">Rule</th>
+                  <th className="px-2 py-1" />
                 </tr>
               </thead>
               <tbody>
                 {worklist.map((m) => (
-                  <tr key={m.subjectId} className="border-t">
-                    <td className="px-3 py-2 font-medium">{m.id}</td>
-                    <td className="px-3 py-2">{m.from ?? "—"}</td>
-                    <td className="px-3 py-2 font-medium">
+                  <tr key={m.subjectId} className="border-b border-border/40 hover:bg-muted/30">
+                    <td className="px-2 py-0.5 font-medium">{m.id}</td>
+                    <td className="px-2 py-0.5">{m.from ?? "—"}</td>
+                    <td className="px-2 py-0.5 font-medium">
                       {m.to}
                       {m.overCapacity && (
                         <span className="ml-2 text-[11px] text-destructive">
@@ -266,10 +266,10 @@ export function GroupingClient({
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">
+                    <td className="px-2 py-0.5 text-muted-foreground">
                       {m.rule}
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-2 py-0.5 text-right">
                       <Button
                         size="sm"
                         disabled={pending}
