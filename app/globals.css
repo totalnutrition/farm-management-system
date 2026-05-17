@@ -149,13 +149,14 @@
   html {
     @apply font-sans;
   }
-  /* DairyComp-style dense data tables by default */
+  /* Pure DairyComp grid: monospace, fixed-width, near-zero padding */
   table {
     font-variant-numeric: tabular-nums;
+    font-family: var(--font-mono, ui-monospace, monospace);
   }
   th,
   td {
-    padding: 2px 8px;
-    line-height: 1.15rem;
+    padding: 0 8px;
+    line-height: 1.05rem;
   }
 }
