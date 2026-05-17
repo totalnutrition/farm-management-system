@@ -41,12 +41,16 @@ export default async function MonitorPage() {
   if (ids.length) {
     const { data: events } = await admin
       .from("events")
-      .select("subject_id, event_code, event_date")
+      .select("subject_id, event_code, event_date, payload")
       .eq("organization_id", orgId)
       .in("subject_id", ids);
     for (const e of events ?? []) {
       const l = byId.get(e.subject_id) ?? [];
-      l.push({ code: e.event_code, date: e.event_date });
+      l.push({
+        code: e.event_code,
+        date: e.event_date,
+        payload: (e.payload ?? {}) as Record<string, unknown>,
+      });
       byId.set(e.subject_id, l);
     }
   }
