@@ -87,7 +87,7 @@ export default async function RecordsPage() {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full border-collapse font-mono text-[11px] leading-tight tabular-nums">
+          <table className="w-auto border-collapse font-mono text-[11px] leading-tight tabular-nums">
             <thead className="border-b bg-muted/50 text-[11px] font-semibold text-muted-foreground">
               <tr>
                 <th className="px-2 text-left">ID</th>
