@@ -17,6 +17,7 @@ export const PathExtended = "/extended";
 export const PathImport = "/import";
 export const PathHealth = "/health";
 export const PathBarns = "/barns";
+export const PathHousing = "/housing";
 export const PathSires = "/sires";
 export const PathActivity = "/activity";
 export const PathNotifications = "/notifications";
