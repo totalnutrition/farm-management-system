@@ -32,9 +32,12 @@ import {
   labelOf,
   ITEMS,
   ITEM_GROUPS,
+  isAggregatable,
+  isGroupable,
   type ConditionValue,
 } from "@/components/condition-builder";
 import { FieldPicker } from "@/components/field-picker";
+import { validateQuery } from "@/lib/derive/validate-query";
 import { runQueryAction, type QueryResponse } from "./actions";
 import { toCsv } from "@/lib/csv";
 import { saveView } from "../views/actions";
@@ -82,9 +85,25 @@ export function QueryBuilder() {
   const [hOp, setHOp] = useState("");
   const [hVal, setHVal] = useState("");
 
+  // DairyComp slot rules: SUM only takes numeric items; BY (group)
+  // only category items; sort (LIST) only an output column.
+  const numericItems = useMemo(
+    () => ITEMS.filter((i) => isAggregatable(i.value)),
+    [],
+  );
+  const groupableItems = useMemo(
+    () => ITEMS.filter((i) => isGroupable(i.value)),
+    [],
+  );
+  const sortableItems = useMemo(
+    () => ITEMS.filter((i) => columns.includes(i.value)),
+    [columns],
+  );
+  const canGroup = verb === "COUNT" || verb === "SUM";
+
   const query: Query = useMemo(() => {
-    const groupBy = [g1, g2].filter(Boolean);
-    const grp = verb !== "LIST" && groupBy.length ? groupBy : undefined;
+    const groupBy = [g1, g2].filter(Boolean).filter(isGroupable);
+    const grp = canGroup && groupBy.length ? groupBy : undefined;
     const having =
       grp && hOp && hVal !== ""
         ? { op: hOp as CmpOp, value: Number(hVal) }
@@ -94,10 +113,15 @@ export function QueryBuilder() {
         ? { verb, items: [] as string[], pct: condsToPredicate(cond) }
         : {
             verb,
-            items: verb === "COUNT" ? [] : columns,
+            items:
+              verb === "COUNT"
+                ? []
+                : verb === "SUM"
+                  ? columns.filter(isAggregatable)
+                  : columns,
             for: condsToPredicate(cond),
             by:
-              !grp && sortItem
+              verb === "LIST" && sortItem && columns.includes(sortItem)
                 ? { item: sortItem, dir: sortDir }
                 : undefined,
             ...(verb === "SUM" && agg !== "mean" ? { agg } : {}),
@@ -107,7 +131,19 @@ export function QueryBuilder() {
       ...(grp ? { groupBy: grp } : {}),
       ...(having ? { having } : {}),
     } as Query;
-  }, [verb, columns, cond, sortItem, sortDir, agg, g1, g2, hOp, hVal]);
+  }, [
+    verb,
+    canGroup,
+    columns,
+    cond,
+    sortItem,
+    sortDir,
+    agg,
+    g1,
+    g2,
+    hOp,
+    hVal,
+  ]);
 
   const sentence = useMemo(() => {
     if (verb === "PCT")
@@ -140,9 +176,14 @@ export function QueryBuilder() {
   const effective = useMemo<
     { ok: true; query: Query } | { ok: false; error: string }
   >(() => {
-    if (mode === "builder") return { ok: true, query };
+    if (mode === "builder") {
+      const bad = validateQuery(query);
+      return bad ? { ok: false, error: bad } : { ok: true, query };
+    }
     try {
-      return { ok: true, query: parseCommand(cmdText) };
+      const parsed = parseCommand(cmdText);
+      const bad = validateQuery(parsed);
+      return bad ? { ok: false, error: bad } : { ok: true, query: parsed };
     } catch (e) {
       return { ok: false, error: (e as Error).message };
     }
@@ -232,22 +273,17 @@ export function QueryBuilder() {
             {(verb === "LIST" || verb === "SUM") && (
               <FieldPicker
                 multiple
-                items={ITEMS}
+                items={verb === "SUM" ? numericItems : ITEMS}
                 groups={ITEM_GROUPS}
                 values={columns}
                 onToggle={toggleCol}
-                exclude={
-                  verb === "SUM"
-                    ? (i) => i.value === "PEN"
-                    : undefined
-                }
                 placeholder={verb === "SUM" ? "Averaging" : "Columns"}
               />
             )}
 
             <ConditionBuilder value={cond} onChange={setCond} />
 
-            {verb !== "LIST" && (
+            {canGroup && (
               <>
                 <span className="text-xs text-muted-foreground">
                   group by
@@ -258,7 +294,7 @@ export function QueryBuilder() {
                 ].map(([gv, gs], idx) => (
                   <FieldPicker
                     key={idx}
-                    items={ITEMS}
+                    items={groupableItems}
                     groups={ITEM_GROUPS}
                     value={gv}
                     onChange={gs}
@@ -301,27 +337,33 @@ export function QueryBuilder() {
               </>
             )}
 
-            <span className="text-xs text-muted-foreground">sort</span>
-            <FieldPicker
-              items={ITEMS}
-              groups={ITEM_GROUPS}
-              value={sortItem}
-              onChange={setSortItem}
-              clearLabel="Animal ID"
-              triggerClassName="w-[130px]"
-            />
-            <Select
-              value={sortDir}
-              onValueChange={(v) => setSortDir(v as "asc" | "desc")}
-            >
-              <SelectTrigger className="h-7 w-[110px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="asc">lowest first</SelectItem>
-                <SelectItem value="desc">highest first</SelectItem>
-              </SelectContent>
-            </Select>
+            {verb === "LIST" && columns.length > 0 && (
+              <>
+                <span className="text-xs text-muted-foreground">sort</span>
+                <FieldPicker
+                  items={sortableItems}
+                  groups={ITEM_GROUPS}
+                  value={sortItem}
+                  onChange={setSortItem}
+                  clearLabel="Animal ID"
+                  triggerClassName="w-[130px]"
+                />
+                <Select
+                  value={sortDir}
+                  onValueChange={(v) =>
+                    setSortDir(v as "asc" | "desc")
+                  }
+                >
+                  <SelectTrigger className="h-7 w-[110px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="asc">lowest first</SelectItem>
+                    <SelectItem value="desc">highest first</SelectItem>
+                  </SelectContent>
+                </Select>
+              </>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
@@ -339,11 +381,20 @@ export function QueryBuilder() {
               </code>
             )}
           </div>
+          {!effective.ok && (
+            <p className="text-[11px] text-destructive">
+              {effective.error}
+            </p>
+          )}
         </>
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={run} disabled={pending}>
+        <Button
+          size="sm"
+          onClick={run}
+          disabled={pending || !effective.ok}
+        >
           {pending ? "Running…" : "Run"}
         </Button>
         <span className="flex items-center gap-1 text-xs text-muted-foreground">

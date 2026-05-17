@@ -10,7 +10,20 @@ import {
 } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
 
-type Item = { value: string; label: string; group: string };
+type Item = {
+  value: string;
+  label: string;
+  group: string;
+  kind?: string;
+};
+
+const KIND_TAG: Record<string, string> = {
+  num: "#",
+  enum: "code",
+  bool: "y/n",
+  date: "date",
+  text: "txt",
+};
 
 // One shared field picker for the whole query/grouping surface: typed
 // search + grouped, scrollable sections so the catalog stays usable as
@@ -23,7 +36,6 @@ export function FieldPicker({
   values,
   onToggle,
   multiple = false,
-  exclude,
   clearLabel,
   placeholder = "field",
   triggerClassName,
@@ -36,7 +48,6 @@ export function FieldPicker({
   values?: string[];
   onToggle?: (v: string) => void;
   multiple?: boolean;
-  exclude?: (i: Item) => boolean;
   clearLabel?: string;
   placeholder?: string;
   triggerClassName?: string;
@@ -45,11 +56,6 @@ export function FieldPicker({
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const pool = useMemo(
-    () => (exclude ? items.filter((i) => !exclude(i)) : items),
-    [items, exclude],
-  );
 
   const sections = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -60,10 +66,10 @@ export function FieldPicker({
     return groups
       .map((g) => ({
         group: g,
-        items: pool.filter((i) => i.group === g && match(i)),
+        items: items.filter((i) => i.group === g && match(i)),
       }))
       .filter((s) => s.items.length > 0);
-  }, [pool, groups, q]);
+  }, [items, groups, q]);
 
   const labelOf = (v: string) =>
     items.find((i) => i.value === v)?.label ?? v;
@@ -162,11 +168,16 @@ export function FieldPicker({
                       type="button"
                       onClick={() => choose(i.value)}
                       className={cn(
-                        "flex w-full items-center justify-between px-3 py-1.5 text-left text-xs hover:bg-muted",
+                        "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted",
                         active && "font-medium",
                       )}
                     >
-                      {i.label}
+                      <span className="flex-1 truncate">{i.label}</span>
+                      {i.kind && (
+                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
+                          {KIND_TAG[i.kind] ?? i.kind}
+                        </span>
+                      )}
                       {active && (
                         <HugeiconsIcon
                           icon={Tick02Icon}

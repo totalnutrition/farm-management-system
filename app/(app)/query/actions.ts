@@ -5,6 +5,7 @@ import "@/lib/derive/items";
 import { requireUser, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { runQuery, type Query, type PopulationMember } from "@/lib/derive/query";
+import { validateQuery } from "@/lib/derive/validate-query";
 import type { Event, IntakeFacts } from "@/lib/derive/engine";
 
 export type QueryResponse =
@@ -52,6 +53,9 @@ export async function runQueryAction(
   ) {
     return { error: "Invalid query." };
   }
+
+  const invalid = validateQuery(q);
+  if (invalid) return { error: invalid };
 
   const db = createAdminClient();
 

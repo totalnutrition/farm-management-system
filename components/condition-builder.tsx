@@ -11,120 +11,34 @@ import {
 import { FieldPicker } from "@/components/field-picker";
 import { range, type Atom, type CmpOp, type Predicate } from "@/lib/derive/query";
 
-// The single shared catalog of items the engine can compute. Both the
-// Query bar and the Grouping rule editor use this — one generator.
-// `group` drives the sectioned, searchable field picker.
-export const ITEM_GROUPS = [
-  "Identity & location",
-  "Reproduction",
-  "Lactation",
-  "Milk yield",
-  "Components & quality",
-  "Health & flags",
-  "Feed & intake",
-] as const;
-export type ItemGroup = (typeof ITEM_GROUPS)[number];
+// One typed catalog for the whole query/grouping surface. Definitions
+// live in the pure lib module (shared with the server-side guard);
+// re-exported here so existing import sites keep working.
+export {
+  ITEM_GROUPS,
+  ITEMS,
+  labelOf,
+  OPS,
+  opLabel,
+  kindOf,
+  optionsOf,
+  opsFor,
+  isAggregatable,
+  isGroupable,
+  tagOf,
+  type ItemGroup,
+  type FieldKind,
+} from "@/lib/derive/catalog";
 
-export const ITEMS: { value: string; label: string; group: ItemGroup }[] = [
-  { value: "ID", label: "Animal ID", group: "Identity & location" },
-  { value: "PEN", label: "Pen (physical)", group: "Identity & location" },
-  { value: "AGE", label: "Age (months)", group: "Identity & location" },
-  { value: "RPRO", label: "Repro status", group: "Reproduction" },
-  { value: "ABT", label: "Abortion vet flag", group: "Reproduction" },
-  { value: "DCC", label: "Days carrying calf", group: "Reproduction" },
-  { value: "DUE", label: "Days to due", group: "Reproduction" },
-  { value: "DSLH", label: "Days since last heat", group: "Reproduction" },
-  { value: "DOPN", label: "Days open", group: "Reproduction" },
-  { value: "LACT", label: "Lactation #", group: "Lactation" },
-  { value: "DIM", label: "Days in milk", group: "Lactation" },
-  { value: "DDRY", label: "Days dry", group: "Lactation" },
-  { value: "FDAT", label: "Fresh date", group: "Lactation" },
-  { value: "DDAT", label: "Dry date", group: "Lactation" },
-  { value: "LCTGP", label: "Lactation group", group: "Lactation" },
-  { value: "MILK", label: "Milk today (kg)", group: "Milk yield" },
-  { value: "MAVG", label: "Milk avg 7d (kg)", group: "Milk yield" },
-  { value: "PMILK", label: "Milk prev day (kg)", group: "Milk yield" },
-  { value: "PEAK", label: "Peak milk (kg)", group: "Milk yield" },
-  { value: "MTOT", label: "Milk lactation total (kg)", group: "Milk yield" },
-  { value: "PCTF", label: "Fat %", group: "Components & quality" },
-  { value: "PCTP", label: "Protein %", group: "Components & quality" },
-  { value: "SNF", label: "SNF %", group: "Components & quality" },
-  { value: "TS", label: "Total solids %", group: "Components & quality" },
-  { value: "SCC", label: "SCC (1000s)", group: "Components & quality" },
-  { value: "LS", label: "Linear score", group: "Components & quality" },
-  { value: "DNSHIP", label: "Do-not-ship (YES/no)", group: "Health & flags" },
-  {
-    value: "DNSELL",
-    label: "Do-not-sell meat (YES/no)",
-    group: "Health & flags",
-  },
-  { value: "MWHOLD", label: "Milk withhold until", group: "Health & flags" },
-  { value: "BWHOLD", label: "Meat withhold until", group: "Health & flags" },
-  { value: "LTDAT", label: "Last treatment date", group: "Health & flags" },
-  { value: "FLAGGED", label: "Flagged (YES/no)", group: "Health & flags" },
-  { value: "ATTN", label: "Flagged for", group: "Health & flags" },
-  { value: "FEEDKG", label: "Feed delivered (kg)", group: "Feed & intake" },
-  { value: "REFKG", label: "Feed refused (kg)", group: "Feed & intake" },
-  { value: "FEEDCOST", label: "Feed cost", group: "Feed & intake" },
-  { value: "SHRINK", label: "Feed shrink %", group: "Feed & intake" },
-];
-export const labelOf = (v: string) =>
-  ITEMS.find((i) => i.value === v)?.label ?? v;
-
-export const OPS: { value: string; label: string }[] = [
-  { value: "=", label: "is" },
-  { value: "<>", label: "is not" },
-  { value: ">", label: "more than" },
-  { value: ">=", label: "at least" },
-  { value: "<", label: "less than" },
-  { value: "<=", label: "at most" },
-  { value: "between", label: "between" },
-];
-export const opLabel = (v: string) =>
-  OPS.find((o) => o.value === v)?.label ?? v;
-
-// Field types. The engine only does string-equality for =/<> and
-// numeric ordering for >/<; categorical & date fields therefore get a
-// constrained operator set and a proper value control instead of a
-// free numeric box (which produced nonsense like "Repro status > 3").
-export type FieldKind = "num" | "enum" | "bool" | "date" | "text";
-
-const ENUM_OPTS: Record<string, string[]> = {
-  RPRO: [
-    "VIRGIN",
-    "DNB",
-    "FRESH",
-    "OPEN",
-    "BRED",
-    "PREG",
-    "DRY",
-    "SLD/DIE",
-    "BULLCAF",
-  ],
-  LCTGP: ["H", "1", "2", "3+"],
-  ABT: ["ABT?"],
-};
-const BOOL_ITEMS = new Set(["FLAGGED", "DNSHIP", "DNSELL"]);
-const TEXT_ITEMS = new Set(["ID", "PEN", "ATTN"]);
-const DATE_ITEMS = new Set(["FDAT", "DDAT", "MWHOLD", "BWHOLD", "LTDAT"]);
-
-export function kindOf(item: string): FieldKind {
-  if (item in ENUM_OPTS) return "enum";
-  if (BOOL_ITEMS.has(item)) return "bool";
-  if (DATE_ITEMS.has(item)) return "date";
-  if (TEXT_ITEMS.has(item)) return "text";
-  return "num";
-}
-export const optionsOf = (item: string): string[] =>
-  BOOL_ITEMS.has(item) ? ["YES", "no"] : (ENUM_OPTS[item] ?? []);
-
-// Only number fields support ordered / between operators; everything
-// else is is / is not (string equality the engine can actually do).
-export function opsFor(item: string): { value: string; label: string }[] {
-  return kindOf(item) === "num"
-    ? OPS
-    : OPS.filter((o) => o.value === "=" || o.value === "<>");
-}
+import {
+  labelOf,
+  opLabel,
+  kindOf,
+  optionsOf,
+  opsFor,
+  ITEMS,
+  ITEM_GROUPS,
+} from "@/lib/derive/catalog";
 
 export type Cond = {
   item: string;
