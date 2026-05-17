@@ -5,6 +5,7 @@ import { type Predicate } from "@/lib/derive/query";
 import type { Event } from "@/lib/derive/engine";
 import {
   buildWorklist,
+  groupSizes,
   unmappedGroups,
   describePredicate,
   describePlacement,
@@ -49,7 +50,7 @@ export default async function GroupingPage() {
     };
   });
   const penOptions: PenOption[] = pens
-    .map((p) => ({ value: p.name }))
+    .map((p) => ({ value: p.name, capacity: p.capacity }))
     .sort((x, y) =>
       x.value.localeCompare(y.value, undefined, { numeric: true }),
     );
@@ -132,6 +133,8 @@ export default async function GroupingPage() {
     pens,
   ).map((w) => ({ ...w, subjectId: idToSubjectId.get(w.id)! }));
 
+  const sizes = groupSizes(population, ruleset, { today });
+
   const ruleRows: RuleRow[] = (rules ?? []).map((r) => {
     const pl = placementOf(r);
     return {
@@ -142,6 +145,7 @@ export default async function GroupingPage() {
       placement: pl,
       placementText: describePlacement(pl),
       mapped: pl.kind !== "none",
+      size: sizes[r.name] ?? 0,
     };
   });
 

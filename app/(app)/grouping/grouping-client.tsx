@@ -33,6 +33,7 @@ import {
   moveAnimal,
   installGroupingPresets,
   setGroupPlacement,
+  savePenCapacities,
 } from "./actions";
 
 export type RuleRow = {
@@ -43,6 +44,7 @@ export type RuleRow = {
   placement: Placement;
   placementText: string;
   mapped: boolean;
+  size: number;
 };
 export type Move = {
   id: string;
@@ -52,7 +54,7 @@ export type Move = {
   rule: string;
   overCapacity: boolean;
 };
-export type PenOption = { value: string };
+export type PenOption = { value: string; capacity: number | null };
 
 type PMode = "none" | "single" | "parity" | "item" | "capacity";
 
@@ -75,20 +77,7 @@ export function GroupingClient({
     matchAny: false,
   });
   const [mapId, setMapId] = useState<string | null>(null);
-
-  const penList = (
-    value: string,
-    onChange: (v: string) => void,
-    placeholder: string,
-  ) => (
-    <Input
-      list="pen-options"
-      className="h-7 w-[120px] text-xs"
-      placeholder={placeholder}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    />
-  );
+  const [override, setOverride] = useState<Record<string, string>>({});
 
   const submit = () =>
     start(async () => {
@@ -113,9 +102,22 @@ export function GroupingClient({
 
   const move = (m: Move) =>
     start(async () => {
-      const res = await moveAnimal({ subjectId: m.subjectId, toPen: m.to });
+      const to = override[m.subjectId] ?? m.to;
+      const res = await moveAnimal({ subjectId: m.subjectId, toPen: to });
       if (res.error) return void toast.error(res.error);
-      toast.success(`${m.id} → ${m.to}.`);
+      toast.success(`${m.id} → ${to}.`);
+      router.refresh();
+    });
+
+  const acceptAll = () =>
+    start(async () => {
+      let ok = 0;
+      for (const m of worklist) {
+        const to = override[m.subjectId] ?? m.to;
+        const res = await moveAnimal({ subjectId: m.subjectId, toPen: to });
+        if (!res.error) ok++;
+      }
+      toast.success(`Moved ${ok} of ${worklist.length} animals.`);
       router.refresh();
     });
 
@@ -155,8 +157,9 @@ export function GroupingClient({
         {unmapped.length > 0 && (
           <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
             {unmapped.length} group{unmapped.length === 1 ? "" : "s"} not
-            mapped to pens yet ({unmapped.join(", ")}). They won’t move
-            any animals until you map them.
+            mapped to pens yet ({unmapped.join(", ")}). See the counts
+            below, then map each to your pens — nothing moves until you
+            do.
           </p>
         )}
 
@@ -172,6 +175,7 @@ export function GroupingClient({
                 <tr>
                   <th className="px-2 text-left">#</th>
                   <th className="px-2 text-left">Group</th>
+                  <th className="px-2 text-right">Animals</th>
                   <th className="px-2 text-left">When</th>
                   <th className="px-2 text-left">Pens</th>
                   <th className="px-2" />
@@ -187,6 +191,9 @@ export function GroupingClient({
                       {r.ordinal}
                     </td>
                     <td className="px-2 font-medium">{r.name}</td>
+                    <td className="px-2 text-right font-medium">
+                      {r.size}
+                    </td>
                     <td className="px-2">{r.cond}</td>
                     <td className="px-2">
                       {r.mapped ? (
@@ -254,7 +261,7 @@ export function GroupingClient({
         <MapPensDialog
           key={target.id}
           group={target}
-          penList={penList}
+          pens={pens}
           onClose={() => setMapId(null)}
           onSaved={() => {
             setMapId(null);
@@ -264,9 +271,20 @@ export function GroupingClient({
       )}
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium">
-          Pen-move worklist ({worklist.length})
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium">
+            Pen-move worklist ({worklist.length})
+          </h2>
+          {worklist.length > 0 && (
+            <Button size="sm" disabled={pending} onClick={acceptAll}>
+              Accept all
+            </Button>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Suggestions only — edit any “To” pen to override, then Move
+          (or Accept all).
+        </p>
         {worklist.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Nothing to move — everyone mapped is where they should be.
@@ -291,8 +309,18 @@ export function GroupingClient({
                   >
                     <td className="px-2 font-medium">{m.id}</td>
                     <td className="px-2">{m.from ?? "—"}</td>
-                    <td className="px-2 font-medium">
-                      {m.to}
+                    <td className="px-2">
+                      <input
+                        list="pen-options"
+                        className="h-6 w-24 rounded border border-input bg-transparent px-1 font-mono text-[11px]"
+                        value={override[m.subjectId] ?? m.to}
+                        onChange={(e) =>
+                          setOverride((o) => ({
+                            ...o,
+                            [m.subjectId]: e.target.value,
+                          }))
+                        }
+                      />
                       {m.overCapacity && (
                         <span className="ml-2 text-[11px] text-destructive">
                           over capacity
@@ -324,32 +352,26 @@ export function GroupingClient({
 
 function MapPensDialog({
   group,
-  penList,
+  pens,
   onClose,
   onSaved,
 }: {
   group: RuleRow;
-  penList: (
-    v: string,
-    on: (x: string) => void,
-    ph: string,
-  ) => React.ReactNode;
+  pens: PenOption[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const pl = group.placement;
+  const capOf = (n: string) =>
+    pens.find((p) => p.value === n)?.capacity ?? null;
+
   const [mode, setMode] = useState<PMode>(pl.kind);
-  const [single, setSingle] = useState(
-    pl.kind === "single" ? pl.pen : "",
-  );
+  const [single, setSingle] = useState(pl.kind === "single" ? pl.pen : "");
   const [pHeifer, setPHeifer] = useState(
     pl.kind === "parity" ? (pl.buckets[0]?.pen ?? "") : "",
   );
   const [pMature, setPMature] = useState(
     pl.kind === "parity" ? (pl.buckets[1]?.pen ?? "") : "",
-  );
-  const [capPens, setCapPens] = useState(
-    pl.kind === "capacity" ? pl.pens.join(", ") : "",
   );
   const [item, setItem] = useState(pl.kind === "item" ? pl.item : "MAVG");
   const [cutLt, setCutLt] = useState(
@@ -361,52 +383,112 @@ function MapPensDialog({
   const [elsePen, setElsePen] = useState(
     pl.kind === "item" ? pl.elsePen : "",
   );
+  const [capRows, setCapRows] = useState<{ pen: string; cap: string }[]>(
+    pl.kind === "capacity"
+      ? pl.pens.map((p) => ({
+          pen: p,
+          cap: capOf(p) != null ? String(capOf(p)) : "",
+        }))
+      : [
+          { pen: "", cap: "" },
+          { pen: "", cap: "" },
+        ],
+  );
+  const [orderItem, setOrderItem] = useState(
+    pl.kind === "capacity" ? (pl.orderBy?.item ?? "") : "",
+  );
+  const [orderDir, setOrderDir] = useState<"asc" | "desc">(
+    pl.kind === "capacity" ? (pl.orderBy?.dir ?? "desc") : "desc",
+  );
   const [pending, start] = useTransition();
 
-  const build = (): Placement | string => {
-    if (mode === "none") return { kind: "none" };
+  const penInput = (
+    value: string,
+    onChange: (v: string) => void,
+    ph: string,
+  ) => (
+    <Input
+      list="pen-options"
+      className="h-7 w-[120px] text-xs"
+      placeholder={ph}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+
+  const build = (): { placement: Placement; caps?: { pen: string; capacity: number | null }[] } | string => {
+    if (mode === "none") return { placement: { kind: "none" } };
     if (mode === "single")
       return single.trim()
-        ? { kind: "single", pen: single.trim() }
+        ? { placement: { kind: "single", pen: single.trim() } }
         : "Enter a pen.";
     if (mode === "parity") {
-      if (!pHeifer.trim() || !pMature.trim())
-        return "Enter both pens.";
+      if (!pHeifer.trim() || !pMature.trim()) return "Enter both pens.";
       return {
-        kind: "parity",
-        buckets: [
-          { lacts: [1], pen: pHeifer.trim() },
-          { lacts: [2, 3, 4, 5, 6, 7, 8, 9, 10], pen: pMature.trim() },
-        ],
+        placement: {
+          kind: "parity",
+          buckets: [
+            { lacts: [1], pen: pHeifer.trim() },
+            { lacts: [2, 3, 4, 5, 6, 7, 8, 9, 10], pen: pMature.trim() },
+          ],
+        },
       };
     }
     if (mode === "capacity") {
-      const list = capPens
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      return list.length >= 2
-        ? { kind: "capacity", pens: list }
-        : "List at least two pens in fill order.";
+      const rows = capRows
+        .map((r) => ({ pen: r.pen.trim(), cap: r.cap.trim() }))
+        .filter((r) => r.pen);
+      if (rows.length < 2) return "Add at least two pens in fill order.";
+      return {
+        placement: {
+          kind: "capacity",
+          pens: rows.map((r) => r.pen),
+          ...(orderItem.trim()
+            ? {
+                orderBy: {
+                  item: orderItem.trim().toUpperCase(),
+                  dir: orderDir,
+                },
+              }
+            : {}),
+        },
+        caps: rows.map((r) => ({
+          pen: r.pen,
+          capacity:
+            r.cap && Number.isFinite(Number(r.cap))
+              ? Number(r.cap)
+              : null,
+        })),
+      };
     }
-    // item
     const lt = Number(cutLt);
-    if (!item.trim() || !Number.isFinite(lt) || !cutPen.trim() || !elsePen.trim())
+    if (
+      !item.trim() ||
+      !Number.isFinite(lt) ||
+      !cutPen.trim() ||
+      !elsePen.trim()
+    )
       return "Fill the item, cut value and both pens.";
     return {
-      kind: "item",
-      item: item.trim().toUpperCase(),
-      cuts: [{ lt, pen: cutPen.trim() }],
-      elsePen: elsePen.trim(),
+      placement: {
+        kind: "item",
+        item: item.trim().toUpperCase(),
+        cuts: [{ lt, pen: cutPen.trim() }],
+        elsePen: elsePen.trim(),
+      },
     };
   };
 
   const save = () =>
     start(async () => {
-      const p = build();
-      if (typeof p === "string") return void toast.error(p);
-      const res = await setGroupPlacement({ id: group.id, placement: p });
+      const b = build();
+      if (typeof b === "string") return void toast.error(b);
+      const res = await setGroupPlacement({
+        id: group.id,
+        placement: b.placement,
+      });
       if (res.error) return void toast.error(res.error);
+      if (b.caps && b.caps.length) await savePenCapacities({ caps: b.caps });
       toast.success(`“${group.name}” mapped.`);
       onSaved();
     });
@@ -415,15 +497,14 @@ function MapPensDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Map “{group.name}” to pens</DialogTitle>
+          <DialogTitle>
+            Map “{group.name}” ({group.size} animals) to pens
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-3 text-xs">
           <div className="space-y-1">
             <Label className="text-xs">How this group uses pens</Label>
-            <Select
-              value={mode}
-              onValueChange={(v) => setMode(v as PMode)}
-            >
+            <Select value={mode} onValueChange={(v) => setMode(v as PMode)}>
               <SelectTrigger className="h-8 text-xs">
                 <SelectValue />
               </SelectTrigger>
@@ -435,11 +516,11 @@ function MapPensDialog({
                 <SelectItem value="parity">
                   Split by parity (heifer / mature)
                 </SelectItem>
+                <SelectItem value="capacity">
+                  Several pens by capacity
+                </SelectItem>
                 <SelectItem value="item">
                   Split by a number cut (advanced)
-                </SelectItem>
-                <SelectItem value="capacity">
-                  Fill by capacity (advanced)
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -448,25 +529,108 @@ function MapPensDialog({
           {mode === "single" && (
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground">Pen</span>
-              {penList(single, setSingle, "pen")}
+              {penInput(single, setSingle, "pen")}
             </div>
           )}
+
           {mode === "parity" && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <span className="w-28 text-muted-foreground">
                   1st lactation
                 </span>
-                {penList(pHeifer, setPHeifer, "heifer pen")}
+                {penInput(pHeifer, setPHeifer, "heifer pen")}
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-28 text-muted-foreground">
-                  2nd & older
+                  2nd &amp; older
                 </span>
-                {penList(pMature, setPMature, "mature pen")}
+                {penInput(pMature, setPMature, "mature pen")}
               </div>
             </div>
           )}
+
+          {mode === "capacity" && (
+            <div className="space-y-2">
+              <p className="text-[11px] text-muted-foreground">
+                {group.size} animals. List pens in fill order with each
+                pen’s capacity; optionally rank who fills first.
+              </p>
+              {capRows.map((row, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-12 text-muted-foreground">
+                    Pen {i + 1}
+                  </span>
+                  {penInput(
+                    row.pen,
+                    (v) =>
+                      setCapRows((rs) =>
+                        rs.map((x, j) =>
+                          j === i ? { ...x, pen: v } : x,
+                        ),
+                      ),
+                    "pen",
+                  )}
+                  <Input
+                    className="h-7 w-20 text-xs"
+                    placeholder="cap"
+                    value={row.cap}
+                    onChange={(e) =>
+                      setCapRows((rs) =>
+                        rs.map((x, j) =>
+                          j === i ? { ...x, cap: e.target.value } : x,
+                        ),
+                      )
+                    }
+                  />
+                  {capRows.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCapRows((rs) => rs.filter((_, j) => j !== i))
+                      }
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() =>
+                  setCapRows((rs) => [...rs, { pen: "", cap: "" }])
+                }
+                className="rounded border border-dashed px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
+              >
+                + pen
+              </button>
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-muted-foreground">Order by</span>
+                <Input
+                  className="h-7 w-24 text-xs"
+                  placeholder="(optional)"
+                  value={orderItem}
+                  onChange={(e) => setOrderItem(e.target.value)}
+                />
+                <Select
+                  value={orderDir}
+                  onValueChange={(v) =>
+                    setOrderDir(v as "asc" | "desc")
+                  }
+                >
+                  <SelectTrigger className="h-7 w-[120px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="desc">high → low</SelectItem>
+                    <SelectItem value="asc">low → high</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
           {mode === "item" && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
@@ -485,27 +649,12 @@ function MapPensDialog({
                   placeholder="40"
                 />
                 <span className="text-muted-foreground">→</span>
-                {penList(cutPen, setCutPen, "pen")}
+                {penInput(cutPen, setCutPen, "pen")}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">
-                  otherwise →
-                </span>
-                {penList(elsePen, setElsePen, "pen")}
+                <span className="text-muted-foreground">otherwise →</span>
+                {penInput(elsePen, setElsePen, "pen")}
               </div>
-            </div>
-          )}
-          {mode === "capacity" && (
-            <div className="space-y-1">
-              <span className="text-muted-foreground">
-                Pens in fill order (comma-separated)
-              </span>
-              <Input
-                className="h-7 w-full text-xs"
-                value={capPens}
-                onChange={(e) => setCapPens(e.target.value)}
-                placeholder="HI-1, HI-2"
-              />
             </div>
           )}
         </div>

@@ -5,6 +5,7 @@ import { parsePredicateString, type Predicate } from "./query.ts";
 import {
   matchGroup,
   buildWorklist,
+  groupSizes,
   unmappedGroups,
   describePredicate,
   legacyPlacement,
@@ -133,6 +134,46 @@ test("capacity split: fills first pen, overflows to the next", () => {
     wl.map((w) => w.to),
     ["HI-1", "HI-1", "HI-2"],
   );
+});
+
+test("capacity + orderBy: top-N by item fills first pen", () => {
+  // three fresh cows, DIM 5/15/45 (older fresh = higher DIM)
+  const mk = (id: string, day: string): GroupingMember => ({
+    id,
+    pen: null,
+    subject: { events: [{ code: 1, date: day }] },
+  });
+  const pop = [
+    mk("a", "2026-05-11"), // DIM 5
+    mk("b", "2026-05-01"), // DIM 15
+    mk("c", "2026-04-01"), // DIM 45
+  ];
+  const r: Ruleset = [
+    {
+      name: "Lac",
+      when: P("RC=2"),
+      placement: {
+        kind: "capacity",
+        pens: ["A", "B"],
+        orderBy: { item: "DIM", dir: "desc" },
+      },
+    },
+  ];
+  const wl = buildWorklist(pop, r, CTX, [
+    { name: "A", capacity: 1 },
+    { name: "B", capacity: null },
+  ]);
+  const to = Object.fromEntries(wl.map((w) => [w.id, w.to]));
+  assert.equal(to["c"], "A"); // highest DIM → first pen (cap 1)
+  assert.equal(to["a"], "B");
+  assert.equal(to["b"], "B");
+});
+
+test("groupSizes counts membership before any pen mapping", () => {
+  const sizes = groupSizes([fresh, dry, virgin], RULES, CTX);
+  assert.equal(sizes["Fresh"], 1);
+  assert.equal(sizes["Dry"], 1);
+  assert.equal(sizes["Catch-all milking"], 0);
 });
 
 test("item split: numeric cut sends low producers elsewhere", () => {

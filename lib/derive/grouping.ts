@@ -20,12 +20,13 @@ import { labelOf } from "./catalog.ts";
 export type ParityBucket = { lacts: number[]; pen: string };
 export type ItemCut = { lt: number; pen: string };
 
+export type OrderBy = { item: string; dir: "asc" | "desc" };
 export type Placement =
   | { kind: "none" }
   | { kind: "single"; pen: string }
   | { kind: "parity"; buckets: ParityBucket[] }
   | { kind: "item"; item: string; cuts: ItemCut[]; elsePen: string }
-  | { kind: "capacity"; pens: string[] };
+  | { kind: "capacity"; pens: string[]; orderBy?: OrderBy };
 
 export type GroupingRule = {
   name: string;
@@ -71,37 +72,80 @@ function resolver(
 const lactOf = (subject: Subject, ctx: DeriveContext) =>
   Number(deriveItem("LACT", subject, ctx) ?? 0);
 
-// Resolve a matched group to a concrete pen. `occupancy` is the live
-// per-pen count built up across the population pass (capacity fill).
-function resolvePen(
-  pl: Placement,
+const numItem = (
+  item: string,
   subject: Subject,
   ctx: DeriveContext,
-  occupancy: Map<string, number>,
+): number | null => {
+  const v = Number(deriveItem(item, subject, ctx) ?? NaN);
+  return Number.isFinite(v) ? v : null;
+};
+
+// Resolve a whole GROUP's members to pens at once — capacity/ranked
+// splits need the full membership (e.g. "top 60 by milk → A, rest →
+// B"). Returns id → pen (null = no pen / unmapped).
+function placeGroup(
+  members: GroupingMember[],
+  pl: Placement,
+  ctx: DeriveContext,
   caps: Map<string, number | null>,
-): string | null {
-  if (pl.kind === "none") return null;
-  if (pl.kind === "single") return pl.pen;
+): Map<string, string | null> {
+  const out = new Map<string, string | null>();
+  if (pl.kind === "none") {
+    for (const m of members) out.set(m.id, null);
+    return out;
+  }
+  if (pl.kind === "single") {
+    for (const m of members) out.set(m.id, pl.pen);
+    return out;
+  }
   if (pl.kind === "parity") {
-    const l = lactOf(subject, ctx);
-    const hit =
-      pl.buckets.find((b) => b.lacts.includes(l)) ??
-      pl.buckets[pl.buckets.length - 1];
-    return hit?.pen ?? null;
+    for (const m of members) {
+      const l = lactOf(m.subject, ctx);
+      const hit =
+        pl.buckets.find((b) => b.lacts.includes(l)) ??
+        pl.buckets[pl.buckets.length - 1];
+      out.set(m.id, hit?.pen ?? null);
+    }
+    return out;
   }
   if (pl.kind === "item") {
-    const v = Number(deriveItem(pl.item, subject, ctx) ?? NaN);
-    if (Number.isFinite(v))
-      for (const c of pl.cuts) if (v < c.lt) return c.pen;
-    return pl.elsePen;
+    for (const m of members) {
+      const v = numItem(pl.item, m.subject, ctx);
+      let pen = pl.elsePen;
+      if (v !== null) for (const c of pl.cuts) if (v < c.lt) { pen = c.pen; break; }
+      out.set(m.id, pen);
+    }
+    return out;
   }
-  // capacity: first pen with room, else last (overflow)
-  for (const p of pl.pens) {
-    const cap = caps.get(p);
-    const used = occupancy.get(p) ?? 0;
-    if (cap === null || cap === undefined || used < cap) return p;
+  // capacity: optionally rank members, then fill pens in order to
+  // their declared capacity; overflow to the last pen.
+  const ordered = [...members];
+  if (pl.orderBy) {
+    const { item, dir } = pl.orderBy;
+    ordered.sort((a, b) => {
+      const av = numItem(item, a.subject, ctx);
+      const bv = numItem(item, b.subject, ctx);
+      if (av === null && bv === null) return 0;
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      return dir === "desc" ? bv - av : av - bv;
+    });
   }
-  return pl.pens[pl.pens.length - 1] ?? null;
+  const used = new Map<string, number>();
+  for (const m of ordered) {
+    let chosen = pl.pens[pl.pens.length - 1] ?? null;
+    for (const p of pl.pens) {
+      const cap = caps.get(p);
+      if (cap === null || cap === undefined || (used.get(p) ?? 0) < cap) {
+        chosen = p;
+        break;
+      }
+    }
+    if (chosen) used.set(chosen, (used.get(chosen) ?? 0) + 1);
+    out.set(m.id, chosen);
+  }
+  return out;
 }
 
 export function matchGroup(
@@ -141,26 +185,61 @@ export function buildWorklist(
   const caps = new Map<string, number | null>(
     pens.map((p) => [p.name, p.capacity]),
   );
-  const occupancy = new Map<string, number>();
-  const out: WorklistRow[] = [];
 
+  // partition into groups (first match wins), preserving order
+  const byGroup = new Map<string, GroupingMember[]>();
+  const ruleOf = new Map<string, GroupingRule>();
   for (const m of population) {
     const g = matchGroup(m.subject, m.pen, ruleset, ctx);
     if (!g || g.placement.kind === "none") continue;
-    const to = resolvePen(g.placement, m.subject, ctx, occupancy, caps);
-    if (to === null) continue;
-    occupancy.set(to, (occupancy.get(to) ?? 0) + 1);
-    if (to !== m.pen) {
-      const cap = caps.get(to);
-      out.push({
-        id: m.id,
-        from: m.pen,
-        to,
-        rule: g.name,
-        overCapacity:
-          cap !== null && cap !== undefined && (occupancy.get(to) ?? 0) > cap,
-      });
+    (byGroup.get(g.name) ?? byGroup.set(g.name, []).get(g.name)!).push(m);
+    ruleOf.set(g.name, g);
+  }
+
+  // resolve each group, then tally pen occupancy for capacity flags
+  const target = new Map<string, { m: GroupingMember; to: string }>();
+  const occupancy = new Map<string, number>();
+  for (const [gname, members] of byGroup) {
+    const g = ruleOf.get(gname)!;
+    const placed = placeGroup(members, g.placement, ctx, caps);
+    for (const m of members) {
+      const to = placed.get(m.id);
+      if (!to) continue;
+      target.set(m.id, { m, to });
+      occupancy.set(to, (occupancy.get(to) ?? 0) + 1);
     }
+  }
+
+  const out: WorklistRow[] = [];
+  for (const m of population) {
+    const t = target.get(m.id);
+    if (!t || t.to === m.pen) continue;
+    const g = matchGroup(m.subject, m.pen, ruleset, ctx)!;
+    const cap = caps.get(t.to);
+    out.push({
+      id: m.id,
+      from: m.pen,
+      to: t.to,
+      rule: g.name,
+      overCapacity:
+        cap !== null && cap !== undefined && (occupancy.get(t.to) ?? 0) > cap,
+    });
+  }
+  return out;
+}
+
+// Counts-first sizing: how many animals each group catches (regardless
+// of whether it's mapped to pens yet). UI shows this BEFORE pen talk.
+export function groupSizes(
+  population: GroupingMember[],
+  ruleset: Ruleset,
+  ctx: DeriveContext,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const r of ruleset) out[r.name] = 0;
+  for (const m of population) {
+    const g = matchGroup(m.subject, m.pen, ruleset, ctx);
+    if (g) out[g.name] = (out[g.name] ?? 0) + 1;
   }
   return out;
 }
@@ -224,5 +303,12 @@ export function describePlacement(pl: Placement): string {
     return `${labelOf(pl.item)}: ${pl.cuts
       .map((c) => `<${c.lt}→${c.pen}`)
       .join(" · ")} · else→${pl.elsePen}`;
-  return `fill ${pl.pens.join(" → ")}`;
+  return (
+    `fill ${pl.pens.join(" → ")}` +
+    (pl.orderBy
+      ? ` by ${labelOf(pl.orderBy.item)} ${
+          pl.orderBy.dir === "desc" ? "high→low" : "low→high"
+        }`
+      : "")
+  );
 }

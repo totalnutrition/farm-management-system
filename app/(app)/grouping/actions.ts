@@ -71,6 +71,12 @@ const placementSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("capacity"),
     pens: z.array(z.string().trim().min(1)).min(2),
+    orderBy: z
+      .object({
+        item: z.string().trim().min(1),
+        dir: z.enum(["asc", "desc"]),
+      })
+      .optional(),
   }),
 ]);
 type Placement = z.infer<typeof placementSchema>;
@@ -219,6 +225,63 @@ export async function installGroupingPresets(): Promise<Result> {
   if (rows.length) {
     const { error } = await admin.from("grouping_rules").insert(rows);
     if (error) return { error: error.message };
+  }
+
+  revalidatePath(PathGrouping);
+  return { success: true };
+}
+
+const capsSchema = z.object({
+  caps: z
+    .array(
+      z.object({
+        pen: z.string().trim().min(1),
+        capacity: z.number().int().positive().nullable(),
+      }),
+    )
+    .min(1),
+});
+
+// Declare each pen's capacity (counts-first sizing → capacity fill).
+export async function savePenCapacities(
+  input: z.infer<typeof capsSchema>,
+): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+
+  const parsed = capsSchema.safeParse(input);
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const admin = createAdminClient();
+  await ensurePens(
+    admin,
+    orgId,
+    user.id,
+    parsed.data.caps.map((c) => c.pen),
+  );
+  const { data: rows } = await admin
+    .from("subjects")
+    .select("id, natural_key, attrs")
+    .eq("organization_id", orgId)
+    .eq("subject_type", "pen")
+    .in(
+      "natural_key",
+      parsed.data.caps.map((c) => c.pen),
+    );
+  for (const r of rows ?? []) {
+    const c = parsed.data.caps.find((x) => x.pen === r.natural_key);
+    if (!c) continue;
+    const attrs = {
+      ...((r.attrs ?? {}) as Record<string, unknown>),
+      capacity: c.capacity,
+    };
+    await admin
+      .from("subjects")
+      .update({ attrs })
+      .eq("id", r.id)
+      .eq("organization_id", orgId);
   }
 
   revalidatePath(PathGrouping);
