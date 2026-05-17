@@ -44,30 +44,33 @@ export function CatalogClient({ rows }: { rows: CatalogRow[] }) {
     <div className="space-y-4">
       {rows.length > 0 && (
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-xs text-muted-foreground">
+          <table className="w-auto border-collapse font-mono text-[11px] leading-tight tabular-nums">
+            <thead className="border-b bg-muted/50 text-[11px] font-semibold text-muted-foreground">
               <tr>
-                <th className="px-3 py-2 text-left">Barn</th>
-                <th className="px-3 py-2 text-left">Location</th>
-                <th className="px-3 py-2 text-left">Pens</th>
-                <th className="px-3 py-2" />
+                <th className="px-2 text-left">Barn</th>
+                <th className="px-2 text-left">Location</th>
+                <th className="px-2 text-right">Pens</th>
+                <th className="px-2" />
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-t">
-                  <td className="px-3 py-2 font-medium">{r.name}</td>
-                  <td className="px-3 py-2">{r.location ?? "—"}</td>
-                  <td className="px-3 py-2">{r.pens}</td>
-                  <td className="px-3 py-2 text-right">
-                    <Button
-                      size="sm"
-                      variant="ghost"
+                <tr
+                  key={r.id}
+                  className="border-b border-border/40 hover:bg-muted/30"
+                >
+                  <td className="px-2 font-medium">{r.name}</td>
+                  <td className="px-2">{r.location ?? "—"}</td>
+                  <td className="px-2 text-right">{r.pens}</td>
+                  <td className="px-2 text-right">
+                    <button
+                      type="button"
                       disabled={pending}
                       onClick={() => remove(r)}
+                      className="text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
                     >
-                      Delete
-                    </Button>
+                      delete
+                    </button>
                   </td>
                 </tr>
               ))}

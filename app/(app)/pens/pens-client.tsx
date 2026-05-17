@@ -79,31 +79,49 @@ export function PensClient({
         </p>
       ) : (
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-xs text-muted-foreground">
+          <table className="w-auto border-collapse font-mono text-[11px] leading-tight tabular-nums">
+            <thead className="border-b bg-muted/50 text-[11px] font-semibold text-muted-foreground">
               <tr>
-                <th className="px-3 py-2 text-left">Pen</th>
-                <th className="px-3 py-2 text-left">Label</th>
-                <th className="px-3 py-2 text-left">Barn</th>
-                <th className="px-3 py-2 text-left">Types</th>
-                <th className="px-3 py-2 text-left">Capacity</th>
-                <th className="px-3 py-2 text-left">In pen</th>
-                <th className="px-3 py-2" />
+                <th className="px-2 text-right">Pen</th>
+                <th className="px-2 text-left">Label</th>
+                <th className="px-2 text-left">Barn</th>
+                <th className="px-2 text-left">Types</th>
+                <th className="px-2 text-right">Cap</th>
+                <th className="px-2 text-right">In</th>
+                <th className="px-2" />
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-t">
-                  <td className="px-3 py-2 font-medium">{r.penNo}</td>
-                  <td className="px-3 py-2">{r.label ?? "—"}</td>
-                  <td className="px-3 py-2">{r.barn ?? "—"}</td>
-                  <td className="px-3 py-2 text-xs">
-                    {r.types.join(", ")}
+                <tr
+                  key={r.id}
+                  className="border-b border-border/40 hover:bg-muted/30"
+                >
+                  <td className="px-2 text-right font-medium">
+                    {r.penNo}
                   </td>
-                  <td className="px-3 py-2">{r.capacity ?? "∞"}</td>
+                  <td className="px-2">{r.label ?? "—"}</td>
+                  <td className="px-2">{r.barn ?? "—"}</td>
+                  <td className="px-2">
+                    <span className="flex flex-wrap gap-1">
+                      {r.types.length === 0
+                        ? "—"
+                        : r.types.map((t) => (
+                            <span
+                              key={t}
+                              className="rounded bg-muted px-1 text-[10px]"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                    </span>
+                  </td>
+                  <td className="px-2 text-right">
+                    {r.capacity ?? "∞"}
+                  </td>
                   <td
                     className={
-                      "px-3 py-2 " +
+                      "px-2 text-right " +
                       (r.capacity != null && r.count > r.capacity
                         ? "text-destructive"
                         : "")
@@ -111,15 +129,15 @@ export function PensClient({
                   >
                     {r.count}
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    <Button
-                      size="sm"
-                      variant="ghost"
+                  <td className="px-2 text-right">
+                    <button
+                      type="button"
                       disabled={pending}
                       onClick={() => remove(r)}
+                      className="text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
                     >
-                      Delete
-                    </Button>
+                      delete
+                    </button>
                   </td>
                 </tr>
               ))}

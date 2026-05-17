@@ -46,6 +46,35 @@ export async function deleteBarn(id: string): Promise<Result> {
   const orgId = getOrganizationIdFromUser(user);
   if (!orgId) return { error: "No organization on this account." };
   const admin = createAdminClient();
+
+  const { data: barn } = await admin
+    .from("subjects")
+    .select("natural_key")
+    .eq("id", id)
+    .eq("organization_id", orgId)
+    .eq("subject_type", "barn")
+    .maybeSingle();
+  if (!barn) return { error: "Barn not found." };
+
+  // Pens store their barn by name in attrs (no FK) — block the delete
+  // so it can't silently orphan pens.
+  const { data: pens } = await admin
+    .from("subjects")
+    .select("attrs")
+    .eq("organization_id", orgId)
+    .eq("subject_type", "pen");
+  const n = (pens ?? []).filter(
+    (p) =>
+      (p.attrs as Record<string, unknown> | null)?.barn ===
+      barn.natural_key,
+  ).length;
+  if (n > 0)
+    return {
+      error: `“${barn.natural_key}” still has ${n} pen${
+        n === 1 ? "" : "s"
+      }. Reassign or delete them first.`,
+    };
+
   const { error } = await admin
     .from("subjects")
     .delete()
