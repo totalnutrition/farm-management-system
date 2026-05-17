@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { PathHousing } from "@/lib/misc";
-import BarnsPage from "../barns/page";
-import PensPage from "../pens/page";
-import GroupingPage from "../grouping/page";
+import { BarnsSection } from "../barns/barns-section";
+import { PensSection } from "../pens/pens-section";
+import { GroupingSection } from "../grouping/grouping-section";
 
 export const metadata = { title: "Housing" };
 export const dynamic = "force-dynamic";
@@ -39,9 +39,9 @@ export default async function HousingPage({
           </Link>
         ))}
       </div>
-      {active === "barns" && <BarnsPage />}
-      {active === "pens" && <PensPage />}
-      {active === "groups" && <GroupingPage />}
+      {active === "barns" && <BarnsSection />}
+      {active === "pens" && <PensSection />}
+      {active === "groups" && <GroupingSection />}
     </div>
   );
 }

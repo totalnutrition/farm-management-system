@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
-import { PathPens } from "@/lib/misc";
+import { PathPens, PathHousing } from "@/lib/misc";
 
 type Result = { error?: string; success?: boolean };
 
@@ -64,6 +64,7 @@ export async function createPen(
   }
 
   revalidatePath(PathPens);
+  revalidatePath(PathHousing);
   return { success: true };
 }
 
@@ -82,5 +83,6 @@ export async function deletePen(id: string): Promise<Result> {
   if (error) return { error: error.message };
 
   revalidatePath(PathPens);
+  revalidatePath(PathHousing);
   return { success: true };
 }

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
-import { PathBarns } from "@/lib/misc";
+import { PathBarns, PathHousing } from "@/lib/misc";
 
 type Result = { error?: string; success?: boolean };
 
@@ -37,6 +37,7 @@ export async function createBarn(
     return { error: error.message };
   }
   revalidatePath(PathBarns);
+  revalidatePath(PathHousing);
   return { success: true };
 }
 
@@ -53,5 +54,6 @@ export async function deleteBarn(id: string): Promise<Result> {
     .eq("subject_type", "barn");
   if (error) return { error: error.message };
   revalidatePath(PathBarns);
+  revalidatePath(PathHousing);
   return { success: true };
 }

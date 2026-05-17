@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
-import { PathGrouping } from "@/lib/misc";
+import { PathGrouping, PathHousing } from "@/lib/misc";
 
 type Result = { error?: string; success?: boolean };
 type Admin = ReturnType<typeof createAdminClient>;
@@ -139,6 +139,7 @@ export async function addRule(
   }
 
   revalidatePath(PathGrouping);
+  revalidatePath(PathHousing);
   return { success: true };
 }
 
@@ -169,6 +170,7 @@ export async function setGroupPlacement(
   if (error) return { error: error.message };
 
   revalidatePath(PathGrouping);
+  revalidatePath(PathHousing);
   return { success: true };
 }
 
@@ -228,6 +230,7 @@ export async function installGroupingPresets(): Promise<Result> {
   }
 
   revalidatePath(PathGrouping);
+  revalidatePath(PathHousing);
   return { success: true };
 }
 
@@ -285,6 +288,7 @@ export async function savePenCapacities(
   }
 
   revalidatePath(PathGrouping);
+  revalidatePath(PathHousing);
   return { success: true };
 }
 
@@ -302,6 +306,7 @@ export async function deleteRule(id: string): Promise<Result> {
   if (error) return { error: error.message };
 
   revalidatePath(PathGrouping);
+  revalidatePath(PathHousing);
   return { success: true };
 }
 
@@ -344,5 +349,6 @@ export async function moveAnimal(
   if (error) return { error: error.message };
 
   revalidatePath(PathGrouping);
+  revalidatePath(PathHousing);
   return { success: true };
 }
