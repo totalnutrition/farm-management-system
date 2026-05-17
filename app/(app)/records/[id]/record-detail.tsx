@@ -23,35 +23,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { recordEvent, recordMilking } from "../actions";
+import { ITEMS, labelOf } from "@/components/condition-builder";
 
 type ItemValue = number | string | null;
-
-const ITEM_LABEL: Record<string, string> = {
-  RPRO: "Repro status",
-  RC: "Repro code (#)",
-  LACT: "Lactation #",
-  DIM: "Days in milk",
-  DDRY: "Days dry",
-  AGE: "Age (months)",
-  DCC: "Days carrying calf",
-  DUE: "Days to due",
-  DSLH: "Days since last heat",
-  DOPN: "Days open",
-  FDAT: "Fresh date",
-  DDAT: "Dry date",
-  MILK: "Milk today (kg)",
-  MAVG: "Milk avg 7d (kg)",
-  PMILK: "Milk prev day (kg)",
-  PEAK: "Peak milk (kg)",
-  MTOT: "Milk lactation total (kg)",
-  PCTF: "Fat %",
-  PCTP: "Protein %",
-  SNF: "SNF %",
-  TS: "Total solids %",
-  SCC: "SCC (1000s)",
-  LS: "Linear score",
-  LCTGP: "Lactation group",
-};
 
 export function RecordDetail({
   subjectId,
@@ -128,7 +102,10 @@ export function RecordDetail({
       router.refresh();
     });
 
-  const shown = Object.entries(state).filter(([k]) => k in ITEM_LABEL);
+  // labels + ordering come from the one shared catalog (no drift)
+  const shown = ITEMS.filter((i) => i.value in state).map(
+    (i) => [i.value, state[i.value]] as const,
+  );
 
   return (
     <div className="mt-6 space-y-6">
@@ -285,11 +262,14 @@ export function RecordDetail({
           </Dialog>
         </div>
         <Card>
-          <CardContent className="grid grid-cols-2 gap-x-8 gap-y-2 py-4 sm:grid-cols-3">
+          <CardContent className="grid grid-cols-2 gap-x-4 gap-y-1 py-3 sm:grid-cols-3 lg:grid-cols-4">
             {shown.map(([k, v]) => (
-              <div key={k} className="flex justify-between text-sm">
-                <span className="text-muted-foreground">
-                  {ITEM_LABEL[k]}
+              <div
+                key={k}
+                className="flex justify-between gap-2 text-xs tabular-nums"
+              >
+                <span className="truncate text-muted-foreground">
+                  {labelOf(k)}
                 </span>
                 <span className="font-medium">{v ?? "—"}</span>
               </div>

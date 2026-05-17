@@ -21,6 +21,7 @@ export const ITEM_GROUPS = [
   "Milk yield",
   "Components & quality",
   "Health & flags",
+  "Feed & intake",
 ] as const;
 export type ItemGroup = (typeof ITEM_GROUPS)[number];
 
@@ -29,7 +30,7 @@ export const ITEMS: { value: string; label: string; group: ItemGroup }[] = [
   { value: "PEN", label: "Pen (physical)", group: "Identity & location" },
   { value: "AGE", label: "Age (months)", group: "Identity & location" },
   { value: "RPRO", label: "Repro status", group: "Reproduction" },
-  { value: "RC", label: "Repro code (#)", group: "Reproduction" },
+  { value: "ABT", label: "Abortion vet flag", group: "Reproduction" },
   { value: "DCC", label: "Days carrying calf", group: "Reproduction" },
   { value: "DUE", label: "Days to due", group: "Reproduction" },
   { value: "DSLH", label: "Days since last heat", group: "Reproduction" },
@@ -58,9 +59,14 @@ export const ITEMS: { value: string; label: string; group: ItemGroup }[] = [
     group: "Health & flags",
   },
   { value: "MWHOLD", label: "Milk withhold until", group: "Health & flags" },
+  { value: "BWHOLD", label: "Meat withhold until", group: "Health & flags" },
   { value: "LTDAT", label: "Last treatment date", group: "Health & flags" },
   { value: "FLAGGED", label: "Flagged (YES/no)", group: "Health & flags" },
   { value: "ATTN", label: "Flagged for", group: "Health & flags" },
+  { value: "FEEDKG", label: "Feed delivered (kg)", group: "Feed & intake" },
+  { value: "REFKG", label: "Feed refused (kg)", group: "Feed & intake" },
+  { value: "FEEDCOST", label: "Feed cost", group: "Feed & intake" },
+  { value: "SHRINK", label: "Feed shrink %", group: "Feed & intake" },
 ];
 export const labelOf = (v: string) =>
   ITEMS.find((i) => i.value === v)?.label ?? v;
@@ -96,10 +102,11 @@ const ENUM_OPTS: Record<string, string[]> = {
     "BULLCAF",
   ],
   LCTGP: ["H", "1", "2", "3+"],
+  ABT: ["ABT?"],
 };
 const BOOL_ITEMS = new Set(["FLAGGED", "DNSHIP", "DNSELL"]);
 const TEXT_ITEMS = new Set(["ID", "PEN", "ATTN"]);
-const DATE_ITEMS = new Set(["FDAT", "DDAT", "MWHOLD", "LTDAT"]);
+const DATE_ITEMS = new Set(["FDAT", "DDAT", "MWHOLD", "BWHOLD", "LTDAT"]);
 
 export function kindOf(item: string): FieldKind {
   if (item in ENUM_OPTS) return "enum";
