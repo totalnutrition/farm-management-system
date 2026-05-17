@@ -14,7 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createPen, deletePen, PEN_TYPES } from "./actions";
+import { createPen, deletePen } from "./actions";
+import { PEN_TYPES } from "./constants";
 
 export type PenRow = {
   id: string;

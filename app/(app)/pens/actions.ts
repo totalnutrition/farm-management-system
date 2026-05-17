@@ -5,18 +5,9 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { PathPens, PathHousing } from "@/lib/misc";
+import { PEN_TYPES } from "./constants";
 
 type Result = { error?: string; success?: boolean };
-
-export const PEN_TYPES = [
-  "BULL",
-  "AI",
-  "MILK",
-  "DRY",
-  "HOSP",
-  "CALF",
-  "USER",
-] as const;
 
 const penSchema = z.object({
   penNo: z.coerce.number().int().min(1).max(9999),
