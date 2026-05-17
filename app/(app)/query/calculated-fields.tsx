@@ -230,6 +230,7 @@ export function CalculatedFields({
   canEdit: boolean;
 }) {
   const router = useRouter();
+  const [expanded, setExpanded] = useState(false);
   const [open, setOpen] = useState(false);
   const [f, setF] = useState(blank);
   const [pending, start] = useTransition();
@@ -277,14 +278,20 @@ export function CalculatedFields({
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-medium">Calculated fields</h2>
-          <p className="text-xs text-muted-foreground">
-            Saved Google-Sheets-style formulas over items. Reusable in
-            queries, grouping, monitors and saved views.
-          </p>
-        </div>
-        {canEdit && (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="flex items-center gap-1.5 text-sm font-medium hover:text-foreground/80"
+        >
+          <span className="text-xs text-muted-foreground">
+            {expanded ? "▾" : "▸"}
+          </span>
+          Calculated fields
+          <span className="text-xs font-normal text-muted-foreground">
+            ({rows.length})
+          </span>
+        </button>
+        {canEdit && expanded && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button size="sm" variant="outline" onClick={create}>
@@ -388,7 +395,20 @@ export function CalculatedFields({
         )}
       </div>
 
-      {rows.length > 0 && (
+      {expanded && (
+        <p className="text-xs text-muted-foreground">
+          Saved Google-Sheets-style formulas over items. Reusable in
+          queries, grouping, monitors and saved views.
+        </p>
+      )}
+
+      {expanded && rows.length === 0 && (
+        <p className="text-xs text-muted-foreground/70">
+          No calculated fields yet.
+        </p>
+      )}
+
+      {expanded && rows.length > 0 && (
         <div className="overflow-x-auto rounded-md border">
           <table className="w-auto border-collapse font-mono text-[11px] leading-tight tabular-nums">
             <thead className="border-b bg-muted/50 text-[11px] font-semibold text-muted-foreground">
