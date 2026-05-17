@@ -6,8 +6,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { deriveItem, type Event } from "@/lib/derive/engine";
 import {
   buildWorklist,
+  legacyPlacement,
   type Ruleset,
   type Pen,
+  type Placement,
   type GroupingMember,
 } from "@/lib/derive/grouping";
 import {
@@ -38,7 +40,7 @@ export default async function Home() {
     await Promise.all([
       admin.from("subjects").select("id, natural_key, attrs").eq("organization_id", orgId).eq("subject_type", "animal"),
       admin.from("subjects").select("natural_key, attrs").eq("organization_id", orgId).eq("subject_type", "pen"),
-      admin.from("grouping_rules").select("name, predicate, target_pen, split, is_active").eq("organization_id", orgId).order("ordinal"),
+      admin.from("grouping_rules").select("name, predicate, target_pen, split, placement, is_active").eq("organization_id", orgId).order("ordinal"),
       admin.from("protocols").select("name, enroll, anchor, steps").eq("organization_id", orgId).order("ordinal"),
       admin.from("monitor_kpis").select("name, filter, metric, goal, direction, warn_pct, alert_pct").eq("organization_id", orgId).order("ordinal"),
     ]);
@@ -88,8 +90,12 @@ export default async function Home() {
     .map((r) => ({
       name: r.name,
       when: r.predicate as Predicate,
-      targetPen: (r.target_pen as string | null) ?? undefined,
-      split: (r.split as { firstLactation: string; mature: string } | null) ?? undefined,
+      placement: r.placement
+        ? (r.placement as Placement)
+        : legacyPlacement(
+            r.target_pen as string | null,
+            r.split as { firstLactation: string; mature: string } | null,
+          ),
     }));
   const protocols: Protocol[] = (protos ?? []).map((p) => ({
     name: p.name,

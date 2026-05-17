@@ -1,7 +1,12 @@
-// Grouping engine — isomorphic, zero-dependency. Ordered ruleset over
-// derived items → each animal's TARGET pen (first match wins), with a
-// within-pen parity split and capacity awareness. The worklist = where
-// physical pen ≠ target. Pure: no DB/DOM.
+// Grouping engine — isomorphic, zero-dependency. Ordered GROUPS over
+// derived items decide each animal's group (first match wins). A group
+// then resolves to one of YOUR physical pens via its placement:
+//   • none      — not mapped yet → never produces a move
+//   • single    — the whole group goes to one pen
+//   • parity    — split into pens by lactation bucket (heifer/mature)
+//   • item      — split by a numeric cut (e.g. production) into pens
+//   • capacity  — fill pens in order, overflow to the next
+// The worklist = animals whose real pen ≠ their resolved pen. Pure.
 
 import {
   deriveItem,
@@ -10,19 +15,43 @@ import {
   type ItemValue,
 } from "./engine.ts";
 import { matchPredicate, type Predicate } from "./query.ts";
+import { labelOf } from "./catalog.ts";
 
-// A rule targets a single pen, OR splits by parity (1st-lactation vs
-// mature) into two pens for within-group uniformity (DC/Bovisync).
-export type ParitySplit = { firstLactation: string; mature: string };
+export type ParityBucket = { lacts: number[]; pen: string };
+export type ItemCut = { lt: number; pen: string };
+
+export type Placement =
+  | { kind: "none" }
+  | { kind: "single"; pen: string }
+  | { kind: "parity"; buckets: ParityBucket[] }
+  | { kind: "item"; item: string; cuts: ItemCut[]; elsePen: string }
+  | { kind: "capacity"; pens: string[] };
+
 export type GroupingRule = {
   name: string;
-  when: Predicate; // ordered; first matching rule wins
-  targetPen?: string;
-  split?: ParitySplit;
+  when: Predicate; // ordered; first matching group wins
+  placement: Placement;
 };
 export type Ruleset = GroupingRule[];
 
 export type Pen = { name: string; capacity: number | null };
+
+// Back-compat: legacy rows stored target_pen / {firstLactation,mature}.
+export function legacyPlacement(
+  targetPen: string | null | undefined,
+  split: { firstLactation: string; mature: string } | null | undefined,
+): Placement {
+  if (split)
+    return {
+      kind: "parity",
+      buckets: [
+        { lacts: [1], pen: split.firstLactation },
+        { lacts: [2, 3, 4, 5, 6, 7, 8, 9, 10], pen: split.mature },
+      ],
+    };
+  if (targetPen) return { kind: "single", pen: targetPen };
+  return { kind: "none" };
+}
 
 function resolver(
   subject: Subject,
@@ -39,32 +68,51 @@ function resolver(
   };
 }
 
-function chosenPen(
-  rule: GroupingRule,
+const lactOf = (subject: Subject, ctx: DeriveContext) =>
+  Number(deriveItem("LACT", subject, ctx) ?? 0);
+
+// Resolve a matched group to a concrete pen. `occupancy` is the live
+// per-pen count built up across the population pass (capacity fill).
+function resolvePen(
+  pl: Placement,
   subject: Subject,
   ctx: DeriveContext,
+  occupancy: Map<string, number>,
+  caps: Map<string, number | null>,
 ): string | null {
-  if (rule.split) {
-    const lact = Number(deriveItem("LACT", subject, ctx) ?? 0);
-    // lactation 1 (and heifers) → first-lactation pen; 2+ → mature
-    return lact >= 2 ? rule.split.mature : rule.split.firstLactation;
+  if (pl.kind === "none") return null;
+  if (pl.kind === "single") return pl.pen;
+  if (pl.kind === "parity") {
+    const l = lactOf(subject, ctx);
+    const hit =
+      pl.buckets.find((b) => b.lacts.includes(l)) ??
+      pl.buckets[pl.buckets.length - 1];
+    return hit?.pen ?? null;
   }
-  return rule.targetPen ?? null;
+  if (pl.kind === "item") {
+    const v = Number(deriveItem(pl.item, subject, ctx) ?? NaN);
+    if (Number.isFinite(v))
+      for (const c of pl.cuts) if (v < c.lt) return c.pen;
+    return pl.elsePen;
+  }
+  // capacity: first pen with room, else last (overflow)
+  for (const p of pl.pens) {
+    const cap = caps.get(p);
+    const used = occupancy.get(p) ?? 0;
+    if (cap === null || cap === undefined || used < cap) return p;
+  }
+  return pl.pens[pl.pens.length - 1] ?? null;
 }
 
-export function targetPen(
+export function matchGroup(
   subject: Subject,
   physicalPen: string | null,
   ruleset: Ruleset,
   ctx: DeriveContext,
-): { pen: string | null; rule: string | null } {
+): GroupingRule | null {
   const get = resolver(subject, physicalPen, ctx);
-  for (const r of ruleset) {
-    if (matchPredicate(r.when, get)) {
-      return { pen: chosenPen(r, subject, ctx), rule: r.name };
-    }
-  }
-  return { pen: null, rule: null };
+  for (const r of ruleset) if (matchPredicate(r.when, get)) return r;
+  return null;
 }
 
 export type WorklistRow = {
@@ -81,44 +129,100 @@ export type GroupingMember = {
   pen: string | null; // current physical pen
 };
 
-// Animals whose physical pen ≠ target. No rule match ⇒ left where they
-// are. Capacity is advisory: a pen the ruleset assigns more animals
-// than its capacity flags every move into it `overCapacity` — the
-// system surfaces it; the human decides (it never silently drops one).
+// Animals whose physical pen ≠ resolved pen. A group with placement
+// "none" (not mapped to your pens yet) NEVER produces a move — the
+// herd is only touched once you've attached real pens.
 export function buildWorklist(
   population: GroupingMember[],
   ruleset: Ruleset,
   ctx: DeriveContext,
   pens: Pen[] = [],
 ): WorklistRow[] {
-  const cap = new Map<string, number | null>(
+  const caps = new Map<string, number | null>(
     pens.map((p) => [p.name, p.capacity]),
   );
-
-  // pass 1: total animals the ruleset assigns to each pen (its target)
-  const assigned = new Map<string, number>();
-  const targets = population.map((m) => {
-    const t = targetPen(m.subject, m.pen, ruleset, ctx);
-    if (t.pen !== null) {
-      assigned.set(t.pen, (assigned.get(t.pen) ?? 0) + 1);
-    }
-    return { m, t };
-  });
-
-  // pass 2: only physical≠target are moves; flag over-subscribed pens
+  const occupancy = new Map<string, number>();
   const out: WorklistRow[] = [];
-  for (const { m, t } of targets) {
-    if (t.pen !== null && t.pen !== m.pen) {
-      const c = cap.get(t.pen);
+
+  for (const m of population) {
+    const g = matchGroup(m.subject, m.pen, ruleset, ctx);
+    if (!g || g.placement.kind === "none") continue;
+    const to = resolvePen(g.placement, m.subject, ctx, occupancy, caps);
+    if (to === null) continue;
+    occupancy.set(to, (occupancy.get(to) ?? 0) + 1);
+    if (to !== m.pen) {
+      const cap = caps.get(to);
       out.push({
         id: m.id,
         from: m.pen,
-        to: t.pen,
-        rule: t.rule!,
+        to,
+        rule: g.name,
         overCapacity:
-          c !== null && c !== undefined && (assigned.get(t.pen) ?? 0) > c,
+          cap !== null && cap !== undefined && (occupancy.get(to) ?? 0) > cap,
       });
     }
   }
   return out;
+}
+
+// Names of groups still without a pen mapping (UI nudges the farmer).
+export function unmappedGroups(ruleset: Ruleset): string[] {
+  return ruleset
+    .filter((r) => r.placement.kind === "none")
+    .map((r) => r.name);
+}
+
+// --- plain-language rule text --------------------------------------
+const OP_WORD: Record<string, string> = {
+  "=": "is",
+  "<>": "is not",
+  ">": "more than",
+  ">=": "at least",
+  "<": "less than",
+  "<=": "at most",
+};
+
+type Atom =
+  | { kind: "cmp"; item: string; op: string; value: number | string }
+  | {
+      kind: "range";
+      item: string;
+      min: number;
+      max: number;
+      minInclusive: boolean;
+      maxInclusive: boolean;
+    }
+  | { kind: "set"; item: string; values: Array<number | string> };
+
+function atomText(a: Atom): string {
+  if (a.kind === "range")
+    return `${labelOf(a.item)} between ${a.min} and ${a.max}`;
+  if (a.kind === "set")
+    return `${labelOf(a.item)} is one of ${a.values.join(", ")}`;
+  // a few readable shortcuts for the common repro cases
+  if (a.item === "RPRO" && a.op === "=") return `${a.value}`;
+  return `${labelOf(a.item)} ${OP_WORD[a.op] ?? a.op} ${a.value}`;
+}
+
+/** Predicate IR → human sentence ("Dry and Days to due at most 21"). */
+export function describePredicate(p: Predicate): string {
+  if (!p || p.length === 0) return "everyone";
+  return p
+    .map((group) => (group as Atom[]).map(atomText).join(" and "))
+    .join(" or ");
+}
+
+/** One-line summary of where a group sends animals. */
+export function describePlacement(pl: Placement): string {
+  if (pl.kind === "none") return "—";
+  if (pl.kind === "single") return `pen ${pl.pen}`;
+  if (pl.kind === "parity")
+    return pl.buckets
+      .map((b) => `L${b.lacts.join("/")}→${b.pen}`)
+      .join(" · ");
+  if (pl.kind === "item")
+    return `${labelOf(pl.item)}: ${pl.cuts
+      .map((c) => `<${c.lt}→${c.pen}`)
+      .join(" · ")} · else→${pl.elsePen}`;
+  return `fill ${pl.pens.join(" → ")}`;
 }

@@ -1,13 +1,18 @@
 import "@/lib/derive/items";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
-import { serializeCommand, type Predicate } from "@/lib/derive/query";
+import { type Predicate } from "@/lib/derive/query";
 import type { Event } from "@/lib/derive/engine";
 import {
   buildWorklist,
+  unmappedGroups,
+  describePredicate,
+  describePlacement,
+  legacyPlacement,
   type Ruleset,
   type GroupingMember,
   type Pen,
+  type Placement,
 } from "@/lib/derive/grouping";
 import {
   GroupingClient,
@@ -18,13 +23,6 @@ import {
 
 export const metadata = { title: "Grouping" };
 export const dynamic = "force-dynamic";
-
-function condText(p: Predicate): string {
-  return serializeCommand({ verb: "COUNT", items: [], for: p }).replace(
-    /^COUNT FOR /,
-    "",
-  );
-}
 
 export default async function GroupingPage() {
   const user = await requireAnyRole(["super_admin", "admin"]);
@@ -52,23 +50,36 @@ export default async function GroupingPage() {
   });
   const penOptions: PenOption[] = pens
     .map((p) => ({ value: p.name }))
-    .sort((x, y) => Number(x.value) - Number(y.value));
+    .sort((x, y) =>
+      x.value.localeCompare(y.value, undefined, { numeric: true }),
+    );
 
   const { data: rules } = await admin
     .from("grouping_rules")
-    .select("id, ordinal, name, predicate, target_pen, split, is_active")
+    .select(
+      "id, ordinal, name, predicate, target_pen, split, placement, is_active",
+    )
     .eq("organization_id", orgId)
     .order("ordinal");
+
+  const placementOf = (r: {
+    placement: unknown;
+    target_pen: string | null;
+    split: unknown;
+  }): Placement =>
+    r.placement
+      ? (r.placement as Placement)
+      : legacyPlacement(
+          r.target_pen,
+          r.split as { firstLactation: string; mature: string } | null,
+        );
 
   const ruleset: Ruleset = (rules ?? [])
     .filter((r) => r.is_active)
     .map((r) => ({
       name: r.name,
       when: r.predicate as Predicate,
-      targetPen: (r.target_pen as string | null) ?? undefined,
-      split: (r.split as { firstLactation: string; mature: string } | null)
-        ? (r.split as { firstLactation: string; mature: string })
-        : undefined,
+      placement: placementOf(r),
     }));
 
   const { data: subjects } = await admin
@@ -122,31 +133,34 @@ export default async function GroupingPage() {
   ).map((w) => ({ ...w, subjectId: idToSubjectId.get(w.id)! }));
 
   const ruleRows: RuleRow[] = (rules ?? []).map((r) => {
-    const sp = r.split as { firstLactation: string; mature: string } | null;
+    const pl = placementOf(r);
     return {
       id: r.id,
       ordinal: r.ordinal,
       name: r.name,
-      cond: condText(r.predicate as Predicate),
-      target: sp
-        ? `1st→${sp.firstLactation} · mature→${sp.mature}`
-        : (r.target_pen as string),
+      cond: describePredicate(r.predicate as Predicate),
+      placement: pl,
+      placementText: describePlacement(pl),
+      mapped: pl.kind !== "none",
     };
   });
+
+  const unmapped = unmappedGroups(ruleset);
 
   return (
     <div className="flex flex-col gap-4 py-4">
       <header>
         <h1 className="font-heading text-lg font-medium">Grouping</h1>
         <p className="text-xs text-muted-foreground">
-          Ordered rules decide where each animal should be (first match
-          wins). The worklist is everyone whose pen doesn’t match yet.
+          Set your group strategy, then map each group to your real
+          pens. Nothing moves until a group has pens.
         </p>
       </header>
       <GroupingClient
         rules={ruleRows}
         worklist={worklist}
         pens={penOptions}
+        unmapped={unmapped}
       />
     </div>
   );

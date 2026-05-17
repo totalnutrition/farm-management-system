@@ -7,91 +7,106 @@ import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { PathGrouping } from "@/lib/misc";
 
 type Result = { error?: string; success?: boolean };
-
 type Admin = ReturnType<typeof createAdminClient>;
 
-// A grouping rule targets a pen; pens are numeric (DC convention).
-// Auto-create any referenced pen so authoring a rule is never blocked
-// by "no pens yet".
+// Pens are now the farm's REAL pens (any name). A pen referenced by a
+// placement is auto-created so mapping is never blocked, but nothing
+// is fabricated until the farmer maps a group to a pen.
 async function ensurePens(
   admin: Admin,
   orgId: string,
   userId: string,
-  pens: { no: number; label?: string }[],
+  names: string[],
 ): Promise<void> {
-  if (!pens.length) return;
-  const nums = pens.map((p) => String(p.no));
+  const want = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
+  if (!want.length) return;
   const { data: existing } = await admin
     .from("subjects")
     .select("natural_key")
     .eq("organization_id", orgId)
     .eq("subject_type", "pen")
-    .in("natural_key", nums);
+    .in("natural_key", want);
   const have = new Set((existing ?? []).map((r) => r.natural_key));
-  const toCreate = pens.filter((p) => !have.has(String(p.no)));
+  const toCreate = want.filter((n) => !have.has(n));
   if (!toCreate.length) return;
   await admin.from("subjects").insert(
-    toCreate.map((p) => ({
+    toCreate.map((n) => ({
       organization_id: orgId,
       subject_type: "pen",
-      natural_key: String(p.no),
-      name: p.label ?? null,
-      attrs: { pen_no: p.no, pen_type: ["USER"], capacity: null, barn: null },
+      natural_key: n,
+      name: null,
+      attrs: {
+        pen_no: /^\d+$/.test(n) ? Number(n) : null,
+        pen_type: ["USER"],
+        capacity: null,
+        barn: null,
+      },
       created_by: userId,
     })),
   );
 }
 
-const isPenNo = (s: string) =>
-  /^\d+$/.test(s) && Number(s) >= 1 && Number(s) <= 9999;
+const placementSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("none") }),
+  z.object({ kind: z.literal("single"), pen: z.string().trim().min(1) }),
+  z.object({
+    kind: z.literal("parity"),
+    buckets: z
+      .array(
+        z.object({
+          lacts: z.array(z.number().int()).min(1),
+          pen: z.string().trim().min(1),
+        }),
+      )
+      .min(2),
+  }),
+  z.object({
+    kind: z.literal("item"),
+    item: z.string().trim().min(1),
+    cuts: z
+      .array(z.object({ lt: z.number(), pen: z.string().trim().min(1) }))
+      .min(1),
+    elsePen: z.string().trim().min(1),
+  }),
+  z.object({
+    kind: z.literal("capacity"),
+    pens: z.array(z.string().trim().min(1)).min(2),
+  }),
+]);
+type Placement = z.infer<typeof placementSchema>;
 
-const ruleSchema = z
-  .object({
-    name: z.string().trim().min(1, "Rule name is required."),
-    predicate: z.array(z.array(z.any())).min(1, "Add at least one condition."),
-    targetPen: z.string().trim().optional(),
-    splitFirst: z.string().trim().optional(),
-    splitMature: z.string().trim().optional(),
-  })
-  .refine(
-    (v) =>
-      (v.targetPen && v.targetPen.length > 0) ||
-      (v.splitFirst && v.splitMature),
-    { message: "Choose a target pen, or both parity-split pens." },
-  );
+function pensOf(p: Placement): string[] {
+  if (p.kind === "single") return [p.pen];
+  if (p.kind === "parity") return p.buckets.map((b) => b.pen);
+  if (p.kind === "item") return [...p.cuts.map((c) => c.pen), p.elsePen];
+  if (p.kind === "capacity") return p.pens;
+  return [];
+}
+
+const groupSchema = z.object({
+  name: z.string().trim().min(1, "Group name is required."),
+  predicate: z
+    .array(z.array(z.any()))
+    .min(1, "Add at least one condition."),
+  placement: placementSchema.optional(),
+});
 
 export async function addRule(
-  input: z.infer<typeof ruleSchema>,
+  input: z.infer<typeof groupSchema>,
 ): Promise<Result> {
   const user = await requireAnyRole(["super_admin", "admin"]);
   const orgId = getOrganizationIdFromUser(user);
   if (!orgId) return { error: "No organization on this account." };
 
-  const parsed = ruleSchema.safeParse(input);
+  const parsed = groupSchema.safeParse(input);
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
-  const { name, predicate, targetPen, splitFirst, splitMature } =
-    parsed.data;
-
-  const split =
-    splitFirst && splitMature
-      ? { firstLactation: splitFirst, mature: splitMature }
-      : null;
-
-  const penRefs = split
-    ? [split.firstLactation, split.mature]
-    : [targetPen as string];
-  for (const p of penRefs)
-    if (!isPenNo(p))
-      return { error: `Pen "${p}" must be a number (1–9999).` };
+  const { name, predicate } = parsed.data;
+  const placement: Placement = parsed.data.placement ?? { kind: "none" };
 
   const admin = createAdminClient();
-  await ensurePens(
-    admin,
-    orgId,
-    user.id,
-    penRefs.map((p) => ({ no: Number(p) })),
-  );
+  await ensurePens(admin, orgId, user.id, pensOf(placement));
+
   const { data: last } = await admin
     .from("grouping_rules")
     .select("ordinal")
@@ -106,15 +121,46 @@ export async function addRule(
     ordinal,
     name,
     predicate,
-    target_pen: split ? null : (targetPen as string),
-    split,
+    target_pen: null,
+    split: null,
+    placement,
     created_by: user.id,
   });
   if (error) {
     if (error.code === "23505")
-      return { error: `A rule named “${name}” already exists.` };
+      return { error: `A group named “${name}” already exists.` };
     return { error: error.message };
   }
+
+  revalidatePath(PathGrouping);
+  return { success: true };
+}
+
+const placeSchema = z.object({
+  id: z.string().uuid(),
+  placement: placementSchema,
+});
+
+export async function setGroupPlacement(
+  input: z.infer<typeof placeSchema>,
+): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+
+  const parsed = placeSchema.safeParse(input);
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  const { id, placement } = parsed.data;
+
+  const admin = createAdminClient();
+  await ensurePens(admin, orgId, user.id, pensOf(placement));
+  const { error } = await admin
+    .from("grouping_rules")
+    .update({ placement, target_pen: null, split: null })
+    .eq("id", id)
+    .eq("organization_id", orgId);
+  if (error) return { error: error.message };
 
   revalidatePath(PathGrouping);
   return { success: true };
@@ -127,32 +173,22 @@ const cmp = (item: string, op: string, value: number | string) => ({
   value,
 });
 
-const PRESET_PENS = [
-  { no: 1, label: "Fresh" },
-  { no: 2, label: "High" },
-  { no: 3, label: "Mid" },
-  { no: 4, label: "Low" },
-  { no: 5, label: "Late" },
-  { no: 10, label: "Far-off dry" },
-  { no: 11, label: "Close-up" },
-  { no: 20, label: "Hospital" },
-];
-
-// Standard lactating-herd scheme, derived items only — order matters
-// (first match wins).
-const PRESET_RULES: { name: string; when: unknown[][]; pen: string }[] = [
-  { name: "Hospital", when: [[cmp("FLAGGED", "=", "YES")]], pen: "20" },
+// The standard lactating-herd STRATEGY only — named groups + readable
+// criteria, derived items only, order matters (first match wins).
+// No pens are created and nothing moves: the farmer maps each group
+// to their real pens afterwards.
+const STANDARD_GROUPS: { name: string; when: unknown[][] }[] = [
+  { name: "Hospital", when: [[cmp("FLAGGED", "=", "YES")]] },
   {
     name: "Close-up",
     when: [[cmp("RPRO", "=", "DRY"), cmp("DUE", "<=", 21)]],
-    pen: "11",
   },
-  { name: "Far-off dry", when: [[cmp("RPRO", "=", "DRY")]], pen: "10" },
-  { name: "Fresh", when: [[cmp("DIM", "<=", 21)]], pen: "1" },
-  { name: "High group", when: [[cmp("MAVG", ">=", 35)]], pen: "2" },
-  { name: "Mid group", when: [[cmp("MAVG", ">=", 25)]], pen: "3" },
-  { name: "Low group", when: [[cmp("MAVG", ">=", 15)]], pen: "4" },
-  { name: "Late lactation", when: [[cmp("DIM", ">=", 1)]], pen: "5" },
+  { name: "Far-off dry", when: [[cmp("RPRO", "=", "DRY")]] },
+  { name: "Fresh", when: [[cmp("DIM", "<=", 21)]] },
+  { name: "High", when: [[cmp("MAVG", ">=", 35)]] },
+  { name: "Mid", when: [[cmp("MAVG", ">=", 25)]] },
+  { name: "Low", when: [[cmp("MAVG", ">=", 15)]] },
+  { name: "Late lactation", when: [[cmp("DIM", ">=", 1)]] },
 ];
 
 export async function installGroupingPresets(): Promise<Result> {
@@ -161,8 +197,6 @@ export async function installGroupingPresets(): Promise<Result> {
   if (!orgId) return { error: "No organization on this account." };
 
   const admin = createAdminClient();
-  await ensurePens(admin, orgId, user.id, PRESET_PENS);
-
   const { data: existing } = await admin
     .from("grouping_rules")
     .select("name, ordinal")
@@ -170,15 +204,18 @@ export async function installGroupingPresets(): Promise<Result> {
   const have = new Set((existing ?? []).map((r) => r.name));
   let ordinal = Math.max(0, ...(existing ?? []).map((r) => r.ordinal));
 
-  const rows = PRESET_RULES.filter((r) => !have.has(r.name)).map((r) => ({
-    organization_id: orgId,
-    ordinal: ++ordinal,
-    name: r.name,
-    predicate: r.when,
-    target_pen: r.pen,
-    split: null,
-    created_by: user.id,
-  }));
+  const rows = STANDARD_GROUPS.filter((r) => !have.has(r.name)).map(
+    (r) => ({
+      organization_id: orgId,
+      ordinal: ++ordinal,
+      name: r.name,
+      predicate: r.when,
+      target_pen: null,
+      split: null,
+      placement: { kind: "none" },
+      created_by: user.id,
+    }),
+  );
   if (rows.length) {
     const { error } = await admin.from("grouping_rules").insert(rows);
     if (error) return { error: error.message };
@@ -206,7 +243,7 @@ export async function deleteRule(id: string): Promise<Result> {
 }
 
 const moveSchema = z.object({
-  subjectId: z.uuid(),
+  subjectId: z.string().uuid(),
   toPen: z.string().trim().min(1),
 });
 
