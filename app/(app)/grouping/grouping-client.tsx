@@ -8,18 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   ConditionBuilder,
   condsToPredicate,
   type ConditionValue,
 } from "@/components/condition-builder";
-import { addRule, deleteRule, moveAnimal } from "./actions";
+import {
+  addRule,
+  deleteRule,
+  moveAnimal,
+  installGroupingPresets,
+} from "./actions";
 
 export type RuleRow = {
   id: string;
@@ -59,29 +57,24 @@ export function GroupingClient({
   const [penFirst, setPenFirst] = useState("");
   const [penMature, setPenMature] = useState("");
 
-  const penSelect = (
+  // pen is a number (DC convention); typeable so a rule is never
+  // blocked by "no pens yet" — a new pen is created on save. Existing
+  // pens are offered as autocomplete.
+  const penInput = (
     value: string,
     onChange: (v: string) => void,
     placeholder: string,
   ) => (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="h-7 w-[130px] text-xs">
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        {pens.length === 0 ? (
-          <SelectItem value="__none" disabled>
-            no pens yet
-          </SelectItem>
-        ) : (
-          pens.map((p) => (
-            <SelectItem key={p.value} value={p.value}>
-              Pen {p.value}
-            </SelectItem>
-          ))
-        )}
-      </SelectContent>
-    </Select>
+    <Input
+      type="number"
+      min={1}
+      max={9999}
+      list="pen-options"
+      className="h-7 w-[110px] text-xs"
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
   );
 
   const submit = () =>
@@ -122,10 +115,33 @@ export function GroupingClient({
       router.refresh();
     });
 
+  const installPresets = () =>
+    start(async () => {
+      const res = await installGroupingPresets();
+      if (res.error) return void toast.error(res.error);
+      toast.success("Standard pens & rules installed.");
+      router.refresh();
+    });
+
   return (
     <div className="space-y-8">
+      <datalist id="pen-options">
+        {pens.map((p) => (
+          <option key={p.value} value={p.value} />
+        ))}
+      </datalist>
       <section className="space-y-3">
-        <h2 className="text-sm font-medium">Rules (first match wins)</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium">Rules (first match wins)</h2>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={pending}
+            onClick={installPresets}
+          >
+            Install standard setup
+          </Button>
+        </div>
         {rules.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No rules yet. Add one below.
@@ -194,12 +210,12 @@ export function GroupingClient({
               {splitMode ? (
                 <>
                   <span className="text-muted-foreground">1st-lact</span>
-                  {penSelect(penFirst, setPenFirst, "pen")}
+                  {penInput(penFirst, setPenFirst, "pen")}
                   <span className="text-muted-foreground">mature</span>
-                  {penSelect(penMature, setPenMature, "pen")}
+                  {penInput(penMature, setPenMature, "pen")}
                 </>
               ) : (
-                penSelect(pen, setPen, "target pen")
+                penInput(pen, setPen, "target pen")
               )}
               <Button
                 size="sm"

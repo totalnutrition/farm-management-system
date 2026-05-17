@@ -19,7 +19,12 @@ import {
   condsToPredicate,
   type ConditionValue,
 } from "@/components/condition-builder";
-import { addProtocol, deleteProtocol, doProtocolStep } from "./actions";
+import {
+  addProtocol,
+  deleteProtocol,
+  doProtocolStep,
+  installProtocolPresets,
+} from "./actions";
 
 export type ProtocolRow = {
   id: string;
@@ -179,7 +184,24 @@ export function ProtocolsClient({
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium">Protocols</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium">Protocols</h2>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                const res = await installProtocolPresets();
+                if (res.error) return void toast.error(res.error);
+                toast.success("Standard protocols installed.");
+                router.refresh();
+              })
+            }
+          >
+            Install standard protocols
+          </Button>
+        </div>
         {protocols.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No protocols yet. Define one below.

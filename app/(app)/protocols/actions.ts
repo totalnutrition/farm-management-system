@@ -61,6 +61,114 @@ export async function addProtocol(
   return { success: true };
 }
 
+const cmp = (item: string, op: string, value: number | string) => ({
+  kind: "cmp" as const,
+  item,
+  op,
+  value,
+});
+
+// Standard farm protocols. Step labels only — no fabricated event
+// numbers (provenance doctrine); anchors limited to confirmed date
+// items FDAT (last calving) / DDAT (dry-off).
+const PRESET_PROTOCOLS = [
+  {
+    name: "Fresh Cow Health Check",
+    enroll: [[cmp("LACT", ">=", 1)]],
+    anchor: "FDAT",
+    steps: [
+      { dayOffset: 1, label: "Calving check — placenta, hydration, BCS" },
+      { dayOffset: 3, label: "Temperature + ketosis (BHB) check" },
+      { dayOffset: 7, label: "Metritis / discharge check" },
+      { dayOffset: 10, label: "Fresh-pen exit check" },
+    ],
+  },
+  {
+    name: "Postpartum Breeding (Presynch–Ovsynch)",
+    enroll: [[cmp("RPRO", "=", "OPEN")]],
+    anchor: "FDAT",
+    steps: [
+      { dayOffset: 35, label: "Presynch PGF #1" },
+      { dayOffset: 49, label: "Presynch PGF #2" },
+      { dayOffset: 61, label: "Ovsynch GnRH #1" },
+      { dayOffset: 68, label: "Ovsynch PGF" },
+      { dayOffset: 70, label: "Ovsynch GnRH #2" },
+      { dayOffset: 71, label: "Timed AI" },
+    ],
+  },
+  {
+    name: "Dry-Off",
+    enroll: [[cmp("RPRO", "=", "DRY")]],
+    anchor: "DDAT",
+    steps: [
+      { dayOffset: 0, label: "Dry-cow therapy + internal teat sealant" },
+      { dayOffset: 1, label: "Move to far-off dry pen" },
+      { dayOffset: 3, label: "Udder check (no mastitis flare)" },
+    ],
+  },
+  {
+    name: "Close-Up / Pre-Calving",
+    enroll: [[cmp("RPRO", "=", "DRY")]],
+    anchor: "DDAT",
+    steps: [
+      { dayOffset: 40, label: "Move to close-up pen + transition ration" },
+      { dayOffset: 45, label: "Pre-calving (scour/respiratory) vaccination" },
+      { dayOffset: 52, label: "Calving watch begins" },
+    ],
+  },
+  {
+    name: "Lactation Vaccination",
+    enroll: [[cmp("LACT", ">=", 1)]],
+    anchor: "FDAT",
+    steps: [
+      { dayOffset: 30, label: "Breeding-time vaccination" },
+      { dayOffset: 120, label: "Mid-lactation booster" },
+    ],
+  },
+  {
+    name: "Hoof Health",
+    enroll: [[cmp("LACT", ">=", 1)]],
+    anchor: "FDAT",
+    steps: [
+      { dayOffset: 80, label: "Routine hoof trim + locomotion score" },
+      { dayOffset: 220, label: "Second hoof trim + locomotion score" },
+    ],
+  },
+];
+
+export async function installProtocolPresets(): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin
+    .from("protocols")
+    .select("name, ordinal")
+    .eq("organization_id", orgId);
+  const have = new Set((existing ?? []).map((r) => r.name));
+  let ordinal = Math.max(0, ...(existing ?? []).map((r) => r.ordinal));
+
+  const rows = PRESET_PROTOCOLS.filter((p) => !have.has(p.name)).map(
+    (p) => ({
+      organization_id: orgId,
+      ordinal: ++ordinal,
+      name: p.name,
+      enroll: p.enroll,
+      anchor: p.anchor,
+      steps: p.steps,
+      created_by: user.id,
+    }),
+  );
+  if (rows.length) {
+    const { error } = await admin.from("protocols").insert(rows);
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath(PathProtocols);
+  return { success: true };
+}
+
 export async function deleteProtocol(id: string): Promise<Result> {
   const user = await requireAnyRole(["super_admin", "admin"]);
   const orgId = getOrganizationIdFromUser(user);
