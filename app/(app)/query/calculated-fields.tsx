@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,160 @@ const blank = {
   expression: "",
   kind: "num" as CalcKind,
 };
+
+type Suggestion = {
+  insert: string;
+  label: string;
+  hint: string;
+  fn: boolean;
+};
+
+// Autocompleting formula editor: as you type an identifier it offers
+// matching items (built-in catalog + this org's other calc fields)
+// and functions. ↑/↓ to move, Tab/Enter to insert, Esc to dismiss.
+function FormulaInput({
+  value,
+  onChange,
+  extraItems,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  extraItems: { value: string; label: string }[];
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const [caret, setCaret] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [hi, setHi] = useState(0);
+
+  const pool = useMemo<Suggestion[]>(() => {
+    const items = [
+      { value: "ID", label: "Animal ID" },
+      ...ITEMS.map((i) => ({ value: i.value, label: i.label })),
+      ...extraItems,
+    ].map((i) => ({
+      insert: i.value,
+      label: i.value,
+      hint: i.label,
+      fn: false,
+    }));
+    const fns = FUNCTION_NAMES.map((n) => ({
+      insert: `${n}(`,
+      label: `${n}()`,
+      hint: "function",
+      fn: true,
+    }));
+    return [...items, ...fns];
+  }, [extraItems]);
+
+  // The identifier token immediately left of the caret.
+  const token = useMemo(() => {
+    const m = value.slice(0, caret).match(/[A-Za-z_][A-Za-z0-9_]*$/);
+    return m ? m[0] : "";
+  }, [value, caret]);
+
+  const matches = useMemo(() => {
+    if (!token) return [];
+    const t = token.toUpperCase();
+    return pool
+      .filter(
+        (s) =>
+          s.label.toUpperCase().startsWith(t) ||
+          s.hint.toUpperCase().includes(t),
+      )
+      .sort((a, b) => {
+        const ap = a.label.toUpperCase().startsWith(t) ? 0 : 1;
+        const bp = b.label.toUpperCase().startsWith(t) ? 0 : 1;
+        return ap - bp || a.label.localeCompare(b.label);
+      })
+      .slice(0, 8);
+  }, [pool, token]);
+
+  const show = open && matches.length > 0;
+
+  const accept = (s: Suggestion) => {
+    const start = caret - token.length;
+    const next = value.slice(0, start) + s.insert + value.slice(caret);
+    onChange(next);
+    setOpen(false);
+    const pos = start + s.insert.length;
+    requestAnimationFrame(() => {
+      const el = ref.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(pos, pos);
+        setCaret(pos);
+      }
+    });
+  };
+
+  const sync = () => {
+    const el = ref.current;
+    if (el) setCaret(el.selectionStart ?? 0);
+  };
+
+  return (
+    <div className="relative">
+      <textarea
+        ref={ref}
+        className="h-24 w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
+        placeholder="=IF(MILK>0, MTOT/DIM, 0)"
+        value={value}
+        spellCheck={false}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setCaret(e.target.selectionStart ?? 0);
+          setOpen(true);
+          setHi(0);
+        }}
+        onClick={sync}
+        onKeyUp={(e) => {
+          if (!["ArrowDown", "ArrowUp", "Enter", "Tab"].includes(e.key))
+            sync();
+        }}
+        onKeyDown={(e) => {
+          if (!show) return;
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setHi((h) => (h + 1) % matches.length);
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setHi((h) => (h - 1 + matches.length) % matches.length);
+          } else if (e.key === "Enter" || e.key === "Tab") {
+            e.preventDefault();
+            accept(matches[hi]);
+          } else if (e.key === "Escape") {
+            setOpen(false);
+          }
+        }}
+        onBlur={() => setTimeout(() => setOpen(false), 120)}
+      />
+      {show && (
+        <div className="absolute z-50 mt-1 max-h-56 w-72 overflow-y-auto rounded-md border bg-popover py-1 shadow-md">
+          {matches.map((s, i) => (
+            <button
+              key={s.label}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                accept(s);
+              }}
+              onMouseEnter={() => setHi(i)}
+              className={
+                "flex w-full items-center justify-between gap-2 px-2 py-1 text-left text-xs " +
+                (i === hi ? "bg-muted" : "")
+              }
+            >
+              <span className="font-mono">{s.label}</span>
+              <span className="truncate text-[10px] text-muted-foreground">
+                {s.hint}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function CalculatedFields({
   rows,
@@ -188,12 +342,13 @@ export function CalculatedFields({
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Formula</Label>
-                  <textarea
-                    className="h-24 w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
-                    placeholder='=IF(MILK>0, MTOT/DIM, 0)'
+                  <FormulaInput
                     value={f.expression}
-                    spellCheck={false}
-                    onChange={(e) => set("expression", e.target.value)}
+                    onChange={(v) => set("expression", v)}
+                    extraItems={others.map((o) => ({
+                      value: o.key,
+                      label: o.label,
+                    }))}
                   />
                   {problem ? (
                     <p className="text-[11px] text-destructive">
@@ -201,8 +356,8 @@ export function CalculatedFields({
                     </p>
                   ) : (
                     <p className="text-[11px] text-muted-foreground">
-                      Items by code (MILK, DIM, RPRO…). Functions:{" "}
-                      {FUNCTION_NAMES.slice(0, 14).join(", ")}…
+                      Type to autocomplete items &amp; functions. ↑↓
+                      choose · Tab/Enter insert.
                     </p>
                   )}
                 </div>
