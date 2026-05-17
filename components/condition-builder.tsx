@@ -35,9 +35,10 @@ import {
   opLabel,
   kindOf,
   optionsOf,
-  opsFor,
+  OPS,
   ITEMS,
   ITEM_GROUPS,
+  type FieldKind,
 } from "@/lib/derive/catalog";
 
 export type Cond = {
@@ -82,15 +83,43 @@ export function describeConds(v: ConditionValue): string {
   );
 }
 
+export type ExtraItem = {
+  value: string;
+  label: string;
+  group: string;
+  kind: FieldKind;
+};
+
 export function ConditionBuilder({
   value,
   onChange,
+  extraItems = [],
+  extraGroups = [],
 }: {
   value: ConditionValue;
   onChange: (v: ConditionValue) => void;
+  extraItems?: ExtraItem[];
+  extraGroups?: readonly string[];
 }) {
   const { conds, matchAny } = value;
   const setConds = (next: Cond[]) => onChange({ conds: next, matchAny });
+
+  const allItems = extraItems.length ? [...ITEMS, ...extraItems] : ITEMS;
+  const allGroups = extraGroups.length
+    ? [...ITEM_GROUPS, ...extraGroups]
+    : ITEM_GROUPS;
+  const extraKind = new Map(extraItems.map((i) => [i.value, i.kind]));
+  const kindAt = (item: string): FieldKind =>
+    extraKind.get(item) ?? kindOf(item);
+  const opsAt = (item: string) =>
+    kindAt(item) === "num"
+      ? OPS
+      : OPS.filter((o) => o.value === "=" || o.value === "<>");
+  const optionsAt = (item: string): string[] => {
+    if (extraKind.has(item))
+      return kindAt(item) === "bool" ? ["YES", "no"] : [];
+    return optionsOf(item);
+  };
 
   return (
     <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
@@ -110,8 +139,8 @@ export function ConditionBuilder({
             </button>
           )}
           <FieldPicker
-            items={ITEMS}
-            groups={ITEM_GROUPS}
+            items={allItems}
+            groups={allGroups}
             value={c.item}
             onChange={(v) =>
               setConds(
@@ -139,7 +168,7 @@ export function ConditionBuilder({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {opsFor(c.item).map((o) => (
+              {opsAt(c.item).map((o) => (
                 <SelectItem key={o.value} value={o.value}>
                   {o.label}
                 </SelectItem>
@@ -147,7 +176,7 @@ export function ConditionBuilder({
             </SelectContent>
           </Select>
           {(() => {
-            const k = kindOf(c.item);
+            const k = kindAt(c.item);
             const set = (val: string) =>
               setConds(
                 conds.map((x, i) =>
@@ -164,7 +193,7 @@ export function ConditionBuilder({
                     <SelectValue placeholder="value" />
                   </SelectTrigger>
                   <SelectContent>
-                    {optionsOf(c.item).map((o) => (
+                    {optionsAt(c.item).map((o) => (
                       <SelectItem key={o} value={o}>
                         {o}
                       </SelectItem>
@@ -192,7 +221,7 @@ export function ConditionBuilder({
               />
             );
           })()}
-          {c.op === "between" && kindOf(c.item) === "num" && (
+          {c.op === "between" && kindAt(c.item) === "num" && (
             <Input
               className="h-7 w-16 text-xs"
               placeholder="and"

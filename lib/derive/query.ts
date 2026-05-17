@@ -11,6 +11,7 @@ import {
   type DeriveContext,
   type ItemValue,
 } from "./engine.ts";
+import { evalFormula } from "./formula.ts";
 import { stats, pick, type Agg } from "./stats.ts";
 
 export type { Agg } from "./stats.ts";
@@ -276,6 +277,37 @@ function plainResolve(
   if (item === "ID") return m.id;
   return deriveItem(item, m.subject, ctx);
 }
+
+// A user calculated field: evaluate its compiled Sheets formula,
+// resolving nested refs to built-in items OR other calc fields.
+// `stack` guards against circular definitions (A→B→A → null).
+function resolveCalc(
+  key: string,
+  m: PopulationMember,
+  ctx: DeriveContext,
+  stack: Set<string>,
+): ItemValue {
+  const f = ctx.calc?.[key];
+  if (!f || stack.has(key)) return null;
+  const next = new Set(stack).add(key);
+  const v = evalFormula(
+    f,
+    (name) => {
+      const u = name.toUpperCase();
+      if (ctx.calc && u in ctx.calc) return resolveCalc(u, m, ctx, next);
+      if (u === "ID") return m.id;
+      try {
+        return deriveItem(u, m.subject, ctx);
+      } catch {
+        return null; // unknown ref → blank, like a spreadsheet
+      }
+    },
+    { today: ctx.today },
+  );
+  // Booleans become 1/0 so flag calc fields sum, compare and group
+  // like DC's numeric flags.
+  return typeof v === "boolean" ? (v ? 1 : 0) : v;
+}
 function operand(
   t: string,
   m: PopulationMember,
@@ -291,6 +323,10 @@ function resolve(
   m: PopulationMember,
   ctx: DeriveContext,
 ): ItemValue {
+  if (ctx.calc) {
+    const up = item.toUpperCase();
+    if (up in ctx.calc) return resolveCalc(up, m, ctx, new Set());
+  }
   const mx = item.match(EXPR);
   if (mx && mx[1].trim() && mx[3].trim()) {
     const a = operand(mx[1], m, ctx);

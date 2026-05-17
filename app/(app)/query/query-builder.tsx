@@ -35,9 +35,11 @@ import {
   isAggregatable,
   isGroupable,
   type ConditionValue,
+  type FieldKind,
 } from "@/components/condition-builder";
 import { FieldPicker } from "@/components/field-picker";
 import { validateQuery } from "@/lib/derive/validate-query";
+import type { CalcFieldRow } from "@/lib/calc-fields";
 import { runQueryAction, type QueryResponse } from "./actions";
 import { toCsv } from "@/lib/csv";
 import { saveView } from "../views/actions";
@@ -62,7 +64,45 @@ const AGGS: AggOpt[] = [
   "stdev",
 ];
 
-export function QueryBuilder() {
+const CALC_GROUP = "Calculated";
+const CALC_TO_KIND: Record<CalcFieldRow["kind"], FieldKind> = {
+  num: "num",
+  flag: "bool",
+  text: "text",
+};
+
+export function QueryBuilder({
+  calcFields = [],
+}: {
+  calcFields?: CalcFieldRow[];
+}) {
+  const calcItems = useMemo(
+    () =>
+      calcFields.map((c) => ({
+        value: c.key,
+        label: c.label,
+        group: CALC_GROUP,
+        kind: CALC_TO_KIND[c.kind],
+      })),
+    [calcFields],
+  );
+  const calcKinds = useMemo(
+    () =>
+      Object.fromEntries(calcFields.map((c) => [c.key, c.kind])) as Record<
+        string,
+        CalcFieldRow["kind"]
+      >,
+    [calcFields],
+  );
+  const allItems = useMemo(
+    () => [...ITEMS, ...calcItems],
+    [calcItems],
+  );
+  const allGroups = useMemo(
+    () => [...ITEM_GROUPS, CALC_GROUP] as const,
+    [],
+  );
+
   const [verb, setVerb] = useState<Verb>("LIST");
   const [columns, setColumns] = useState<string[]>(["ID", "RPRO", "DIM"]);
   const [cond, setCond] = useState<ConditionValue>({
@@ -87,17 +127,29 @@ export function QueryBuilder() {
 
   // DairyComp slot rules: SUM only takes numeric items; BY (group)
   // only category items; sort (LIST) only an output column.
+  // calc kind → slot eligibility: num summarizable; flag both;
+  // text neither (mirrors the server guard).
   const numericItems = useMemo(
-    () => ITEMS.filter((i) => isAggregatable(i.value)),
-    [],
+    () =>
+      allItems.filter((i) =>
+        i.value in calcKinds
+          ? calcKinds[i.value] !== "text"
+          : isAggregatable(i.value),
+      ),
+    [allItems, calcKinds],
   );
   const groupableItems = useMemo(
-    () => ITEMS.filter((i) => isGroupable(i.value)),
-    [],
+    () =>
+      allItems.filter((i) =>
+        i.value in calcKinds
+          ? calcKinds[i.value] === "flag"
+          : isGroupable(i.value),
+      ),
+    [allItems, calcKinds],
   );
   const sortableItems = useMemo(
-    () => ITEMS.filter((i) => columns.includes(i.value)),
-    [columns],
+    () => allItems.filter((i) => columns.includes(i.value)),
+    [allItems, columns],
   );
   const canGroup = verb === "COUNT" || verb === "SUM";
 
@@ -177,17 +229,17 @@ export function QueryBuilder() {
     { ok: true; query: Query } | { ok: false; error: string }
   >(() => {
     if (mode === "builder") {
-      const bad = validateQuery(query);
+      const bad = validateQuery(query, calcKinds);
       return bad ? { ok: false, error: bad } : { ok: true, query };
     }
     try {
       const parsed = parseCommand(cmdText);
-      const bad = validateQuery(parsed);
+      const bad = validateQuery(parsed, calcKinds);
       return bad ? { ok: false, error: bad } : { ok: true, query: parsed };
     } catch (e) {
       return { ok: false, error: (e as Error).message };
     }
-  }, [mode, query, cmdText]);
+  }, [mode, query, cmdText, calcKinds]);
 
   const switchTo = (m: "builder" | "command") => {
     if (m === "command") setCmdText(serializeCommand(query));
@@ -273,15 +325,20 @@ export function QueryBuilder() {
             {(verb === "LIST" || verb === "SUM") && (
               <FieldPicker
                 multiple
-                items={verb === "SUM" ? numericItems : ITEMS}
-                groups={ITEM_GROUPS}
+                items={verb === "SUM" ? numericItems : allItems}
+                groups={allGroups}
                 values={columns}
                 onToggle={toggleCol}
                 placeholder={verb === "SUM" ? "Averaging" : "Columns"}
               />
             )}
 
-            <ConditionBuilder value={cond} onChange={setCond} />
+            <ConditionBuilder
+              value={cond}
+              onChange={setCond}
+              extraItems={calcItems}
+              extraGroups={[CALC_GROUP]}
+            />
 
             {canGroup && (
               <>
@@ -295,7 +352,7 @@ export function QueryBuilder() {
                   <FieldPicker
                     key={idx}
                     items={groupableItems}
-                    groups={ITEM_GROUPS}
+                    groups={allGroups}
                     value={gv}
                     onChange={gs}
                     clearLabel="— none —"
@@ -342,7 +399,7 @@ export function QueryBuilder() {
                 <span className="text-xs text-muted-foreground">sort</span>
                 <FieldPicker
                   items={sortableItems}
-                  groups={ITEM_GROUPS}
+                  groups={allGroups}
                   value={sortItem}
                   onChange={setSortItem}
                   clearLabel="Animal ID"

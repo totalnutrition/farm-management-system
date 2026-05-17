@@ -6,6 +6,7 @@ import { requireUser, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { runQuery, type Query, type PopulationMember } from "@/lib/derive/query";
 import { validateQuery } from "@/lib/derive/validate-query";
+import { loadCalcFields } from "@/lib/calc-fields";
 import type { Event, IntakeFacts } from "@/lib/derive/engine";
 
 export type QueryResponse =
@@ -54,10 +55,11 @@ export async function runQueryAction(
     return { error: "Invalid query." };
   }
 
-  const invalid = validateQuery(q);
-  if (invalid) return { error: invalid };
-
   const db = createAdminClient();
+  const calc = await loadCalcFields(db, orgId);
+
+  const invalid = validateQuery(q, calc.kinds);
+  if (invalid) return { error: invalid };
 
   const { data: subjects, error: sErr } = await db
     .from("subjects")
@@ -98,7 +100,7 @@ export async function runQueryAction(
     asOf && /^\d{4}-\d{2}-\d{2}$/.test(asOf)
       ? asOf
       : new Date().toISOString().slice(0, 10);
-  const result = runQuery(q, population, { today });
+  const result = runQuery(q, population, { today, calc: calc.compiled });
 
   if (q.groupBy && q.groupBy.length) {
     const g = result as {

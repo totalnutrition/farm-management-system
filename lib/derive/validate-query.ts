@@ -5,9 +5,22 @@
 import { isAggregatable, isGroupable, labelOf } from "./catalog.ts";
 import type { Query } from "./query.ts";
 
-export function validateQuery(q: Query): string | null {
+// Calc-field kinds, so the guard treats user fields by their declared
+// type: num → summarizable; flag → summarizable + groupable; text →
+// neither. Built-in items fall back to the static catalog rules.
+export type CalcKindMap = Record<string, "num" | "flag" | "text">;
+
+export function validateQuery(
+  q: Query,
+  calc: CalcKindMap = {},
+): string | null {
+  const aggOk = (i: string) =>
+    i in calc ? calc[i] !== "text" : isAggregatable(i);
+  const grpOk = (i: string) =>
+    i in calc ? calc[i] === "flag" : isGroupable(i);
+
   if (q.verb === "SUM") {
-    const bad = (q.items ?? []).filter((i) => !isAggregatable(i));
+    const bad = (q.items ?? []).filter((i) => !aggOk(i));
     if (bad.length)
       return `Can only summarize numeric items — ${bad
         .map(labelOf)
@@ -17,7 +30,7 @@ export function validateQuery(q: Query): string | null {
   }
 
   if (q.groupBy && q.groupBy.length) {
-    const bad = q.groupBy.filter((i) => !isGroupable(i));
+    const bad = q.groupBy.filter((i) => !grpOk(i));
     if (bad.length)
       return `Can't group by ${bad
         .map(labelOf)

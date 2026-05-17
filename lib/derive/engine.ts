@@ -30,6 +30,10 @@ export type Subject = {
 
 export type DeriveContext = {
   today: string; // ISO yyyy-mm-dd — injected, never read from a clock
+  // Org-scoped user calculated fields (compiled Sheets formulas),
+  // keyed by uppercase item code. Resolved by the query executor so
+  // they behave like any other item everywhere the engine is used.
+  calc?: Record<string, import("./formula.ts").Formula>;
 };
 
 export type ItemValue = number | string | null;
