@@ -19,7 +19,7 @@ import {
 } from "@/lib/derive/protocols";
 import { evaluateKpi, type Kpi } from "@/lib/derive/monitor";
 import type { Predicate, PopulationMember } from "@/lib/derive/query";
-import { PathHousing, PathProtocols, PathMonitor, PathHealth, PathActivity } from "@/lib/misc";
+import { PathHousing, PathBreeding, PathMonitor, PathHealth, PathActivity } from "@/lib/misc";
 
 export const dynamic = "force-dynamic";
 
@@ -135,7 +135,7 @@ export default async function Home() {
     .filter((r) => r.status === "warn" || r.status === "alert");
 
   const tiles = [
-    { label: "Protocol tasks due", n: tasks.length, href: PathProtocols, items: tasks.slice(0, 6).map((t) => `${t.id} · ${t.protocol}: ${t.step}${t.status === "overdue" ? " (overdue)" : ""}`) },
+    { label: "Protocol tasks due", n: tasks.length, href: `${PathBreeding}?tab=protocols`, items: tasks.slice(0, 6).map((t) => `${t.id} · ${t.protocol}: ${t.step}${t.status === "overdue" ? " (overdue)" : ""}`) },
     { label: "Pen moves", n: worklist.length, href: `${PathHousing}?tab=groups`, items: worklist.slice(0, 6).map((w) => `${w.id}: ${w.from ?? "—"} → ${w.to}${w.overCapacity ? " (over cap)" : ""}`) },
     { label: "KPI alerts", n: alerts.length, href: PathMonitor, items: alerts.slice(0, 6).map((a) => `${a.name}: ${a.value ?? "—"} vs ${a.goal} [${a.status}]`) },
     { label: "Do-not-ship", n: dnship.length, href: PathHealth, items: dnship.slice(0, 6).map((m) => `${m.id}: milk until ${deriveItem("MWHOLD", m.subject, { today }) ?? "—"}`) },

@@ -16,6 +16,7 @@ export const PathImport = "/import";
 export const PathHealth = "/health";
 export const PathHousing = "/housing";
 export const PathSires = "/sires";
+export const PathBreeding = "/breeding";
 export const PathActivity = "/activity";
 export const PathNotifications = "/notifications";
 export const PathProjection = "/projection";

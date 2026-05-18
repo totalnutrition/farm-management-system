@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
-import { PathProtocols } from "@/lib/misc";
+import { PathProtocols, PathBreeding } from "@/lib/misc";
 
 type Result = { error?: string; success?: boolean };
 
@@ -58,6 +58,7 @@ export async function addProtocol(
   }
 
   revalidatePath(PathProtocols);
+  revalidatePath(PathBreeding);
   return { success: true };
 }
 
@@ -166,6 +167,7 @@ export async function installProtocolPresets(): Promise<Result> {
   }
 
   revalidatePath(PathProtocols);
+  revalidatePath(PathBreeding);
   return { success: true };
 }
 
@@ -183,6 +185,7 @@ export async function deleteProtocol(id: string): Promise<Result> {
   if (error) return { error: error.message };
 
   revalidatePath(PathProtocols);
+  revalidatePath(PathBreeding);
   return { success: true };
 }
 
@@ -224,5 +227,6 @@ export async function doProtocolStep(
   if (error) return { error: error.message };
 
   revalidatePath(PathProtocols);
+  revalidatePath(PathBreeding);
   return { success: true };
 }

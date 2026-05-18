@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
-import { PathSires } from "@/lib/misc";
+import { PathSires, PathBreeding } from "@/lib/misc";
 
 type Result = { error?: string; success?: boolean };
 
@@ -43,6 +43,7 @@ export async function createSire(
     return { error: error.message };
   }
   revalidatePath(PathSires);
+  revalidatePath(PathBreeding);
   return { success: true };
 }
 
@@ -59,6 +60,7 @@ export async function deleteSire(id: string): Promise<Result> {
     .eq("subject_type", "sire");
   if (error) return { error: error.message };
   revalidatePath(PathSires);
+  revalidatePath(PathBreeding);
   return { success: true };
 }
 
@@ -92,5 +94,6 @@ export async function adjustStraws(
     .eq("organization_id", orgId);
   if (error) return { error: error.message };
   revalidatePath(PathSires);
+  revalidatePath(PathBreeding);
   return { success: true };
 }
