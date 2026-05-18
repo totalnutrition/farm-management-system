@@ -12,6 +12,7 @@ import {
   applySupplyMovement,
   checkSupplyShortages,
   shortageMessage,
+  resolveSupplyItemId,
 } from "@/lib/supply-usage";
 
 type Result = { error?: string; success?: boolean };
@@ -135,7 +136,18 @@ export async function recordEvent(
   if (!subj) return { error: "Animal not found." };
 
   const matQty = materialQty ?? 1;
+  let materialId: string | null = null;
   if (isBreeding && material) {
+    const r = await resolveSupplyItemId(admin, orgId, material);
+    if (r.ambiguous)
+      return {
+        error: `Multiple Supply Chain items named “${material}”. Rename one so stock can be tracked.`,
+      };
+    if (!r.id)
+      return {
+        error: `“${material}” is not a Supply Chain item. Add it under Supply Chain first.`,
+      };
+    materialId = r.id;
     const short = await checkSupplyShortages(admin, orgId, [
       { itemName: material, qty: matQty },
     ]);
@@ -159,6 +171,7 @@ export async function recordEvent(
   if (isBreeding && material) {
     await applySupplyMovement(admin, orgId, {
       itemName: material,
+      itemId: materialId ?? undefined,
       qty: matQty,
       date: eventDate,
       direction: "use",

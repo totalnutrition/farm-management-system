@@ -102,14 +102,19 @@ export async function recordTreatment(
     .maybeSingle();
   if (!animal) return { error: `Animal ${animalId} not found.` };
 
-  const { data: dr } = await admin
+  const { data: drugs } = await admin
     .from("subjects")
-    .select("attrs")
+    .select("id, attrs")
     .eq("organization_id", orgId)
     .eq("subject_type", "supply_item")
-    .eq("natural_key", drug)
-    .maybeSingle();
-  if (!dr) return { error: `Drug “${drug}” not found in Supply Chain.` };
+    .eq("natural_key", drug);
+  if (!drugs || drugs.length === 0)
+    return { error: `Drug “${drug}” not found in Supply Chain.` };
+  if (drugs.length > 1)
+    return {
+      error: `Multiple Supply Chain items named “${drug}”. Rename one so stock can be tracked.`,
+    };
+  const dr = drugs[0];
   const a = (dr.attrs ?? {}) as Record<string, unknown>;
   const milkDays = typeof a.milk_days === "number" ? a.milk_days : 0;
   const meatDays = typeof a.meat_days === "number" ? a.meat_days : 0;
@@ -140,6 +145,7 @@ export async function recordTreatment(
   // correct without a second manual entry. Defaults to 1 unit.
   await applySupplyMovement(admin, orgId, {
     itemName: drug,
+    itemId: dr.id,
     qty: need,
     date,
     direction: "use",

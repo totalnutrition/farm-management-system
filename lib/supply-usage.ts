@@ -101,11 +101,34 @@ export function shortageMessage(shortages: Shortage[]): string {
   );
 }
 
+// Resolve a Supply item name to its subject id. `ambiguous` is true
+// when more than one item shares the name — callers that MUST track
+// the consumable (drugs, genetic material) should treat both "no id"
+// and "ambiguous" as hard errors instead of silently skipping.
+export async function resolveSupplyItemId(
+  admin: Admin,
+  orgId: string,
+  name: string,
+): Promise<{ id: string | null; ambiguous: boolean }> {
+  if (!name) return { id: null, ambiguous: false };
+  const { data } = await admin
+    .from("subjects")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("subject_type", SUBJECT_ITEM)
+    .eq("natural_key", name);
+  if (!data || data.length === 0)
+    return { id: null, ambiguous: false };
+  if (data.length > 1) return { id: null, ambiguous: true };
+  return { id: data[0].id, ambiguous: false };
+}
+
 export async function applySupplyMovement(
   admin: Admin,
   orgId: string,
   opts: {
     itemName: string;
+    itemId?: string; // pre-resolved id — skips the name lookup
     qty: number;
     date: string;
     direction: "use" | "receive";
@@ -113,16 +136,21 @@ export async function applySupplyMovement(
   },
 ): Promise<void> {
   const qty = Math.abs(opts.qty);
-  if (!opts.itemName || qty <= 0) return;
+  if (qty <= 0) return;
 
-  const { data: item } = await admin
-    .from("subjects")
-    .select("id")
-    .eq("organization_id", orgId)
-    .eq("subject_type", SUBJECT_ITEM)
-    .eq("natural_key", opts.itemName)
-    .maybeSingle();
-  if (!item) return;
+  let subjectId = opts.itemId ?? null;
+  if (!subjectId) {
+    if (!opts.itemName) return;
+    const { data: item } = await admin
+      .from("subjects")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("subject_type", SUBJECT_ITEM)
+      .eq("natural_key", opts.itemName)
+      .maybeSingle();
+    if (!item) return;
+    subjectId = item.id;
+  }
 
   const code = opts.direction === "receive" ? EC_RECEIVE : EC_USAGE;
   // The events FK requires the code to exist for this org. Orgs
@@ -144,7 +172,7 @@ export async function applySupplyMovement(
 
   await admin.from("events").insert({
     organization_id: orgId,
-    subject_id: item.id,
+    subject_id: subjectId,
     event_code: code,
     event_date: opts.date,
     payload: {
