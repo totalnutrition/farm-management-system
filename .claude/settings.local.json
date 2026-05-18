@@ -6,7 +6,8 @@
       "mcp__9a74ae53-1441-4095-b3b7-606cfdbd8a80__list_projects",
       "mcp__9a74ae53-1441-4095-b3b7-606cfdbd8a80__list_deployments",
       "mcp__9a74ae53-1441-4095-b3b7-606cfdbd8a80__get_runtime_logs",
-      "mcp__9a74ae53-1441-4095-b3b7-606cfdbd8a80__get_deployment"
+      "mcp__9a74ae53-1441-4095-b3b7-606cfdbd8a80__get_deployment",
+      "mcp__9a74ae53-1441-4095-b3b7-606cfdbd8a80__deploy_to_vercel"
     ]
   }
 }
