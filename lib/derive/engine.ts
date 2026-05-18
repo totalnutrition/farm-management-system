@@ -122,7 +122,17 @@ export function runMachine(s: Subject): MachineState {
   const ordered = [...s.events].sort(
     (a, b) => toUTC(a.date) - toUTC(b.date),
   );
-  const st: MachineState = { rc: 0, lactBonus: 0, abt: false };
+  // A positive baseLactation means she has already completed
+  // lactation(s) — she has calved, so she is NOT a virgin even if no
+  // current-lactation FRESH/BRED/DRY event is in the stream. Seeding
+  // rc from it keeps RPRO consistent with LACT (LACT>=1 can never be
+  // VIRGIN) instead of mis-deriving multiparous cows as maiden heifers.
+  const calved = (s.facts?.baseLactation ?? 0) >= 1;
+  const st: MachineState = {
+    rc: calved ? 2 : 0,
+    lactBonus: 0,
+    abt: false,
+  };
   for (const e of ordered) {
     if (e.code === EC.FRESH) {
       st.rc = 2; // FRESH
