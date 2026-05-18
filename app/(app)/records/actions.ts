@@ -187,6 +187,44 @@ export async function recordEvent(
   return { success: true };
 }
 
+// Delete an animal event and reverse any stock it auto-consumed
+// (treatment/breeding) in one locked transaction. Scoped to the
+// org and restricted to events on animal subjects.
+export async function deleteAnimalEvent(
+  eventId: string,
+): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+
+  const admin = createAdminClient();
+  const { data: ev } = await admin
+    .from("events")
+    .select("id, subject_id, subjects!inner(subject_type)")
+    .eq("id", eventId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (!ev) return { error: "Event not found." };
+  const stype = (
+    ev as unknown as { subjects: { subject_type: string } }
+  ).subjects?.subject_type;
+  if (stype !== "animal")
+    return { error: "Only animal events can be deleted here." };
+
+  const { data, error } = await admin.rpc(
+    "delete_event_with_reversal",
+    { p_org: orgId, p_event_id: eventId },
+  );
+  if (error) return { error: error.message };
+  const res = (data ?? {}) as { ok?: boolean };
+  if (!res.ok) return { error: "Event no longer exists." };
+
+  revalidatePath(`${PathRecords}/${ev.subject_id}`);
+  revalidatePath(PathRecords);
+  revalidatePath(PathSupply);
+  return { success: true };
+}
+
 const milkSchema = z.object({
   subjectId: z.uuid(),
   date: z.string().trim().min(1, "Date is required."),

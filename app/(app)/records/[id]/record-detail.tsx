@@ -22,7 +22,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { recordEvent, recordMilking } from "../actions";
+import {
+  recordEvent,
+  recordMilking,
+  deleteAnimalEvent,
+} from "../actions";
 import { ITEMS, labelOf } from "@/components/condition-builder";
 import { EC } from "@/lib/derive/engine";
 
@@ -37,7 +41,12 @@ export function RecordDetail({
 }: {
   subjectId: string;
   state: Record<string, ItemValue>;
-  timeline: { date: string; label: string; remark: string | null }[];
+  timeline: {
+    id: string;
+    date: string;
+    label: string;
+    remark: string | null;
+  }[];
   codes: { code: number; label: string }[];
   supplyItems: string[];
 }) {
@@ -77,6 +86,24 @@ export function RecordDetail({
       setOpen(false);
       router.refresh();
     });
+
+  const removeEvent = (id: string, label: string) => {
+    if (
+      !window.confirm(
+        `Delete “${label}”? Any stock it consumed will be returned.`,
+      )
+    )
+      return;
+    start(async () => {
+      const res = await deleteAnimalEvent(id);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Event deleted; stock reversed.");
+      router.refresh();
+    });
+  };
 
   const [mOpen, setMOpen] = useState(false);
   const [mDate, setMDate] = useState(
@@ -345,10 +372,10 @@ export function RecordDetail({
           </p>
         ) : (
           <ol className="space-y-2">
-            {timeline.map((t, i) => (
+            {timeline.map((t) => (
               <li
-                key={i}
-                className="flex items-baseline gap-3 border-l-2 border-border pl-3 text-sm"
+                key={t.id}
+                className="group flex items-baseline gap-3 border-l-2 border-border pl-3 text-sm"
               >
                 <span className="w-24 shrink-0 font-mono text-xs text-muted-foreground">
                   {t.date}
@@ -357,6 +384,14 @@ export function RecordDetail({
                 {t.remark ? (
                   <span className="text-muted-foreground">— {t.remark}</span>
                 ) : null}
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => removeEvent(t.id, t.label)}
+                  className="ml-auto shrink-0 text-xs text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:text-destructive disabled:opacity-50"
+                >
+                  Delete
+                </button>
               </li>
             ))}
           </ol>

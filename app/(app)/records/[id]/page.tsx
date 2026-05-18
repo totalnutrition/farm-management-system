@@ -30,7 +30,7 @@ export default async function RecordPage({
 
   const { data: rawEvents } = await admin
     .from("events")
-    .select("event_code, event_date, remark, recorded_at")
+    .select("id, event_code, event_date, remark, recorded_at")
     .eq("organization_id", orgId)
     .eq("subject_id", id)
     .order("event_date", { ascending: false });
@@ -75,6 +75,7 @@ export default async function RecordPage({
   );
 
   const timeline = (rawEvents ?? []).map((e) => ({
+    id: e.id as string,
     date: e.event_date,
     label: codeName.get(e.event_code) ?? `EC ${e.event_code}`,
     remark: e.remark as string | null,
