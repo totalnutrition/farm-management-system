@@ -116,28 +116,29 @@ export default async function Home() {
   const attn = members.filter(
     (m) => deriveItem("FLAGGED", m.subject, { today }) === "YES",
   );
-  const alerts = (kpis ?? [])
-    .map((k) =>
-      evaluateKpi(
-        {
-          name: k.name,
-          filter: (k.filter as Predicate | null) ?? undefined,
-          metric: k.metric as Kpi["metric"],
-          goal: Number(k.goal),
-          direction: k.direction as Kpi["direction"],
-          warnPct: Number(k.warn_pct),
-          alertPct: Number(k.alert_pct),
-        },
-        pop,
-        { today },
-      ),
-    )
-    .filter((r) => r.status === "warn" || r.status === "alert");
+  const kpiResults = (kpis ?? []).map((k) =>
+    evaluateKpi(
+      {
+        name: k.name,
+        filter: (k.filter as Predicate | null) ?? undefined,
+        metric: k.metric as Kpi["metric"],
+        goal: Number(k.goal),
+        direction: k.direction as Kpi["direction"],
+        warnPct: Number(k.warn_pct),
+        alertPct: Number(k.alert_pct),
+      },
+      pop,
+      { today },
+    ),
+  );
+  const alerts = kpiResults.filter(
+    (r) => r.status === "warn" || r.status === "alert",
+  );
 
   const tiles = [
     { label: "Protocol tasks due", n: tasks.length, href: `${PathBreeding}?tab=protocols`, items: tasks.slice(0, 6).map((t) => `${t.id} · ${t.protocol}: ${t.step}${t.status === "overdue" ? " (overdue)" : ""}`) },
     { label: "Pen moves", n: worklist.length, href: `${PathHousing}?tab=groups`, items: worklist.slice(0, 6).map((w) => `${w.id}: ${w.from ?? "—"} → ${w.to}${w.overCapacity ? " (over cap)" : ""}`) },
-    { label: "KPI alerts", n: alerts.length, href: PathMonitor, items: alerts.slice(0, 6).map((a) => `${a.name}: ${a.value ?? "—"} vs ${a.goal} [${a.status}]`) },
+    { label: "KPI alerts", n: alerts.length, href: "#kpis", items: alerts.slice(0, 6).map((a) => `${a.name}: ${a.value ?? "—"} vs ${a.goal} [${a.status}]`) },
     { label: "Do-not-ship", n: dnship.length, href: PathHealth, items: dnship.slice(0, 6).map((m) => `${m.id}: milk until ${deriveItem("MWHOLD", m.subject, { today }) ?? "—"}`) },
     { label: "Needs attention", n: attn.length, href: PathActivity, items: attn.slice(0, 6).map((m) => `${m.id}: ${deriveItem("ATTN", m.subject, { today }) ?? "—"}`) },
   ];
@@ -182,6 +183,61 @@ export default async function Home() {
           </Link>
         ))}
       </div>
+
+      <section id="kpis" className="space-y-2 scroll-mt-4">
+        <div className="flex items-baseline justify-between">
+          <h2 className="font-heading text-base font-medium">KPIs</h2>
+          <Link
+            href={PathMonitor}
+            className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+          >
+            Manage KPIs →
+          </Link>
+        </div>
+        {kpiResults.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            No KPIs defined yet. Use “Manage KPIs” to add goals.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50 text-muted-foreground">
+                <tr>
+                  <th className="px-2 py-1 text-left font-medium">KPI</th>
+                  <th className="px-2 py-1 text-right font-medium">Value</th>
+                  <th className="px-2 py-1 text-right font-medium">Goal</th>
+                  <th className="px-2 py-1 text-left font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kpiResults.map((r) => (
+                  <tr key={r.name} className="border-t">
+                    <td className="px-2 py-0.5 font-medium">{r.name}</td>
+                    <td className="px-2 py-0.5 text-right tabular-nums">
+                      {r.value ?? "—"}
+                    </td>
+                    <td className="px-2 py-0.5 text-right tabular-nums">
+                      {r.goal}
+                    </td>
+                    <td
+                      className={
+                        "px-2 py-0.5 font-medium " +
+                        (r.status === "alert"
+                          ? "text-destructive"
+                          : r.status === "warn"
+                            ? "text-amber-600 dark:text-amber-500"
+                            : "text-muted-foreground")
+                      }
+                    >
+                      {r.status}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
