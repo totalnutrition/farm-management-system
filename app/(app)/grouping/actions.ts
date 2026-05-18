@@ -219,12 +219,31 @@ const cmp = (item: string, op: string, value: number | string) => ({
   value,
 });
 
-// The standard lactating-herd STRATEGY only — named groups + readable
-// criteria, derived items only, order matters (first match wins).
-// No pens are created and nothing moves: the farmer maps each group
-// to their real pens afterwards.
+// Full-herd STRATEGY (order matters — first match wins). Covers
+// calves and heifers, not just the milking string, so every animal
+// lands in a group and the reconciliation totals close. Derived
+// items only; no pens created and nothing moves until mapped.
 const STANDARD_GROUPS: { name: string; when: unknown[][] }[] = [
   { name: "Hospital", when: [[cmp("FLAGGED", "=", "YES")]] },
+  { name: "Bull calf", when: [[cmp("RPRO", "=", "BULLCAF")]] },
+  {
+    name: "Calf (pre-breeding)",
+    when: [[cmp("RPRO", "=", "VIRGIN"), cmp("AGE", "<=", 12)]],
+  },
+  {
+    name: "Breeding heifer",
+    when: [[cmp("RPRO", "=", "VIRGIN"), cmp("AGE", ">=", 13)]],
+  },
+  // Catches virgins with no birth date (AGE null) so none escape.
+  { name: "Heifer (maiden)", when: [[cmp("RPRO", "=", "VIRGIN")]] },
+  {
+    name: "Bred heifer",
+    when: [[cmp("RPRO", "=", "BRED"), cmp("LACT", "=", 0)]],
+  },
+  {
+    name: "Springing heifer",
+    when: [[cmp("RPRO", "=", "PREG"), cmp("LACT", "=", 0)]],
+  },
   {
     name: "Close-up",
     when: [[cmp("RPRO", "=", "DRY"), cmp("DUE", "<=", 21)]],
@@ -239,6 +258,7 @@ const STANDARD_GROUPS: { name: string; when: unknown[][] }[] = [
   { name: "Mid", when: [[cmp("MILK", ">=", 25)]] },
   { name: "Low", when: [[cmp("MILK", ">=", 15)]] },
   { name: "Late lactation", when: [[cmp("DIM", ">=", 1)]] },
+  { name: "Sold / dead", when: [[cmp("RPRO", "=", "SLD/DIE")]] },
 ];
 
 export async function installGroupingPresets(): Promise<Result> {

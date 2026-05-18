@@ -244,6 +244,25 @@ export function groupSizes(
   return out;
 }
 
+// Reconciliation: every animal should land in exactly one group.
+// Surfaces total vs grouped vs ungrouped (with the ungrouped ids) so
+// gaps in the strategy are visible instead of silently dropped.
+export function reconcile(
+  population: GroupingMember[],
+  ruleset: Ruleset,
+  ctx: DeriveContext,
+): { total: number; grouped: number; ungrouped: string[] } {
+  const ungrouped: string[] = [];
+  for (const m of population) {
+    if (!matchGroup(m.subject, m.pen, ruleset, ctx)) ungrouped.push(m.id);
+  }
+  return {
+    total: population.length,
+    grouped: population.length - ungrouped.length,
+    ungrouped,
+  };
+}
+
 // Names of groups still without a pen mapping (UI nudges the farmer).
 export function unmappedGroups(ruleset: Ruleset): string[] {
   return ruleset

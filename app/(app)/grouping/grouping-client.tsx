@@ -67,11 +67,13 @@ export function GroupingClient({
   worklist,
   pens,
   unmapped,
+  recon,
 }: {
   rules: RuleRow[];
   worklist: Move[];
   pens: PenOption[];
   unmapped: string[];
+  recon: { total: number; grouped: number; ungrouped: string[] };
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -158,6 +160,47 @@ export function GroupingClient({
           >
             Install standard strategy
           </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+          <span>
+            <span className="font-semibold">{recon.total}</span> animals
+            in data
+          </span>
+          <span className="text-muted-foreground">·</span>
+          <span>
+            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+              {recon.grouped}
+            </span>{" "}
+            grouped
+          </span>
+          <span className="text-muted-foreground">·</span>
+          <span>
+            <span
+              className={
+                "font-semibold " +
+                (recon.ungrouped.length
+                  ? "text-destructive"
+                  : "text-muted-foreground")
+              }
+            >
+              {recon.ungrouped.length}
+            </span>{" "}
+            not in any group
+          </span>
+          {recon.ungrouped.length > 0 && (
+            <span
+              className="text-muted-foreground"
+              title={recon.ungrouped.join(", ")}
+            >
+              (
+              {recon.ungrouped.slice(0, 12).join(", ")}
+              {recon.ungrouped.length > 12
+                ? `, +${recon.ungrouped.length - 12} more`
+                : ""}
+              )
+            </span>
+          )}
         </div>
 
         {unmapped.length > 0 && (

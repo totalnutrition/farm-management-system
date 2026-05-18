@@ -6,6 +6,7 @@ import type { Event } from "@/lib/derive/engine";
 import {
   buildWorklist,
   groupSizes,
+  reconcile,
   unmappedGroups,
   describePredicate,
   describePlacement,
@@ -135,6 +136,7 @@ export async function GroupingSection() {
   ).map((w) => ({ ...w, subjectId: idToSubjectId.get(w.id)! }));
 
   const sizes = groupSizes(population, ruleset, { today });
+  const recon = reconcile(population, ruleset, { today });
 
   const ruleRows: RuleRow[] = (rules ?? []).map((r) => {
     const pl = placementOf(r);
@@ -167,6 +169,7 @@ export async function GroupingSection() {
         worklist={worklist}
         pens={penOptions}
         unmapped={unmapped}
+        recon={recon}
       />
     </div>
   );
