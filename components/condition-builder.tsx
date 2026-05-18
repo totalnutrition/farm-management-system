@@ -67,6 +67,38 @@ export function condsToPredicate(
   return v.matchAny ? valid.map((c) => [toAtom(c)]) : [valid.map(toAtom)];
 }
 
+// Inverse of condsToPredicate: rebuild the editable form from a
+// stored predicate so a group's rule can be edited, not just deleted
+// and re-created. Round-trips anything the builder can produce
+// (single AND-group = match-all; all-singleton groups = match-any).
+export function predicateToConds(
+  p: Predicate | undefined | null,
+): ConditionValue {
+  if (!p || p.length === 0) return { conds: [], matchAny: false };
+  const atomToCond = (a: Atom): Cond => {
+    if (a.kind === "range")
+      return {
+        item: a.item,
+        op: "between",
+        value: String(a.min),
+        value2: String(a.max),
+      };
+    if (a.kind === "set")
+      return {
+        item: a.item,
+        op: "=",
+        value: String(a.values[0] ?? ""),
+        value2: "",
+      };
+    return { item: a.item, op: a.op, value: String(a.value), value2: "" };
+  };
+  const matchAny = p.length > 1 && p.every((g) => g.length === 1);
+  const conds = matchAny
+    ? p.map((g) => atomToCond(g[0]))
+    : (p[0] ?? []).map(atomToCond);
+  return { conds, matchAny };
+}
+
 export function describeConds(v: ConditionValue): string {
   const valid = v.conds.filter((c) => c.item && c.value !== "");
   if (!valid.length) return "";

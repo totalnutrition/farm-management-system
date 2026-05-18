@@ -142,6 +142,7 @@ export async function GroupingSection() {
       id: r.id,
       ordinal: r.ordinal,
       name: r.name,
+      predicate: r.predicate as Predicate,
       cond: describePredicate(r.predicate as Predicate),
       placement: pl,
       placementText: describePlacement(pl),

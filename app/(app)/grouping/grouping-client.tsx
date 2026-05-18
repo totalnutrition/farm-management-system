@@ -24,11 +24,14 @@ import {
 import {
   ConditionBuilder,
   condsToPredicate,
+  predicateToConds,
   type ConditionValue,
 } from "@/components/condition-builder";
+import type { Predicate } from "@/lib/derive/query";
 import type { Placement } from "@/lib/derive/grouping";
 import {
   addRule,
+  updateRule,
   deleteRule,
   moveAnimal,
   installGroupingPresets,
@@ -40,6 +43,7 @@ export type RuleRow = {
   id: string;
   ordinal: number;
   name: string;
+  predicate: Predicate;
   cond: string;
   placement: Placement;
   placementText: string;
@@ -77,6 +81,7 @@ export function GroupingClient({
     matchAny: false,
   });
   const [mapId, setMapId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const [override, setOverride] = useState<Record<string, string>>({});
 
   const submit = () =>
@@ -130,6 +135,7 @@ export function GroupingClient({
     });
 
   const target = rules.find((r) => r.id === mapId) ?? null;
+  const editTarget = rules.find((r) => r.id === editId) ?? null;
 
   return (
     <div className="space-y-8">
@@ -211,10 +217,17 @@ export function GroupingClient({
                     <td className="px-2 text-right whitespace-nowrap">
                       <button
                         type="button"
-                        onClick={() => setMapId(r.id)}
+                        onClick={() => setEditId(r.id)}
                         className="text-muted-foreground underline-offset-2 hover:underline"
                       >
-                        {r.mapped ? "edit" : "map"}
+                        edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMapId(r.id)}
+                        className="ml-2 text-muted-foreground underline-offset-2 hover:underline"
+                      >
+                        {r.mapped ? "pens" : "map"}
                       </button>
                       <button
                         type="button"
@@ -265,6 +278,18 @@ export function GroupingClient({
           onClose={() => setMapId(null)}
           onSaved={() => {
             setMapId(null);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {editTarget && (
+        <EditGroupDialog
+          key={editTarget.id}
+          group={editTarget}
+          onClose={() => setEditId(null)}
+          onSaved={() => {
+            setEditId(null);
             router.refresh();
           }}
         />
@@ -657,6 +682,71 @@ function MapPensDialog({
               </div>
             </div>
           )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button onClick={save} disabled={pending}>
+            {pending ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditGroupDialog({
+  group,
+  onClose,
+  onSaved,
+}: {
+  group: RuleRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(group.name);
+  const [cond, setCond] = useState<ConditionValue>(() =>
+    predicateToConds(group.predicate),
+  );
+  const [pending, start] = useTransition();
+
+  const save = () =>
+    start(async () => {
+      const predicate = condsToPredicate(cond);
+      if (!predicate)
+        return void toast.error("Add at least one condition.");
+      if (!name.trim()) return void toast.error("Group name is required.");
+      const res = await updateRule({
+        id: group.id,
+        name: name.trim(),
+        predicate,
+      });
+      if (res.error) return void toast.error(res.error);
+      toast.success(`“${name}” updated.`);
+      onSaved();
+    });
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit group</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Group name</Label>
+            <Input
+              className="h-7 w-44 text-xs"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <ConditionBuilder value={cond} onChange={setCond} />
+          <p className="text-[11px] text-muted-foreground">
+            Pen mapping and evaluation order are unchanged — use “pens”
+            for placement.
+          </p>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={pending}>

@@ -142,6 +142,46 @@ export async function addRule(
   return { success: true };
 }
 
+const updateSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().min(1, "Group name is required."),
+  predicate: z
+    .array(z.array(z.any()))
+    .min(1, "Add at least one condition."),
+});
+
+// Edit an existing group's name and rule in place (previously the
+// only path was delete + re-create, which lost the group's ordinal
+// and pen mapping). Placement is untouched here — it has its own
+// editor.
+export async function updateRule(
+  input: z.infer<typeof updateSchema>,
+): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+
+  const parsed = updateSchema.safeParse(input);
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  const { id, name, predicate } = parsed.data;
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("grouping_rules")
+    .update({ name, predicate })
+    .eq("id", id)
+    .eq("organization_id", orgId);
+  if (error) {
+    if (error.code === "23505")
+      return { error: `A group named “${name}” already exists.` };
+    return { error: error.message };
+  }
+
+  revalidatePath(PathHousing);
+  return { success: true };
+}
+
 const placeSchema = z.object({
   id: z.string().uuid(),
   placement: placementSchema,
@@ -191,9 +231,13 @@ const STANDARD_GROUPS: { name: string; when: unknown[][] }[] = [
   },
   { name: "Far-off dry", when: [[cmp("RPRO", "=", "DRY")]] },
   { name: "Fresh", when: [[cmp("DIM", "<=", 21)]] },
-  { name: "High", when: [[cmp("MAVG", ">=", 35)]] },
-  { name: "Mid", when: [[cmp("MAVG", ">=", 25)]] },
-  { name: "Low", when: [[cmp("MAVG", ">=", 15)]] },
+  // MILK = last recorded milking-day total (no recency window), so
+  // groups populate from test-day / imported milk. MAVG is a strict
+  // trailing-7-day mean and silently nulls out when the latest milk
+  // is older than a week — which left these groups empty.
+  { name: "High", when: [[cmp("MILK", ">=", 35)]] },
+  { name: "Mid", when: [[cmp("MILK", ">=", 25)]] },
+  { name: "Low", when: [[cmp("MILK", ">=", 15)]] },
   { name: "Late lactation", when: [[cmp("DIM", ">=", 1)]] },
 ];
 
