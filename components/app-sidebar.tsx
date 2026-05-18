@@ -25,9 +25,13 @@ const MENU = [
       { name: "Query", icon: Search01Icon, link: PathQuery, roles: RolesAll },
       { name: "Animals", icon: ClipboardIcon, link: PathRecords, roles: RolesAll },
       { name: "Housing", icon: Home03Icon, link: PathHousing, roles: RolesAll },
+      { name: "Sires & Semen", icon: Dna01Icon, link: PathSires, roles: RolesAll },
       { name: "Notifications", icon: Notification01Icon, link: PathNotifications, roles: RolesAll },
       { name: "Activity", icon: ClipboardIcon, link: PathActivity, roles: RolesAll },
+      { name: "Health", icon: FirstAidKitIcon, link: PathHealth, roles: RolesAll },
       { name: "Protocols", icon: Calendar03Icon, link: PathProtocols, roles: RolesAll },
+      { name: "Feed", icon: WheatIcon, link: PathFeed, roles: RolesAll },
+      { name: "Commercial", icon: DollarCircleIcon, link: PathCommercial, roles: RolesAll },
       { name: "Monitor", icon: Analytics01Icon, link: PathMonitor, roles: RolesAll },
       { name: "Projection", icon: ChartIncreaseIcon, link: PathProjection, roles: RolesAll },
       { name: "Views", icon: ViewIcon, link: PathViews, roles: RolesAll },
@@ -39,11 +43,7 @@ const MENU = [
   {
     label: "Supply Chain",
     links: [
-      { name: "Supply Chain", icon: DeliveryBox01Icon, link: PathSupply, roles: RolesAdmin },
-      { name: "Sires & Semen", icon: Dna01Icon, link: PathSires, roles: RolesAll },
-      { name: "Feed", icon: WheatIcon, link: PathFeed, roles: RolesAll },
-      { name: "Health", icon: FirstAidKitIcon, link: PathHealth, roles: RolesAll },
-      { name: "Commercial", icon: DollarCircleIcon, link: PathCommercial, roles: RolesAll }
+      { name: "Supply Chain", icon: DeliveryBox01Icon, link: PathSupply, roles: RolesAdmin }
     ],
     roles: RolesAll
   },
