@@ -6,8 +6,11 @@
 
 import { register, type Subject } from "./engine.ts";
 
-// App-defined (non-DC) event, user range; seeded by 0013.
+// App-defined (non-DC) events, user range. TREAT seeded by 0013;
+// VACC (vaccination) seeded by 0026. A vaccine can carry a milk/
+// meat withhold too, so withhold/DNSHIP consider BOTH.
 export const TREAT_EC = 202;
+export const VACC_EC = 204;
 
 type TreatPayload = {
   drug?: string;
@@ -18,9 +21,14 @@ type TreatPayload = {
 function treats(s: Subject) {
   return s.events.filter((e) => e.code === TREAT_EC);
 }
+function withholdEvents(s: Subject) {
+  return s.events.filter(
+    (e) => e.code === TREAT_EC || e.code === VACC_EC,
+  );
+}
 function maxDate(s: Subject, key: "mwUntil" | "bwUntil"): string | null {
   let m: string | null = null;
-  for (const e of treats(s)) {
+  for (const e of withholdEvents(s)) {
     const v = (e.payload as TreatPayload | undefined)?.[key];
     if (typeof v === "string" && (m === null || v > m)) m = v;
   }

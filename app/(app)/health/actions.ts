@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { PathHealth, PathSupply } from "@/lib/misc";
-import { TREAT_EC } from "@/lib/derive/health";
+import { TREAT_EC, VACC_EC } from "@/lib/derive/health";
 import { consumeSupply } from "@/lib/supply-usage";
 
 type Result = { error?: string; success?: boolean };
@@ -68,16 +68,24 @@ export async function updateDrugClinical(
   return { success: true };
 }
 
-const treatSchema = z.object({
+const clinicalSchemaShape = {
   animalId: z.string().trim().min(1),
-  drug: z.string().trim().min(1),
+  item: z.string().trim().min(1),
   date: z.string().trim().min(1),
   dose: z.string().trim().optional(),
   qty: z.coerce.number().positive().optional(),
-});
+};
+const treatSchema = z.object(clinicalSchemaShape);
 
-export async function recordTreatment(
-  input: z.infer<typeof treatSchema>,
+// Shared clinical-event recorder. Treatment and vaccination are the
+// same shape — an event on the animal that carries withhold dates
+// computed from the item's Supply attrs, plus an atomic stock
+// deduction with rollback on shortage.
+async function recordClinical(
+  input: unknown,
+  eventCode: number,
+  payloadKey: "drug" | "vaccine",
+  refKey: string,
 ): Promise<Result> {
   const user = await requireAnyRole(["super_admin", "admin"]);
   const orgId = getOrganizationIdFromUser(user);
@@ -86,7 +94,7 @@ export async function recordTreatment(
   const parsed = treatSchema.safeParse(input);
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
-  const { animalId, drug, date, dose, qty } = parsed.data;
+  const { animalId, item, date, dose, qty } = parsed.data;
 
   const admin = createAdminClient();
   const { data: animal } = await admin
@@ -98,20 +106,20 @@ export async function recordTreatment(
     .maybeSingle();
   if (!animal) return { error: `Animal ${animalId} not found.` };
 
-  const { data: drugs } = await admin
+  const { data: items } = await admin
     .from("subjects")
     .select("id, attrs")
     .eq("organization_id", orgId)
     .eq("subject_type", "supply_item")
-    .eq("natural_key", drug);
-  if (!drugs || drugs.length === 0)
-    return { error: `Drug “${drug}” not found in Supply Chain.` };
-  if (drugs.length > 1)
+    .eq("natural_key", item);
+  if (!items || items.length === 0)
+    return { error: `“${item}” not found in Supply Chain.` };
+  if (items.length > 1)
     return {
-      error: `Multiple Supply Chain items named “${drug}”. Rename one so stock can be tracked.`,
+      error: `Multiple Supply Chain items named “${item}”. Rename one so stock can be tracked.`,
     };
-  const dr = drugs[0];
-  const a = (dr.attrs ?? {}) as Record<string, unknown>;
+  const it = items[0];
+  const a = (it.attrs ?? {}) as Record<string, unknown>;
   const milkDays = typeof a.milk_days === "number" ? a.milk_days : 0;
   const meatDays = typeof a.meat_days === "number" ? a.meat_days : 0;
 
@@ -122,10 +130,10 @@ export async function recordTreatment(
     .insert({
       organization_id: orgId,
       subject_id: animal.id,
-      event_code: TREAT_EC,
+      event_code: eventCode,
       event_date: date,
       payload: {
-        drug,
+        [payloadKey]: item,
         dose: dose ?? null,
         mwUntil: addDays(date, milkDays),
         bwUntil: addDays(date, meatDays),
@@ -137,14 +145,14 @@ export async function recordTreatment(
     .single();
   if (error) return { error: error.message };
 
-  // Atomic, race-safe deduction. On shortage, roll back the
-  // treatment we just wrote so nothing is half-recorded.
+  // Atomic, race-safe deduction. On shortage, roll back the event
+  // we just wrote so nothing is half-recorded.
   const consumed = await consumeSupply(
     admin,
     orgId,
-    [{ itemId: dr.id, itemName: drug, qty: need }],
+    [{ itemId: it.id, itemName: item, qty: need }],
     date,
-    { treatment_animal: animalId, src_event: ev.id },
+    { [refKey]: animalId, src_event: ev.id },
   );
   if (!consumed.ok) {
     await admin.from("events").delete().eq("id", ev.id);
@@ -154,4 +162,16 @@ export async function recordTreatment(
   revalidatePath(PathHealth);
   revalidatePath(PathSupply);
   return { success: true };
+}
+
+export async function recordTreatment(
+  input: z.infer<typeof treatSchema>,
+): Promise<Result> {
+  return recordClinical(input, TREAT_EC, "drug", "treatment_animal");
+}
+
+export async function recordVaccination(
+  input: z.infer<typeof treatSchema>,
+): Promise<Result> {
+  return recordClinical(input, VACC_EC, "vaccine", "vaccination_animal");
 }

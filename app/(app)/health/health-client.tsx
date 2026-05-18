@@ -16,7 +16,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PathSupply } from "@/lib/misc";
-import { updateDrugClinical, recordTreatment } from "./actions";
+import {
+  updateDrugClinical,
+  recordTreatment,
+  recordVaccination,
+} from "./actions";
 
 export type DrugRow = {
   id: string;
@@ -114,6 +118,11 @@ export function HealthClient({
   const [tDate, setTDate] = useState(today());
   const [tDose, setTDose] = useState("");
   const [tQty, setTQty] = useState("1");
+  const [vAnimal, setVAnimal] = useState("");
+  const [vVax, setVVax] = useState("");
+  const [vDate, setVDate] = useState(today());
+  const [vDose, setVDose] = useState("");
+  const [vQty, setVQty] = useState("1");
 
   const saveClinical = (
     id: string,
@@ -137,7 +146,7 @@ export function HealthClient({
     start(async () => {
       const res = await recordTreatment({
         animalId: tAnimal,
-        drug: tDrug,
+        item: tDrug,
         date: tDate,
         dose: tDose || undefined,
         qty: tQty ? Number(tQty) : undefined,
@@ -146,6 +155,22 @@ export function HealthClient({
       toast.success(`Treated ${tAnimal} with ${tDrug}.`);
       setTDose("");
       setTQty("1");
+      router.refresh();
+    });
+
+  const vaccinate = () =>
+    start(async () => {
+      const res = await recordVaccination({
+        animalId: vAnimal,
+        item: vVax,
+        date: vDate,
+        dose: vDose || undefined,
+        qty: vQty ? Number(vQty) : undefined,
+      });
+      if (res.error) return void toast.error(res.error);
+      toast.success(`Vaccinated ${vAnimal} with ${vVax}.`);
+      setVDose("");
+      setVQty("1");
       router.refresh();
     });
 
@@ -270,6 +295,95 @@ export function HealthClient({
               size="sm"
               disabled={pending || !tAnimal || !tDrug}
               onClick={treat}
+            >
+              Record
+            </Button>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium">Record vaccination</h2>
+        <p className="text-[11px] text-muted-foreground">
+          Recording a vaccination auto-deducts “Qty used” of the
+          vaccine from Supply Chain stock. Any milk/meat withhold set
+          on the vaccine applies to the do-not-ship list too.
+        </p>
+        <Card>
+          <CardContent className="flex flex-wrap items-end gap-3 py-4">
+            <div className="space-y-1">
+              <Label className="text-xs">Animal</Label>
+              <Select value={vAnimal} onValueChange={setVAnimal}>
+                <SelectTrigger className="h-8 w-[120px] text-xs">
+                  <SelectValue placeholder="animal" />
+                </SelectTrigger>
+                <SelectContent>
+                  {animals.length === 0 ? (
+                    <SelectItem value="__none" disabled>
+                      no animals
+                    </SelectItem>
+                  ) : (
+                    animals.map((a) => (
+                      <SelectItem key={a} value={a}>
+                        {a}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Vaccine</Label>
+              <Select value={vVax} onValueChange={setVVax}>
+                <SelectTrigger className="h-8 w-[150px] text-xs">
+                  <SelectValue placeholder="vaccine" />
+                </SelectTrigger>
+                <SelectContent>
+                  {drugs.length === 0 ? (
+                    <SelectItem value="__none" disabled>
+                      add it in Supply Chain
+                    </SelectItem>
+                  ) : (
+                    drugs.map((d) => (
+                      <SelectItem key={d.id} value={d.name}>
+                        {d.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Date</Label>
+              <Input
+                className="h-8 w-36 text-xs"
+                type="date"
+                value={vDate}
+                onChange={(e) => setVDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Dose</Label>
+              <Input
+                className="h-8 w-24 text-xs"
+                value={vDose}
+                onChange={(e) => setVDose(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Qty used</Label>
+              <Input
+                className="h-8 w-20 text-xs"
+                type="number"
+                value={vQty}
+                onChange={(e) => setVQty(e.target.value)}
+                placeholder="1"
+              />
+            </div>
+            <Button
+              size="sm"
+              disabled={pending || !vAnimal || !vVax}
+              onClick={vaccinate}
             >
               Record
             </Button>
