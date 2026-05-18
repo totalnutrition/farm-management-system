@@ -4,6 +4,7 @@ export const PathAdminUsers = "/admin/users";
 export const PathAdminOrganizations = "/admin/organizations";
 export const PathQuery = "/query";
 export const PathRecords = "/records";
+export const PathEnter = "/enter";
 export const PathViews = "/views";
 export const PathMonitor = "/monitor";
 export const PathProtocols = "/protocols";
