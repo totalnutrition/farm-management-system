@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createDrug, deleteDrug, recordTreatment } from "./actions";
+import { PathSupply } from "@/lib/misc";
+import { updateDrugClinical, recordTreatment } from "./actions";
 
 export type DrugRow = {
   id: string;
@@ -32,6 +34,70 @@ export type DnsRow = {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+function ClinicalRow({
+  d,
+  pending,
+  onSave,
+}: {
+  d: DrugRow;
+  pending: boolean;
+  onSave: (
+    id: string,
+    milk: number,
+    meat: number,
+    route: string,
+  ) => void;
+}) {
+  const [milk, setMilk] = useState(String(d.milkDays));
+  const [meat, setMeat] = useState(String(d.meatDays));
+  const [route, setRoute] = useState(d.route ?? "");
+  const dirty =
+    milk !== String(d.milkDays) ||
+    meat !== String(d.meatDays) ||
+    route !== (d.route ?? "");
+  return (
+    <tr className="border-t">
+      <td className="px-3 py-2 font-medium">{d.name}</td>
+      <td className="px-3 py-2">
+        <Input
+          className="h-7 w-20 text-xs"
+          type="number"
+          value={milk}
+          onChange={(e) => setMilk(e.target.value)}
+        />
+      </td>
+      <td className="px-3 py-2">
+        <Input
+          className="h-7 w-20 text-xs"
+          type="number"
+          value={meat}
+          onChange={(e) => setMeat(e.target.value)}
+        />
+      </td>
+      <td className="px-3 py-2">
+        <Input
+          className="h-7 w-24 text-xs"
+          value={route}
+          onChange={(e) => setRoute(e.target.value)}
+          placeholder="IM"
+        />
+      </td>
+      <td className="px-3 py-2 text-right">
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={pending || !dirty}
+          onClick={() =>
+            onSave(d.id, Number(milk || 0), Number(meat || 0), route)
+          }
+        >
+          Save
+        </Button>
+      </td>
+    </tr>
+  );
+}
+
 export function HealthClient({
   drugs,
   animals,
@@ -43,37 +109,26 @@ export function HealthClient({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [dn, setDn] = useState("");
-  const [dmilk, setDmilk] = useState("");
-  const [dmeat, setDmeat] = useState("");
-  const [droute, setDroute] = useState("");
   const [tAnimal, setTAnimal] = useState("");
   const [tDrug, setTDrug] = useState("");
   const [tDate, setTDate] = useState(today());
   const [tDose, setTDose] = useState("");
 
-  const addDrug = () =>
+  const saveClinical = (
+    id: string,
+    milk: number,
+    meat: number,
+    route: string,
+  ) =>
     start(async () => {
-      const res = await createDrug({
-        name: dn,
-        milkDays: Number(dmilk || 0),
-        meatDays: Number(dmeat || 0),
-        route: droute || undefined,
+      const res = await updateDrugClinical({
+        id,
+        milkDays: milk,
+        meatDays: meat,
+        route: route || undefined,
       });
       if (res.error) return void toast.error(res.error);
-      toast.success(`Drug “${dn}” added.`);
-      setDn("");
-      setDmilk("");
-      setDmeat("");
-      setDroute("");
-      router.refresh();
-    });
-
-  const delDrug = (d: DrugRow) =>
-    start(async () => {
-      const res = await deleteDrug(d.id);
-      if (res.error) return void toast.error(res.error);
-      toast.success(`Deleted “${d.name}”.`);
+      toast.success("Withhold updated.");
       router.refresh();
     });
 
@@ -165,7 +220,7 @@ export function HealthClient({
                 <SelectContent>
                   {drugs.length === 0 ? (
                     <SelectItem value="__none" disabled>
-                      add a drug first
+                      add a drug in Supply Chain
                     </SelectItem>
                   ) : (
                     drugs.map((d) => (
@@ -206,8 +261,21 @@ export function HealthClient({
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium">Drug catalog</h2>
-        {drugs.length > 0 && (
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-medium">Drug withhold</h2>
+          <Link
+            href={PathSupply}
+            className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+          >
+            Manage drugs &amp; stock in Supply Chain →
+          </Link>
+        </div>
+        {drugs.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No drugs yet. Add them in Supply Chain under “Veterinary
+            Drugs &amp; Vaccines”, then set their withhold here.
+          </p>
+        ) : (
           <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-xs text-muted-foreground">
@@ -221,74 +289,17 @@ export function HealthClient({
               </thead>
               <tbody>
                 {drugs.map((d) => (
-                  <tr key={d.id} className="border-t">
-                    <td className="px-3 py-2 font-medium">{d.name}</td>
-                    <td className="px-3 py-2">{d.milkDays}</td>
-                    <td className="px-3 py-2">{d.meatDays}</td>
-                    <td className="px-3 py-2">{d.route ?? "—"}</td>
-                    <td className="px-3 py-2 text-right">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={pending}
-                        onClick={() => delDrug(d)}
-                      >
-                        Delete
-                      </Button>
-                    </td>
-                  </tr>
+                  <ClinicalRow
+                    key={d.id}
+                    d={d}
+                    pending={pending}
+                    onSave={saveClinical}
+                  />
                 ))}
               </tbody>
             </table>
           </div>
         )}
-        <Card>
-          <CardContent className="flex flex-wrap items-end gap-3 py-4">
-            <div className="space-y-1">
-              <Label className="text-xs">Drug name</Label>
-              <Input
-                className="h-8 w-44 text-xs"
-                value={dn}
-                onChange={(e) => setDn(e.target.value)}
-                placeholder="Excede"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Milk withhold (days)</Label>
-              <Input
-                className="h-8 w-28 text-xs"
-                type="number"
-                value={dmilk}
-                onChange={(e) => setDmilk(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Meat withhold (days)</Label>
-              <Input
-                className="h-8 w-28 text-xs"
-                type="number"
-                value={dmeat}
-                onChange={(e) => setDmeat(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Route</Label>
-              <Input
-                className="h-8 w-28 text-xs"
-                value={droute}
-                onChange={(e) => setDroute(e.target.value)}
-                placeholder="IM"
-              />
-            </div>
-            <Button
-              size="sm"
-              disabled={pending || !dn}
-              onClick={addDrug}
-            >
-              Add drug
-            </Button>
-          </CardContent>
-        </Card>
       </section>
     </div>
   );

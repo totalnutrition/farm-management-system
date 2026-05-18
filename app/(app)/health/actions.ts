@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
-import { PathHealth } from "@/lib/misc";
+import { PathHealth, PathSupply } from "@/lib/misc";
 import { TREAT_EC } from "@/lib/derive/health";
 
 type Result = { error?: string; success?: boolean };
@@ -14,55 +14,56 @@ function addDays(iso: string, n: number): string {
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
-const drugSchema = z.object({
-  name: z.string().trim().min(1, "Name is required."),
+// Drugs are Supply Chain items (category "Veterinary Drugs &
+// Vaccines"). Health no longer creates or deletes them — it owns
+// only the clinical layer: milk/meat withhold days and route, which
+// it writes back onto the Supply item's attrs.
+const clinicalSchema = z.object({
+  id: z.uuid(),
   milkDays: z.coerce.number().int().min(0),
   meatDays: z.coerce.number().int().min(0),
   route: z.string().trim().optional(),
 });
 
-export async function createDrug(
-  input: z.infer<typeof drugSchema>,
+export async function updateDrugClinical(
+  input: z.infer<typeof clinicalSchema>,
 ): Promise<Result> {
   const user = await requireAnyRole(["super_admin", "admin"]);
   const orgId = getOrganizationIdFromUser(user);
   if (!orgId) return { error: "No organization on this account." };
 
-  const parsed = drugSchema.safeParse(input);
+  const parsed = clinicalSchema.safeParse(input);
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
-  const { name, milkDays, meatDays, route } = parsed.data;
+  const { id, milkDays, meatDays, route } = parsed.data;
 
   const admin = createAdminClient();
-  const { error } = await admin.from("subjects").insert({
-    organization_id: orgId,
-    subject_type: "drug",
-    natural_key: name,
-    attrs: { milk_days: milkDays, meat_days: meatDays, route: route ?? null },
-    created_by: user.id,
-  });
-  if (error) {
-    if (error.code === "23505")
-      return { error: `Drug “${name}” already exists.` };
-    return { error: error.message };
-  }
-  revalidatePath(PathHealth);
-  return { success: true };
-}
-
-export async function deleteDrug(id: string): Promise<Result> {
-  const user = await requireAnyRole(["super_admin", "admin"]);
-  const orgId = getOrganizationIdFromUser(user);
-  if (!orgId) return { error: "No organization on this account." };
-  const admin = createAdminClient();
-  const { error } = await admin
+  const { data: item } = await admin
     .from("subjects")
-    .delete()
+    .select("attrs")
     .eq("id", id)
     .eq("organization_id", orgId)
-    .eq("subject_type", "drug");
+    .eq("subject_type", "supply_item")
+    .maybeSingle();
+  if (!item) return { error: "Drug not found in Supply Chain." };
+  const attrs = (item.attrs ?? {}) as Record<string, unknown>;
+
+  const { error } = await admin
+    .from("subjects")
+    .update({
+      attrs: {
+        ...attrs,
+        milk_days: milkDays,
+        meat_days: meatDays,
+        route: route ?? null,
+      },
+    })
+    .eq("id", id)
+    .eq("organization_id", orgId)
+    .eq("subject_type", "supply_item");
   if (error) return { error: error.message };
   revalidatePath(PathHealth);
+  revalidatePath(PathSupply);
   return { success: true };
 }
 
@@ -99,10 +100,10 @@ export async function recordTreatment(
     .from("subjects")
     .select("attrs")
     .eq("organization_id", orgId)
-    .eq("subject_type", "drug")
+    .eq("subject_type", "supply_item")
     .eq("natural_key", drug)
     .maybeSingle();
-  if (!dr) return { error: `Drug “${drug}” not found.` };
+  if (!dr) return { error: `Drug “${drug}” not found in Supply Chain.` };
   const a = (dr.attrs ?? {}) as Record<string, unknown>;
   const milkDays = typeof a.milk_days === "number" ? a.milk_days : 0;
   const meatDays = typeof a.meat_days === "number" ? a.meat_days : 0;

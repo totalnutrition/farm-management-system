@@ -23,11 +23,14 @@ export default async function HealthPage() {
     );
 
   const admin = createAdminClient();
+  // Drugs are Supply Chain items in the vet-drug category. Health
+  // reads the list and owns only the clinical attrs on each.
   const { data: drugSubs } = await admin
     .from("subjects")
     .select("id, natural_key, attrs")
     .eq("organization_id", orgId)
-    .eq("subject_type", "drug")
+    .eq("subject_type", "supply_item")
+    .eq("attrs->>category", "Veterinary Drugs & Vaccines")
     .order("natural_key");
   const drugs: DrugRow[] = (drugSubs ?? []).map((d) => {
     const a = (d.attrs ?? {}) as Record<string, unknown>;
@@ -93,8 +96,10 @@ export default async function HealthPage() {
       <header>
         <h1 className="font-heading text-lg font-medium">Health</h1>
         <p className="text-xs text-muted-foreground">
-          Drug catalog, treatments, and the do-not-ship list. A cow on
-          withhold must never be shipped.
+          Treatments, withhold (milk/meat) settings, and the
+          do-not-ship list. Drugs are stocked in Supply Chain; Health
+          owns their clinical withhold. A cow on withhold must never
+          be shipped.
         </p>
       </header>
       <HealthClient
