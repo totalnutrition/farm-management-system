@@ -20,6 +20,7 @@ import {
   type SupplyItem,
   type StockRow,
   type SupplyMove,
+  type SupplyParty,
   type MoveKind,
   type AutoDeduct,
 } from "@/lib/supply";
@@ -30,13 +31,17 @@ import {
   addCategory,
   addMovement,
   deleteMovement,
+  createParty,
+  updateParty,
+  deleteParty,
 } from "./actions";
 
-type Tab = "catalogue" | "stock" | "movements";
+type Tab = "catalogue" | "stock" | "parties" | "movements";
 
 const TH = "px-2 py-1 text-left font-medium whitespace-nowrap";
 const TD = "px-2 py-0.5 whitespace-nowrap";
 const NUM = "px-2 py-0.5 text-right tabular-nums whitespace-nowrap";
+const NONE = "__none__";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -70,24 +75,32 @@ export function SupplyClient({
   stock,
   moves,
   categories,
+  parties,
 }: {
   items: SupplyItem[];
   stock: StockRow[];
   moves: SupplyMove[];
   categories: string[];
+  parties: SupplyParty[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [tab, setTab] = useState<Tab>("catalogue");
 
-  // ---- catalogue form (create / edit) ----
+  const suppliers = parties.filter((p) => p.isSupplier);
+  const buyers = parties.filter((p) => p.isBuyer);
+
+  // ---------- catalogue form ----------
   const blank = {
     id: "",
     name: "",
+    genericName: "",
+    brand: "",
     category: categories[0] ?? "",
     unit: "ea",
     cost: "",
     reorderPoint: "",
+    defaultSupplier: "",
     trackLots: false,
     trackExpiry: false,
     autoDeduct: "none" as AutoDeduct,
@@ -96,17 +109,19 @@ export function SupplyClient({
   const [f, setF] = useState(blank);
   const [newCat, setNewCat] = useState("");
   const editing = f.id !== "";
-
   const resetForm = () => setF(blank);
 
   const saveItem = () =>
     start(async () => {
       const payload = {
         name: f.name,
+        genericName: f.genericName || undefined,
+        brand: f.brand || undefined,
         category: f.category,
         unit: f.unit,
-        cost: f.cost ? Number(f.cost) : undefined,
+        cost: f.cost ? Number(f.cost) : 0,
         reorderPoint: f.reorderPoint ? Number(f.reorderPoint) : undefined,
+        defaultSupplier: f.defaultSupplier || undefined,
         trackLots: f.trackLots,
         trackExpiry: f.trackExpiry,
         autoDeduct: f.autoDeduct,
@@ -126,10 +141,13 @@ export function SupplyClient({
     setF({
       id: i.id,
       name: i.name,
+      genericName: i.genericName ?? "",
+      brand: i.brand ?? "",
       category: i.category,
       unit: i.unit,
       cost: i.cost?.toString() ?? "",
       reorderPoint: i.reorderPoint?.toString() ?? "",
+      defaultSupplier: i.defaultSupplier ?? "",
       trackLots: i.trackLots,
       trackExpiry: i.trackExpiry,
       autoDeduct: i.autoDeduct,
@@ -158,7 +176,68 @@ export function SupplyClient({
       router.refresh();
     });
 
-  // ---- movement form ----
+  // ---------- party form ----------
+  const pBlank = {
+    id: "",
+    name: "",
+    isSupplier: true,
+    isBuyer: false,
+    phone: "",
+    email: "",
+    address: "",
+    terms: "",
+    notes: "",
+  };
+  const [pf, setPf] = useState(pBlank);
+  const editingParty = pf.id !== "";
+  const resetParty = () => setPf(pBlank);
+
+  const saveParty = () =>
+    start(async () => {
+      const payload = {
+        name: pf.name,
+        isSupplier: pf.isSupplier,
+        isBuyer: pf.isBuyer,
+        phone: pf.phone || undefined,
+        email: pf.email || undefined,
+        address: pf.address || undefined,
+        terms: pf.terms || undefined,
+        notes: pf.notes || undefined,
+      };
+      const res = editingParty
+        ? await updateParty({ ...payload, id: pf.id })
+        : await createParty(payload);
+      if (res.error) return void toast.error(res.error);
+      toast.success(editingParty ? "Party updated." : `“${pf.name}” added.`);
+      resetParty();
+      router.refresh();
+    });
+
+  const editParty = (p: SupplyParty) => {
+    setTab("parties");
+    setPf({
+      id: p.id,
+      name: p.name,
+      isSupplier: p.isSupplier,
+      isBuyer: p.isBuyer,
+      phone: p.phone ?? "",
+      email: p.email ?? "",
+      address: p.address ?? "",
+      terms: p.terms ?? "",
+      notes: p.notes ?? "",
+    });
+  };
+
+  const removeParty = (p: SupplyParty) =>
+    start(async () => {
+      const res = await deleteParty(p.id);
+      if (res.error) return void toast.error(res.error);
+      toast.success(`Deleted “${p.name}”.`);
+      if (pf.id === p.id) resetParty();
+      router.refresh();
+    });
+
+  // ---------- movement form ----------
   const mBlank = {
     itemId: items[0]?.id ?? "",
     kind: "receive" as MoveKind,
@@ -171,6 +250,16 @@ export function SupplyClient({
     remark: "",
   };
   const [m, setM] = useState(mBlank);
+
+  // which parties are pickable for the chosen movement kind
+  const moveParties =
+    m.kind === "receive"
+      ? suppliers
+      : m.kind === "sale"
+        ? buyers
+        : parties;
+  const partyRequired = m.kind === "receive" || m.kind === "sale";
+  const costRequired = m.kind === "price" || m.kind === "sale";
 
   const saveMove = () =>
     start(async () => {
@@ -213,6 +302,12 @@ export function SupplyClient({
         />
         <TabBtn id="stock" label="Stock" tab={tab} setTab={setTab} />
         <TabBtn
+          id="parties"
+          label={`Parties (${parties.length})`}
+          tab={tab}
+          setTab={setTab}
+        />
+        <TabBtn
           id="movements"
           label={`Movements (${moves.length})`}
           tab={tab}
@@ -231,7 +326,27 @@ export function SupplyClient({
                   onChange={(e) =>
                     setF((s) => ({ ...s, name: e.target.value }))
                   }
-                  placeholder="e.g. Diesel, Teat dip, Mineral premix"
+                  placeholder="e.g. Oxytetracycline 100 inj."
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Generic name</Label>
+                <Input
+                  value={f.genericName}
+                  onChange={(e) =>
+                    setF((s) => ({ ...s, genericName: e.target.value }))
+                  }
+                  placeholder="e.g. Oxytetracycline"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Brand</Label>
+                <Input
+                  value={f.brand}
+                  onChange={(e) =>
+                    setF((s) => ({ ...s, brand: e.target.value }))
+                  }
+                  placeholder="e.g. Terramycin"
                 />
               </div>
               <div className="space-y-1">
@@ -273,14 +388,14 @@ export function SupplyClient({
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label>Std. unit cost</Label>
+                <Label>Unit price *</Label>
                 <Input
                   type="number"
                   value={f.cost}
                   onChange={(e) =>
                     setF((s) => ({ ...s, cost: e.target.value }))
                   }
-                  placeholder="optional"
+                  placeholder="required"
                 />
               </div>
               <div className="space-y-1">
@@ -293,6 +408,30 @@ export function SupplyClient({
                   }
                   placeholder="optional"
                 />
+              </div>
+              <div className="space-y-1">
+                <Label>Default supplier</Label>
+                <Select
+                  value={f.defaultSupplier || NONE}
+                  onValueChange={(v) =>
+                    setF((s) => ({
+                      ...s,
+                      defaultSupplier: v === NONE ? "" : v,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="—" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>—</SelectItem>
+                    {suppliers.map((s) => (
+                      <SelectItem key={s.id} value={s.name}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1">
                 <Label>Auto-deduct</Label>
@@ -339,7 +478,7 @@ export function SupplyClient({
                   Expiry
                 </label>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 md:col-span-2">
                 <Label>Notes</Label>
                 <Input
                   value={f.notes}
@@ -349,7 +488,7 @@ export function SupplyClient({
                   placeholder="optional"
                 />
               </div>
-              <div className="col-span-2 flex items-end gap-2 md:col-span-4">
+              <div className="col-span-2 flex flex-wrap items-end gap-2 md:col-span-4">
                 <Button disabled={pending} onClick={saveItem}>
                   {editing ? "Save changes" : "Add item"}
                 </Button>
@@ -386,11 +525,13 @@ export function SupplyClient({
                 <thead className="bg-muted/50 text-muted-foreground">
                   <tr>
                     <th className={TH}>Item</th>
+                    <th className={TH}>Generic</th>
+                    <th className={TH}>Brand</th>
                     <th className={TH}>Category</th>
                     <th className={TH}>Unit</th>
-                    <th className={NUM}>Std cost</th>
+                    <th className={NUM}>Price</th>
                     <th className={NUM}>Reorder</th>
-                    <th className={TH}>Track</th>
+                    <th className={TH}>Supplier</th>
                     <th className={TH}>Auto-deduct</th>
                     <th className={TH} />
                   </tr>
@@ -399,18 +540,13 @@ export function SupplyClient({
                   {items.map((i) => (
                     <tr key={i.id} className="border-t">
                       <td className={`${TD} font-medium`}>{i.name}</td>
+                      <td className={TD}>{i.genericName ?? "—"}</td>
+                      <td className={TD}>{i.brand ?? "—"}</td>
                       <td className={TD}>{i.category}</td>
                       <td className={TD}>{i.unit}</td>
-                      <td className={NUM}>{i.cost ?? "—"}</td>
+                      <td className={NUM}>{i.cost}</td>
                       <td className={NUM}>{i.reorderPoint ?? "—"}</td>
-                      <td className={TD}>
-                        {[
-                          i.trackLots ? "lots" : null,
-                          i.trackExpiry ? "expiry" : null,
-                        ]
-                          .filter(Boolean)
-                          .join(", ") || "—"}
-                      </td>
+                      <td className={TD}>{i.defaultSupplier ?? "—"}</td>
                       <td className={TD}>{i.autoDeduct}</td>
                       <td className={`${TD} text-right`}>
                         <Button
@@ -508,6 +644,167 @@ export function SupplyClient({
         </div>
       )}
 
+      {tab === "parties" && (
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="grid grid-cols-2 gap-3 pt-4 md:grid-cols-4">
+              <div className="space-y-1">
+                <Label>Party name</Label>
+                <Input
+                  value={pf.name}
+                  onChange={(e) =>
+                    setPf((s) => ({ ...s, name: e.target.value }))
+                  }
+                  placeholder="e.g. ABC Feeds Ltd."
+                />
+              </div>
+              <div className="flex items-end gap-4">
+                <label className="flex items-center gap-1.5 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={pf.isSupplier}
+                    onChange={(e) =>
+                      setPf((s) => ({
+                        ...s,
+                        isSupplier: e.target.checked,
+                      }))
+                    }
+                  />
+                  Supplier
+                </label>
+                <label className="flex items-center gap-1.5 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={pf.isBuyer}
+                    onChange={(e) =>
+                      setPf((s) => ({ ...s, isBuyer: e.target.checked }))
+                    }
+                  />
+                  Buyer
+                </label>
+              </div>
+              <div className="space-y-1">
+                <Label>Phone</Label>
+                <Input
+                  value={pf.phone}
+                  onChange={(e) =>
+                    setPf((s) => ({ ...s, phone: e.target.value }))
+                  }
+                  placeholder="optional"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Email</Label>
+                <Input
+                  value={pf.email}
+                  onChange={(e) =>
+                    setPf((s) => ({ ...s, email: e.target.value }))
+                  }
+                  placeholder="optional"
+                />
+              </div>
+              <div className="space-y-1 md:col-span-2">
+                <Label>Address</Label>
+                <Input
+                  value={pf.address}
+                  onChange={(e) =>
+                    setPf((s) => ({ ...s, address: e.target.value }))
+                  }
+                  placeholder="optional"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Payment terms</Label>
+                <Input
+                  value={pf.terms}
+                  onChange={(e) =>
+                    setPf((s) => ({ ...s, terms: e.target.value }))
+                  }
+                  placeholder="e.g. Net 30"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Notes</Label>
+                <Input
+                  value={pf.notes}
+                  onChange={(e) =>
+                    setPf((s) => ({ ...s, notes: e.target.value }))
+                  }
+                  placeholder="optional"
+                />
+              </div>
+              <div className="col-span-2 flex items-end gap-2 md:col-span-4">
+                <Button disabled={pending} onClick={saveParty}>
+                  {editingParty ? "Save changes" : "Add party"}
+                </Button>
+                {editingParty && (
+                  <Button
+                    variant="ghost"
+                    disabled={pending}
+                    onClick={resetParty}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {parties.length > 0 && (
+            <div className="overflow-x-auto rounded-md border">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50 text-muted-foreground">
+                  <tr>
+                    <th className={TH}>Party</th>
+                    <th className={TH}>Roles</th>
+                    <th className={TH}>Phone</th>
+                    <th className={TH}>Email</th>
+                    <th className={TH}>Terms</th>
+                    <th className={TH} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {parties.map((p) => (
+                    <tr key={p.id} className="border-t">
+                      <td className={`${TD} font-medium`}>{p.name}</td>
+                      <td className={TD}>
+                        {[
+                          p.isSupplier ? "supplier" : null,
+                          p.isBuyer ? "buyer" : null,
+                        ]
+                          .filter(Boolean)
+                          .join(", ") || "—"}
+                      </td>
+                      <td className={TD}>{p.phone ?? "—"}</td>
+                      <td className={TD}>{p.email ?? "—"}</td>
+                      <td className={TD}>{p.terms ?? "—"}</td>
+                      <td className={`${TD} text-right`}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={pending}
+                          onClick={() => editParty(p)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={pending}
+                          onClick={() => removeParty(p)}
+                        >
+                          Delete
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {tab === "movements" && (
         <div className="space-y-4">
           <Card>
@@ -537,7 +834,7 @@ export function SupplyClient({
                 <Select
                   value={m.kind}
                   onValueChange={(v) =>
-                    setM((s) => ({ ...s, kind: v as MoveKind }))
+                    setM((s) => ({ ...s, kind: v as MoveKind, party: "" }))
                   }
                 >
                   <SelectTrigger>
@@ -545,8 +842,9 @@ export function SupplyClient({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="receive">
-                      Receipt (+)
+                      Purchase / receipt (+)
                     </SelectItem>
+                    <SelectItem value="sale">Sale (−)</SelectItem>
                     <SelectItem value="adjust">Adjust (±)</SelectItem>
                     <SelectItem value="usage">Usage (−)</SelectItem>
                     <SelectItem value="price">Price only</SelectItem>
@@ -581,25 +879,55 @@ export function SupplyClient({
                 />
               </div>
               <div className="space-y-1">
-                <Label>Unit cost</Label>
+                <Label>
+                  {m.kind === "sale"
+                    ? "Sale price *"
+                    : m.kind === "price"
+                      ? "Unit cost *"
+                      : "Unit cost"}
+                </Label>
                 <Input
                   type="number"
                   value={m.unitCost}
                   onChange={(e) =>
                     setM((s) => ({ ...s, unitCost: e.target.value }))
                   }
-                  placeholder={m.kind === "price" ? "required" : "optional"}
+                  placeholder={costRequired ? "required" : "optional"}
                 />
               </div>
               <div className="space-y-1">
-                <Label>Supplier / party</Label>
-                <Input
-                  value={m.party}
-                  onChange={(e) =>
-                    setM((s) => ({ ...s, party: e.target.value }))
+                <Label>
+                  {m.kind === "sale"
+                    ? "Buyer *"
+                    : m.kind === "receive"
+                      ? "Supplier *"
+                      : "Party"}
+                </Label>
+                <Select
+                  value={m.party || NONE}
+                  onValueChange={(v) =>
+                    setM((s) => ({ ...s, party: v === NONE ? "" : v }))
                   }
-                  placeholder="optional"
-                />
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="—" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {!partyRequired && (
+                      <SelectItem value={NONE}>—</SelectItem>
+                    )}
+                    {moveParties.length === 0 && (
+                      <SelectItem value={NONE} disabled>
+                        none registered — add in Parties
+                      </SelectItem>
+                    )}
+                    {moveParties.map((p) => (
+                      <SelectItem key={p.id} value={p.name}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1">
                 <Label>Lot / batch</Label>
@@ -621,7 +949,7 @@ export function SupplyClient({
                   }
                 />
               </div>
-              <div className="col-span-2 space-y-1 md:col-span-3">
+              <div className="space-y-1 md:col-span-3">
                 <Label>Remark</Label>
                 <Input
                   value={m.remark}

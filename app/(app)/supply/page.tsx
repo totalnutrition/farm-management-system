@@ -6,12 +6,14 @@ import {
 import {
   SUBJECT_ITEM,
   SUBJECT_CATEGORY,
+  SUBJECT_PARTY,
   DEFAULT_CATEGORIES,
   MOVE_CODES,
   CODE_KIND,
   computeStock,
   type SupplyItem,
   type SupplyMove,
+  type SupplyParty,
   type AutoDeduct,
 } from "@/lib/supply";
 import { SupplyClient } from "./supply-client";
@@ -30,37 +32,64 @@ export default async function SupplyPage() {
     );
   const admin = createAdminClient();
 
-  const [{ data: itemRows }, { data: catRows }] = await Promise.all([
-    admin
-      .from("subjects")
-      .select("id, natural_key, attrs")
-      .eq("organization_id", orgId)
-      .eq("subject_type", SUBJECT_ITEM)
-      .order("natural_key"),
-    admin
-      .from("subjects")
-      .select("natural_key")
-      .eq("organization_id", orgId)
-      .eq("subject_type", SUBJECT_CATEGORY)
-      .order("natural_key"),
-  ]);
+  const [{ data: itemRows }, { data: catRows }, { data: partyRows }] =
+    await Promise.all([
+      admin
+        .from("subjects")
+        .select("id, natural_key, attrs")
+        .eq("organization_id", orgId)
+        .eq("subject_type", SUBJECT_ITEM)
+        .order("natural_key"),
+      admin
+        .from("subjects")
+        .select("natural_key")
+        .eq("organization_id", orgId)
+        .eq("subject_type", SUBJECT_CATEGORY)
+        .order("natural_key"),
+      admin
+        .from("subjects")
+        .select("id, natural_key, attrs")
+        .eq("organization_id", orgId)
+        .eq("subject_type", SUBJECT_PARTY)
+        .order("natural_key"),
+    ]);
 
   const items: SupplyItem[] = (itemRows ?? []).map((s) => {
     const a = (s.attrs ?? {}) as Record<string, unknown>;
     return {
       id: s.id,
       name: s.natural_key,
+      genericName:
+        typeof a.generic_name === "string" ? a.generic_name : null,
+      brand: typeof a.brand === "string" ? a.brand : null,
       category: typeof a.category === "string" ? a.category : "Uncategorized",
       unit: typeof a.unit === "string" ? a.unit : "ea",
-      cost: typeof a.cost === "number" ? a.cost : null,
+      cost: typeof a.cost === "number" ? a.cost : 0,
       reorderPoint:
         typeof a.reorder_point === "number" ? a.reorder_point : null,
+      defaultSupplier:
+        typeof a.default_supplier === "string" ? a.default_supplier : null,
       trackLots: a.track_lots === true,
       trackExpiry: a.track_expiry === true,
       autoDeduct:
         typeof a.auto_deduct === "string"
           ? (a.auto_deduct as AutoDeduct)
           : "none",
+      notes: typeof a.notes === "string" ? a.notes : null,
+    };
+  });
+
+  const parties: SupplyParty[] = (partyRows ?? []).map((s) => {
+    const a = (s.attrs ?? {}) as Record<string, unknown>;
+    return {
+      id: s.id,
+      name: s.natural_key,
+      isSupplier: a.is_supplier === true,
+      isBuyer: a.is_buyer === true,
+      phone: typeof a.phone === "string" ? a.phone : null,
+      email: typeof a.email === "string" ? a.email : null,
+      address: typeof a.address === "string" ? a.address : null,
+      terms: typeof a.terms === "string" ? a.terms : null,
       notes: typeof a.notes === "string" ? a.notes : null,
     };
   });
@@ -121,10 +150,9 @@ export default async function SupplyPage() {
       <header>
         <h1 className="font-heading text-lg font-medium">Supply Chain</h1>
         <p className="text-xs text-muted-foreground">
-          One catalogue and stock ledger for every farm input — semen,
-          vet drugs, feed, additives, fuel, utilities and anything else
-          you stock. On-hand is derived from receipts, adjustments and
-          usage; there is no separate issue step.
+          One catalogue, party book and stock ledger for every farm
+          input. Purchases come in from suppliers, sales go out to
+          buyers, and on-hand is derived — no separate issue step.
         </p>
       </header>
       <SupplyClient
@@ -132,6 +160,7 @@ export default async function SupplyPage() {
         stock={stock}
         moves={moves}
         categories={categories}
+        parties={parties}
       />
     </div>
   );

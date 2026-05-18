@@ -11,6 +11,7 @@ import { PathSupply } from "@/lib/misc";
 import {
   SUBJECT_ITEM,
   SUBJECT_CATEGORY,
+  SUBJECT_PARTY,
   AUTO_DEDUCT,
   KIND_CODE,
   MOVE_CODES,
@@ -39,6 +40,7 @@ async function ensureSupplyCodes(
         },
         { code: 213, name: "SPRC", label: "Stock price (Supply Chain)" },
         { code: 214, name: "SUSE", label: "Stock usage (Supply Chain)" },
+        { code: 215, name: "SSAL", label: "Stock sale (Supply Chain)" },
       ].map((c) => ({
         organization_id: orgId,
         code: c.code,
@@ -54,10 +56,13 @@ async function ensureSupplyCodes(
 
 const itemSchema = z.object({
   name: z.string().trim().min(1, "Item name is required."),
+  genericName: z.string().trim().optional(),
+  brand: z.string().trim().optional(),
   category: z.string().trim().min(1, "Category is required."),
   unit: z.string().trim().min(1, "Unit is required."),
-  cost: z.coerce.number().min(0).optional(),
+  cost: z.coerce.number().positive("A unit price is required."),
   reorderPoint: z.coerce.number().min(0).optional(),
+  defaultSupplier: z.string().trim().optional(),
   trackLots: z.boolean().optional(),
   trackExpiry: z.boolean().optional(),
   autoDeduct: z.enum(AUTO_DEDUCT).optional(),
@@ -80,10 +85,13 @@ export async function createItem(
     subject_type: SUBJECT_ITEM,
     natural_key: p.name,
     attrs: {
+      generic_name: p.genericName ?? null,
+      brand: p.brand ?? null,
       category: p.category,
       unit: p.unit,
-      cost: p.cost ?? null,
+      cost: p.cost,
       reorder_point: p.reorderPoint ?? null,
+      default_supplier: p.defaultSupplier ?? null,
       track_lots: p.trackLots ?? false,
       track_expiry: p.trackExpiry ?? false,
       auto_deduct: p.autoDeduct ?? "none",
@@ -186,7 +194,7 @@ export async function addCategory(
 
 const moveSchema = z.object({
   itemId: z.uuid(),
-  kind: z.enum(["receive", "adjust", "price", "usage"]),
+  kind: z.enum(["receive", "adjust", "price", "usage", "sale"]),
   date: z.string().min(1, "Date is required."),
   qty: z.coerce.number(),
   unitCost: z.coerce.number().min(0).optional(),
@@ -210,6 +218,12 @@ export async function addMovement(
     return { error: "Quantity must be greater than zero." };
   if (m.kind === "price" && m.unitCost == null)
     return { error: "A price observation needs a unit cost." };
+  if (m.kind === "receive" && !m.party)
+    return { error: "A purchase needs a supplier." };
+  if (m.kind === "sale" && !m.party)
+    return { error: "A sale needs a buyer." };
+  if (m.kind === "sale" && m.unitCost == null)
+    return { error: "A sale needs a unit price." };
 
   const admin = createAdminClient();
   // Confirm the item belongs to this org.
@@ -256,6 +270,107 @@ export async function deleteMovement(id: string): Promise<Result> {
     .eq("id", id)
     .eq("organization_id", orgId)
     .in("event_code", MOVE_CODES);
+  if (error) return { error: error.message };
+  revalidatePath(PathSupply);
+  return { success: true };
+}
+
+// ---- Parties (suppliers / buyers) — replaces Commercial's separate
+// vendor and customer registration; one party can be both. ----
+
+const partySchema = z.object({
+  name: z.string().trim().min(1, "Party name is required."),
+  isSupplier: z.boolean().optional(),
+  isBuyer: z.boolean().optional(),
+  phone: z.string().trim().optional(),
+  email: z.string().trim().optional(),
+  address: z.string().trim().optional(),
+  terms: z.string().trim().optional(),
+  notes: z.string().trim().optional(),
+});
+
+function partyAttrs(p: z.infer<typeof partySchema>) {
+  return {
+    is_supplier: p.isSupplier ?? false,
+    is_buyer: p.isBuyer ?? false,
+    phone: p.phone ?? null,
+    email: p.email ?? null,
+    address: p.address ?? null,
+    terms: p.terms ?? null,
+    notes: p.notes ?? null,
+  };
+}
+
+export async function createParty(
+  input: z.infer<typeof partySchema>,
+): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+  const parsed = partySchema.safeParse(input);
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  const p = parsed.data;
+  if (!p.isSupplier && !p.isBuyer)
+    return { error: "Mark the party as a supplier, a buyer, or both." };
+  const admin = createAdminClient();
+  const { error } = await admin.from("subjects").insert({
+    organization_id: orgId,
+    subject_type: SUBJECT_PARTY,
+    natural_key: p.name,
+    attrs: partyAttrs(p),
+    created_by: user.id,
+  });
+  if (error) {
+    if (error.code === "23505")
+      return { error: `Party “${p.name}” already exists.` };
+    return { error: error.message };
+  }
+  revalidatePath(PathSupply);
+  return { success: true };
+}
+
+const partyUpdateSchema = partySchema.extend({ id: z.uuid() });
+
+export async function updateParty(
+  input: z.infer<typeof partyUpdateSchema>,
+): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+  const parsed = partyUpdateSchema.safeParse(input);
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  const p = parsed.data;
+  if (!p.isSupplier && !p.isBuyer)
+    return { error: "Mark the party as a supplier, a buyer, or both." };
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("subjects")
+    .update({ natural_key: p.name, attrs: partyAttrs(p) })
+    .eq("id", p.id)
+    .eq("organization_id", orgId)
+    .eq("subject_type", SUBJECT_PARTY);
+  if (error) {
+    if (error.code === "23505")
+      return { error: `Party “${p.name}” already exists.` };
+    return { error: error.message };
+  }
+  revalidatePath(PathSupply);
+  return { success: true };
+}
+
+export async function deleteParty(id: string): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("subjects")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", orgId)
+    .eq("subject_type", SUBJECT_PARTY);
   if (error) return { error: error.message };
   revalidatePath(PathSupply);
   return { success: true };

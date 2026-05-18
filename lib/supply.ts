@@ -4,21 +4,35 @@
 
 export const SUBJECT_ITEM = "supply_item";
 export const SUBJECT_CATEGORY = "supply_category";
+export const SUBJECT_PARTY = "supply_party";
 
-export const EC_RECEIVE = 210; // SRCV  +qty
+export const EC_RECEIVE = 210; // SRCV  +qty  (purchase from a supplier)
 export const EC_ADJUST = 212; //  SADJ  ±qty
 export const EC_PRICE = 213; //   SPRC   price only, qty 0
-export const EC_USAGE = 214; //   SUSE  −qty
+export const EC_USAGE = 214; //   SUSE  −qty  (auto-consumption)
+export const EC_SALE = 215; //    SSAL  −qty  (sale to a buyer)
 
-export const MOVE_CODES = [EC_RECEIVE, EC_ADJUST, EC_PRICE, EC_USAGE];
+export const MOVE_CODES = [
+  EC_RECEIVE,
+  EC_ADJUST,
+  EC_PRICE,
+  EC_USAGE,
+  EC_SALE,
+];
 
-export type MoveKind = "receive" | "adjust" | "price" | "usage";
+export type MoveKind =
+  | "receive"
+  | "adjust"
+  | "price"
+  | "usage"
+  | "sale";
 
 export const KIND_CODE: Record<MoveKind, number> = {
   receive: EC_RECEIVE,
   adjust: EC_ADJUST,
   price: EC_PRICE,
   usage: EC_USAGE,
+  sale: EC_SALE,
 };
 
 export const CODE_KIND: Record<number, MoveKind> = {
@@ -26,6 +40,7 @@ export const CODE_KIND: Record<number, MoveKind> = {
   [EC_ADJUST]: "adjust",
   [EC_PRICE]: "price",
   [EC_USAGE]: "usage",
+  [EC_SALE]: "sale",
 };
 
 // Major farm stock categories shipped as the baseline. The category
@@ -78,13 +93,30 @@ export const AUTO_DEDUCT = [
 ] as const;
 export type AutoDeduct = (typeof AUTO_DEDUCT)[number];
 
+// A trading partner. One party can be a supplier, a buyer, or both —
+// this replaces the separate Commercial vendor / customer entities.
+export type SupplyParty = {
+  id: string;
+  name: string;
+  isSupplier: boolean;
+  isBuyer: boolean;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  terms: string | null;
+  notes: string | null;
+};
+
 export type SupplyItem = {
   id: string;
   name: string;
+  genericName: string | null;
+  brand: string | null;
   category: string;
   unit: string;
-  cost: number | null; // standard / reference unit cost
+  cost: number; // standard / reference unit price — mandatory
   reorderPoint: number | null;
+  defaultSupplier: string | null; // party name
   trackLots: boolean;
   trackExpiry: boolean;
   autoDeduct: AutoDeduct;
@@ -99,7 +131,7 @@ export type SupplyMove = {
   date: string;
   qty: number; // as entered (always >= 0 except adjust which may be ±)
   unitCost: number | null;
-  party: string | null;
+  party: string | null; // supplier (receive) or buyer (sale)
   lot: string | null;
   expiry: string | null;
   remark: string | null;
@@ -116,7 +148,7 @@ export type StockRow = SupplyItem & {
 // Signed contribution of a movement to on-hand.
 export function signedQty(kind: MoveKind, qty: number): number {
   if (kind === "receive") return Math.abs(qty);
-  if (kind === "usage") return -Math.abs(qty);
+  if (kind === "usage" || kind === "sale") return -Math.abs(qty);
   if (kind === "adjust") return qty; // may be negative
   return 0; // price
 }
@@ -139,12 +171,8 @@ export function computeStock(
     }
   }
   const avgCost =
-    rcvQty > 0 && rcvCost > 0
-      ? rcvCost / rcvQty
-      : item.cost != null
-        ? item.cost
-        : null;
-  const value = avgCost != null ? onHand * avgCost : null;
+    rcvQty > 0 && rcvCost > 0 ? rcvCost / rcvQty : item.cost;
+  const value = onHand * avgCost;
   const low =
     item.reorderPoint != null && onHand <= item.reorderPoint;
   return {
