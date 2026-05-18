@@ -14,14 +14,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createSire, deleteSire, adjustStraws } from "./actions";
+import { createSire, deleteSire } from "./actions";
 
 export type SireRow = {
   id: string;
   naab: string;
   breed: string | null;
   semenType: string;
-  straws: number;
 };
 
 export function SiresClient({ rows }: { rows: SireRow[] }) {
@@ -32,7 +31,6 @@ export function SiresClient({ rows }: { rows: SireRow[] }) {
   const [stype, setStype] = useState<
     "conventional" | "sexed" | "beef"
   >("conventional");
-  const [straws, setStraws] = useState("");
 
   const add = () =>
     start(async () => {
@@ -40,20 +38,11 @@ export function SiresClient({ rows }: { rows: SireRow[] }) {
         naab,
         breed: breed || undefined,
         semenType: stype,
-        straws: straws ? Number(straws) : undefined,
       });
       if (res.error) return void toast.error(res.error);
       toast.success(`Sire “${naab}” added.`);
       setNaab("");
       setBreed("");
-      setStraws("");
-      router.refresh();
-    });
-
-  const adj = (r: SireRow, delta: number) =>
-    start(async () => {
-      const res = await adjustStraws({ id: r.id, delta });
-      if (res.error) return void toast.error(res.error);
       router.refresh();
     });
 
@@ -75,7 +64,6 @@ export function SiresClient({ rows }: { rows: SireRow[] }) {
                 <th className="px-3 py-2 text-left">Sire / NAAB</th>
                 <th className="px-3 py-2 text-left">Breed</th>
                 <th className="px-3 py-2 text-left">Semen</th>
-                <th className="px-3 py-2 text-left">Straws</th>
                 <th className="px-3 py-2" />
               </tr>
             </thead>
@@ -85,27 +73,6 @@ export function SiresClient({ rows }: { rows: SireRow[] }) {
                   <td className="px-3 py-2 font-medium">{r.naab}</td>
                   <td className="px-3 py-2">{r.breed ?? "—"}</td>
                   <td className="px-3 py-2">{r.semenType}</td>
-                  <td className="px-3 py-2">
-                    <span className="inline-flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={pending}
-                        onClick={() => adj(r, -1)}
-                      >
-                        −
-                      </Button>
-                      {r.straws}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={pending}
-                        onClick={() => adj(r, 1)}
-                      >
-                        +
-                      </Button>
-                    </span>
-                  </td>
                   <td className="px-3 py-2 text-right">
                     <Button
                       size="sm"
@@ -160,23 +127,15 @@ export function SiresClient({ rows }: { rows: SireRow[] }) {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Straws</Label>
-            <Input
-              className="h-8 w-20 text-xs"
-              type="number"
-              value={straws}
-              onChange={(e) => setStraws(e.target.value)}
-            />
-          </div>
           <Button size="sm" disabled={pending || !naab} onClick={add}>
             Add sire
           </Button>
         </CardContent>
       </Card>
       <p className="text-[11px] text-muted-foreground">
-        Auto-decrement on BRED and genomic mating import are documented
-        next steps.
+        Straw inventory is managed in Supply Chain (category “Semen
+        &amp; Genetics”). Auto-decrement on BRED is a documented next
+        step.
       </p>
     </div>
   );

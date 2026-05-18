@@ -26,7 +26,6 @@ export async function SiresSection() {
       breed: typeof a.breed === "string" ? a.breed : null,
       semenType:
         typeof a.semen_type === "string" ? a.semen_type : "conventional",
-      straws: typeof a.straws === "number" ? a.straws : 0,
     };
   });
 
@@ -37,8 +36,9 @@ export async function SiresSection() {
           Sires &amp; Semen
         </h1>
         <p className="text-xs text-muted-foreground">
-          Sire catalog and straw inventory. Service sire on BRED
-          references these.
+          Sire genetics catalog (NAAB, breed, semen type). Straw
+          stock now lives in Supply Chain under “Semen &amp;
+          Genetics”. Service sire on BRED references these.
         </p>
       </header>
       <SiresClient rows={rows} />
