@@ -73,7 +73,12 @@ export function GroupingClient({
   worklist: Move[];
   pens: PenOption[];
   unmapped: string[];
-  recon: { total: number; grouped: number; ungrouped: string[] };
+  recon: {
+    total: number;
+    grouped: number;
+    ungrouped: string[];
+    overlap: { id: string; groups: string[] }[];
+  };
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -149,9 +154,7 @@ export function GroupingClient({
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium">
-            Groups (first match wins)
-          </h2>
+          <h2 className="text-sm font-medium">Groups</h2>
           <Button
             size="sm"
             variant="outline"
@@ -201,7 +204,43 @@ export function GroupingClient({
               )
             </span>
           )}
+          <span className="text-muted-foreground">·</span>
+          <span>
+            <span
+              className={
+                "font-semibold " +
+                (recon.overlap.length
+                  ? "text-destructive"
+                  : "text-muted-foreground")
+              }
+            >
+              {recon.overlap.length}
+            </span>{" "}
+            in more than one
+          </span>
+          {recon.overlap.length > 0 && (
+            <span
+              className="text-destructive"
+              title={recon.overlap
+                .map((o) => `${o.id}: ${o.groups.join(" / ")}`)
+                .join("\n")}
+            >
+              ({recon.overlap[0].id}: {recon.overlap[0].groups.join(" / ")}
+              {recon.overlap.length > 1
+                ? `, +${recon.overlap.length - 1} more`
+                : ""}
+              )
+            </span>
+          )}
         </div>
+        <p className="text-[11px] text-muted-foreground">
+          Each group’s rule is self-contained, so an animal lands in
+          exactly one group. Priority (the #) only decides the two
+          overrides — “Sold / dead” and “Hospital” — which pull an
+          animal out regardless of where she’d otherwise sit. If
+          “in more than one” is above zero, two rules overlap and need
+          tightening.
+        </p>
 
         {unmapped.length > 0 && (
           <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">

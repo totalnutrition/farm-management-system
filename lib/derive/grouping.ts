@@ -245,21 +245,35 @@ export function groupSizes(
 }
 
 // Reconciliation: every animal should land in exactly one group.
-// Surfaces total vs grouped vs ungrouped (with the ungrouped ids) so
-// gaps in the strategy are visible instead of silently dropped.
+// Surfaces total vs grouped vs ungrouped (ids), AND any animal that
+// matches MORE THAN ONE rule — if a strategy is well-designed its
+// conditions are self-contained and overlap is empty, so evaluation
+// order never silently changes who goes where.
 export function reconcile(
   population: GroupingMember[],
   ruleset: Ruleset,
   ctx: DeriveContext,
-): { total: number; grouped: number; ungrouped: string[] } {
+): {
+  total: number;
+  grouped: number;
+  ungrouped: string[];
+  overlap: { id: string; groups: string[] }[];
+} {
   const ungrouped: string[] = [];
+  const overlap: { id: string; groups: string[] }[] = [];
   for (const m of population) {
-    if (!matchGroup(m.subject, m.pen, ruleset, ctx)) ungrouped.push(m.id);
+    const get = resolver(m.subject, m.pen, ctx);
+    const hits = ruleset
+      .filter((r) => matchPredicate(r.when, get))
+      .map((r) => r.name);
+    if (hits.length === 0) ungrouped.push(m.id);
+    if (hits.length > 1) overlap.push({ id: m.id, groups: hits });
   }
   return {
     total: population.length,
     grouped: population.length - ungrouped.length,
     ungrouped,
+    overlap,
   };
 }
 

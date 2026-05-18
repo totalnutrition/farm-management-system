@@ -219,12 +219,17 @@ const cmp = (item: string, op: string, value: number | string) => ({
   value,
 });
 
-// Full-herd STRATEGY (order matters — first match wins). Covers
-// calves and heifers, not just the milking string, so every animal
-// lands in a group and the reconciliation totals close. Derived
-// items only; no pens created and nothing moves until mapped.
+// Full-herd STRATEGY. Designed so each group's rule is SELF-CONTAINED
+// (mutually exclusive bands) — an animal lands in exactly one group by
+// its own definition, so evaluation order is irrelevant for the herd
+// groups. Only two genuine "overrides" sit on top by design: Sold/dead
+// (exit) and Hospital (a flagged animal is pulled regardless of where
+// she'd otherwise sit). Derived items only; nothing moves until mapped.
 const STANDARD_GROUPS: { name: string; when: unknown[][] }[] = [
+  // — overrides (intentionally take precedence) —
+  { name: "Sold / dead", when: [[cmp("RPRO", "=", "SLD/DIE")]] },
   { name: "Hospital", when: [[cmp("FLAGGED", "=", "YES")]] },
+  // — youngstock (mutually exclusive) —
   { name: "Bull calf", when: [[cmp("RPRO", "=", "BULLCAF")]] },
   {
     name: "Calf (pre-breeding)",
@@ -234,8 +239,6 @@ const STANDARD_GROUPS: { name: string; when: unknown[][] }[] = [
     name: "Breeding heifer",
     when: [[cmp("RPRO", "=", "VIRGIN"), cmp("AGE", ">=", 13)]],
   },
-  // Catches virgins with no birth date (AGE null) so none escape.
-  { name: "Heifer (maiden)", when: [[cmp("RPRO", "=", "VIRGIN")]] },
   {
     name: "Bred heifer",
     when: [[cmp("RPRO", "=", "BRED"), cmp("LACT", "=", 0)]],
@@ -244,21 +247,52 @@ const STANDARD_GROUPS: { name: string; when: unknown[][] }[] = [
     name: "Springing heifer",
     when: [[cmp("RPRO", "=", "PREG"), cmp("LACT", "=", 0)]],
   },
+  // — dry cows (split by days-to-due, no overlap) —
   {
     name: "Close-up",
     when: [[cmp("RPRO", "=", "DRY"), cmp("DUE", "<=", 21)]],
   },
-  { name: "Far-off dry", when: [[cmp("RPRO", "=", "DRY")]] },
-  { name: "Fresh", when: [[cmp("DIM", "<=", 21)]] },
-  // MILK = last recorded milking-day total (no recency window), so
-  // groups populate from test-day / imported milk. MAVG is a strict
-  // trailing-7-day mean and silently nulls out when the latest milk
-  // is older than a week — which left these groups empty.
-  { name: "High", when: [[cmp("MILK", ">=", 35)]] },
-  { name: "Mid", when: [[cmp("MILK", ">=", 25)]] },
-  { name: "Low", when: [[cmp("MILK", ">=", 15)]] },
-  { name: "Late lactation", when: [[cmp("DIM", ">=", 1)]] },
-  { name: "Sold / dead", when: [[cmp("RPRO", "=", "SLD/DIE")]] },
+  {
+    name: "Far-off dry",
+    when: [[cmp("RPRO", "=", "DRY"), cmp("DUE", ">", 21)]],
+  },
+  // — milking string: DIM band + non-overlapping MILK bands —
+  {
+    name: "Fresh",
+    when: [[cmp("LACT", ">=", 1), cmp("DIM", "<=", 21)]],
+  },
+  {
+    name: "High",
+    when: [[cmp("LACT", ">=", 1), cmp("DIM", ">=", 22), cmp("MILK", ">=", 35)]],
+  },
+  {
+    name: "Mid",
+    when: [
+      [
+        cmp("LACT", ">=", 1),
+        cmp("DIM", ">=", 22),
+        cmp("MILK", ">=", 25),
+        cmp("MILK", "<", 35),
+      ],
+    ],
+  },
+  {
+    name: "Low",
+    when: [
+      [
+        cmp("LACT", ">=", 1),
+        cmp("DIM", ">=", 22),
+        cmp("MILK", ">=", 15),
+        cmp("MILK", "<", 25),
+      ],
+    ],
+  },
+  {
+    name: "Late lactation",
+    when: [
+      [cmp("LACT", ">=", 1), cmp("DIM", ">=", 22), cmp("MILK", "<", 15)],
+    ],
+  },
 ];
 
 export async function installGroupingPresets(): Promise<Result> {
