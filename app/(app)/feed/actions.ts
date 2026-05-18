@@ -303,3 +303,40 @@ export async function recordFeeding(
   revalidatePath(PathFeed);
   return { success: true };
 }
+
+// Delete a pen feeding and reverse any stock its ingredients
+// consumed, in one locked transaction (same RPC as animal events).
+// Org-scoped and restricted to FEED events on pen subjects.
+export async function deleteFeedingEvent(
+  eventId: string,
+): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+
+  const admin = createAdminClient();
+  const { data: ev } = await admin
+    .from("events")
+    .select("id, event_code, subjects!inner(subject_type)")
+    .eq("id", eventId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (!ev) return { error: "Feeding not found." };
+  const stype = (
+    ev as unknown as { subjects: { subject_type: string } }
+  ).subjects?.subject_type;
+  if (ev.event_code !== FEED_EC || stype !== "pen")
+    return { error: "Not a pen feeding event." };
+
+  const { data, error } = await admin.rpc(
+    "delete_event_with_reversal",
+    { p_org: orgId, p_event_id: eventId },
+  );
+  if (error) return { error: error.message };
+  const res = (data ?? {}) as { ok?: boolean };
+  if (!res.ok) return { error: "Feeding no longer exists." };
+
+  revalidatePath(PathFeed);
+  revalidatePath(PathSupply);
+  return { success: true };
+}

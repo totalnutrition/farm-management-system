@@ -21,6 +21,7 @@ import {
   createRation,
   deleteRation,
   recordFeeding,
+  deleteFeedingEvent,
 } from "./actions";
 
 export type MaterialRow = {
@@ -48,6 +49,14 @@ export type PenFeed = {
   cost: number | null;
   shrink: number | null;
 };
+export type Feeding = {
+  id: string;
+  pen: string;
+  date: string;
+  ration: string;
+  kg: number | null;
+  cost: number | null;
+};
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -56,14 +65,31 @@ export function FeedClient({
   rations,
   pens,
   penFeed,
+  feedings,
 }: {
   materials: MaterialRow[];
   rations: RationRow[];
   pens: string[];
   penFeed: PenFeed[];
+  feedings: Feeding[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+
+  const removeFeeding = (f: Feeding) => {
+    if (
+      !window.confirm(
+        `Delete the ${f.date} feeding of ${f.pen} (${f.ration})? Any stock it consumed will be returned.`,
+      )
+    )
+      return;
+    start(async () => {
+      const res = await deleteFeedingEvent(f.id);
+      if (res.error) return void toast.error(res.error);
+      toast.success("Feeding deleted; stock reversed.");
+      router.refresh();
+    });
+  };
 
   // materials
   const [mn, setMn] = useState("");
@@ -197,6 +223,54 @@ export function FeedClient({
                     <td className="px-3 py-2">{p.refused ?? "—"}</td>
                     <td className="px-3 py-2">{p.cost ?? "—"}</td>
                     <td className="px-3 py-2">{p.shrink ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* recent feedings (deletable, reverses stock) */}
+      <section className="space-y-2">
+        <h2 className="text-sm font-medium">Recent feedings</h2>
+        {feedings.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No feedings recorded yet.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-left">Date</th>
+                  <th className="px-3 py-2 text-left">Pen</th>
+                  <th className="px-3 py-2 text-left">Ration</th>
+                  <th className="px-3 py-2 text-left">Delivered (kg)</th>
+                  <th className="px-3 py-2 text-left">Cost</th>
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {feedings.map((f) => (
+                  <tr key={f.id} className="group border-t">
+                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                      {f.date}
+                    </td>
+                    <td className="px-3 py-2 font-medium">{f.pen}</td>
+                    <td className="px-3 py-2">{f.ration}</td>
+                    <td className="px-3 py-2">{f.kg ?? "—"}</td>
+                    <td className="px-3 py-2">{f.cost ?? "—"}</td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => removeFeeding(f)}
+                        className="text-xs text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:text-destructive disabled:opacity-50"
+                      >
+                        Delete
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

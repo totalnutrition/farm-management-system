@@ -9,6 +9,7 @@ import {
   type MaterialRow,
   type RationRow,
   type PenFeed,
+  type Feeding,
 } from "./feed-client";
 
 export const metadata = { title: "Feed" };
@@ -122,6 +123,32 @@ export default async function FeedPage() {
     shrink: r.SHRINK as number | null,
   }));
 
+  const penName = new Map(
+    (penSubjects ?? []).map((p) => [p.id, p.natural_key]),
+  );
+  const feedings: Feeding[] = [];
+  if (penIds.length) {
+    const { data: fev } = await admin
+      .from("events")
+      .select("id, subject_id, event_date, payload")
+      .eq("organization_id", orgId)
+      .eq("event_code", FEED_EC)
+      .in("subject_id", penIds)
+      .order("event_date", { ascending: false })
+      .limit(100);
+    for (const e of fev ?? []) {
+      const p = (e.payload ?? {}) as Record<string, unknown>;
+      feedings.push({
+        id: e.id as string,
+        pen: penName.get(e.subject_id) ?? "—",
+        date: e.event_date as string,
+        ration: typeof p.ration === "string" ? p.ration : "—",
+        kg: typeof p.kg === "number" ? p.kg : null,
+        cost: typeof p.cost === "number" ? p.cost : null,
+      });
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4 py-4">
       <header>
@@ -135,6 +162,7 @@ export default async function FeedPage() {
         rations={rations}
         pens={(penSubjects ?? []).map((p) => p.natural_key)}
         penFeed={penFeed}
+        feedings={feedings}
       />
     </div>
   );
