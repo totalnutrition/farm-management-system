@@ -70,6 +70,7 @@ export default async function RecordPage({
         baseLactation:
           typeof a.base_lactation === "number" ? a.base_lactation : undefined,
       },
+      attrs: a,
     },
     { today },
   );
@@ -100,6 +101,8 @@ export default async function RecordPage({
 
       <RecordDetail
         subjectId={subject.id}
+        animalName={subject.name as string | null}
+        attrs={a}
         state={state}
         timeline={timeline}
         codes={(codes ?? []).map((c) => ({

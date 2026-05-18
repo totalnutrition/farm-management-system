@@ -26,20 +26,40 @@ import {
   recordEvent,
   recordMilking,
   deleteAnimalEvent,
+  updateAnimalAttrs,
 } from "../actions";
 import { ITEMS, labelOf } from "@/components/condition-builder";
 import { EC } from "@/lib/derive/engine";
 
 type ItemValue = number | string | null;
 
+const EDIT_FIELDS: { key: string; label: string; type?: string }[] = [
+  { key: "breed", label: "Breed" },
+  { key: "pen", label: "Pen" },
+  { key: "eid", label: "Electronic ID" },
+  { key: "dam_id", label: "Dam ID" },
+  { key: "sire_id", label: "Sire ID" },
+  { key: "service_sire", label: "Service sire" },
+  { key: "registration", label: "Registration" },
+  { key: "entry_reason", label: "Entry reason" },
+  { key: "entry_date", label: "Entry date", type: "date" },
+  { key: "birth_date", label: "Birth date", type: "date" },
+  { key: "due_date", label: "Due date", type: "date" },
+  { key: "conception_date", label: "Conception date", type: "date" },
+];
+
 export function RecordDetail({
   subjectId,
+  animalName,
+  attrs,
   state,
   timeline,
   codes,
   supplyItems,
 }: {
   subjectId: string;
+  animalName: string | null;
+  attrs: Record<string, unknown>;
   state: Record<string, ItemValue>;
   timeline: {
     id: string;
@@ -51,6 +71,30 @@ export function RecordDetail({
   supplyItems: string[];
 }) {
   const router = useRouter();
+  const asStr = (v: unknown) => (typeof v === "string" ? v : "");
+  const [eOpen, setEOpen] = useState(false);
+  const [eName, setEName] = useState(animalName ?? "");
+  const [eVals, setEVals] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      EDIT_FIELDS.map((f) => [f.key, asStr(attrs[f.key])]),
+    ),
+  );
+
+  const saveEdits = () =>
+    start(async () => {
+      const res = await updateAnimalAttrs({
+        subjectId,
+        name: eName,
+        attrs: eVals,
+      });
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Details updated.");
+      setEOpen(false);
+      router.refresh();
+    });
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState<string>("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -342,6 +386,58 @@ export function RecordDetail({
                   disabled={pending || !mKg || !mDate}
                 >
                   {pending ? "Saving…" : "Record"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={eOpen} onOpenChange={setEOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline" className="ml-2">
+                Edit details
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit details</DialogTitle>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Name</Label>
+                  <Input
+                    value={eName}
+                    onChange={(e) => setEName(e.target.value)}
+                  />
+                </div>
+                {EDIT_FIELDS.map((f) => (
+                  <div key={f.key} className="space-y-1">
+                    <Label className="text-xs">{f.label}</Label>
+                    <Input
+                      type={f.type ?? "text"}
+                      value={eVals[f.key] ?? ""}
+                      onChange={(e) =>
+                        setEVals((p) => ({
+                          ...p,
+                          [f.key]: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Clearing a field removes that value. Lactation, cohort
+                and the event history are managed separately.
+              </p>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setEOpen(false)}
+                  disabled={pending}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={saveEdits} disabled={pending}>
+                  {pending ? "Saving…" : "Save"}
                 </Button>
               </DialogFooter>
             </DialogContent>

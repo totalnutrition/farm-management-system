@@ -280,3 +280,74 @@ export async function recordMilking(
   revalidatePath(`${PathRecords}/${subjectId}`);
   return { success: true };
 }
+
+// Editable identity/seed attributes. Empty string clears the key, so
+// a blank field reads back as "not set" (null) everywhere — symmetric
+// with how unset keys behave. base_lactation / cohort and the event
+// stream are NOT touched here; this is metadata only.
+const ATTR_KEYS = [
+  "breed",
+  "pen",
+  "eid",
+  "dam_id",
+  "sire_id",
+  "service_sire",
+  "registration",
+  "entry_reason",
+  "entry_date",
+  "birth_date",
+  "due_date",
+  "conception_date",
+] as const;
+
+const editAttrsSchema = z.object({
+  subjectId: z.uuid(),
+  name: z.string().trim().optional(),
+  attrs: z.record(z.string(), z.string().trim()),
+});
+
+export async function updateAnimalAttrs(
+  input: z.infer<typeof editAttrsSchema>,
+): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+
+  const parsed = editAttrsSchema.safeParse(input);
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  const { subjectId, name, attrs: incoming } = parsed.data;
+
+  const admin = createAdminClient();
+  const { data: subj, error: sErr } = await admin
+    .from("subjects")
+    .select("attrs")
+    .eq("id", subjectId)
+    .eq("organization_id", orgId)
+    .eq("subject_type", "animal")
+    .maybeSingle();
+  if (sErr) return { error: sErr.message };
+  if (!subj) return { error: "Animal not found." };
+
+  const merged = { ...((subj.attrs ?? {}) as Record<string, unknown>) };
+  for (const k of ATTR_KEYS) {
+    if (!(k in incoming)) continue;
+    const v = incoming[k]?.trim() ?? "";
+    if (v === "") delete merged[k];
+    else merged[k] = v;
+  }
+
+  const { error } = await admin
+    .from("subjects")
+    .update({
+      attrs: merged,
+      ...(name !== undefined ? { name: name || null } : {}),
+    })
+    .eq("id", subjectId)
+    .eq("organization_id", orgId);
+  if (error) return { error: error.message };
+
+  revalidatePath(PathRecords);
+  revalidatePath(`${PathRecords}/${subjectId}`);
+  return { success: true };
+}

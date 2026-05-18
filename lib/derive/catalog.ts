@@ -38,8 +38,26 @@ const ENUM_OPTS: Record<string, string[]> = {
   ABT: ["ABT?"],
 };
 const BOOL_ITEMS = new Set(["FLAGGED", "DNSHIP", "DNSELL"]);
-const TEXT_ITEMS = new Set(["ID", "PEN", "ATTN"]);
-const DATE_ITEMS = new Set(["FDAT", "DDAT", "MWHOLD", "BWHOLD", "LTDAT"]);
+const TEXT_ITEMS = new Set([
+  "ID",
+  "PEN",
+  "ATTN",
+  "BREED",
+  "EID",
+  "DAM",
+  "SIRE",
+  "SSIRE",
+  "REG",
+  "RSN",
+]);
+const DATE_ITEMS = new Set([
+  "FDAT",
+  "DDAT",
+  "MWHOLD",
+  "BWHOLD",
+  "LTDAT",
+  "ENTRY",
+]);
 
 export function kindOf(item: string): FieldKind {
   if (item in ENUM_OPTS) return "enum";
@@ -60,7 +78,7 @@ export const isAggregatable = (item: string) => kindOf(item) === "num";
 // low-cardinality categoricals DC groups on (pen, parity, attention).
 // Continuous numbers & dates are NOT groupable (they'd shatter into
 // one-row buckets) — this is the core "no distinction" fix.
-const GROUPABLE_EXTRA = new Set(["PEN", "LACT", "ATTN"]);
+const GROUPABLE_EXTRA = new Set(["PEN", "LACT", "ATTN", "BREED"]);
 export const isGroupable = (item: string) =>
   ["enum", "bool"].includes(kindOf(item)) || GROUPABLE_EXTRA.has(item);
 
@@ -81,8 +99,16 @@ export type CatalogItem = {
 const RAW: { value: string; label: string; group: ItemGroup }[] = [
   { value: "ID", label: "Animal ID", group: "Identity & location" },
   { value: "PEN", label: "Pen (physical)", group: "Identity & location" },
+  { value: "BREED", label: "Breed", group: "Identity & location" },
+  { value: "EID", label: "Electronic ID", group: "Identity & location" },
+  { value: "DAM", label: "Dam ID", group: "Identity & location" },
+  { value: "SIRE", label: "Sire ID", group: "Identity & location" },
+  { value: "REG", label: "Registration", group: "Identity & location" },
+  { value: "RSN", label: "Entry reason", group: "Identity & location" },
+  { value: "ENTRY", label: "Entry date", group: "Identity & location" },
   { value: "AGE", label: "Age (months)", group: "Identity & location" },
   { value: "RPRO", label: "Repro status", group: "Reproduction" },
+  { value: "SSIRE", label: "Service sire", group: "Reproduction" },
   { value: "ABT", label: "Abortion vet flag", group: "Reproduction" },
   { value: "DCC", label: "Days carrying calf", group: "Reproduction" },
   { value: "DUE", label: "Days to due", group: "Reproduction" },

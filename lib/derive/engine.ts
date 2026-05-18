@@ -26,6 +26,10 @@ export type IntakeFacts = {
 export type Subject = {
   events: Event[];
   facts?: IntakeFacts;
+  // Stored animal attributes (subjects.attrs). Identity/metadata the
+  // user enters at intake or edits later — first-class so it is
+  // queryable, listable and shown, not write-only.
+  attrs?: Record<string, unknown>;
 };
 
 export type DeriveContext = {
@@ -278,6 +282,32 @@ register({
     return daysBetween(ctx.today, f);
   },
 });
+
+// --- stored attributes (subjects.attrs) -----------------------------
+// User-entered identity/metadata. Without these resolvers the fields
+// are written at intake but invisible everywhere (list, query, detail)
+// — the "fields vanish" gap. Each returns the stored string or null
+// (absent → empty, never throws), so they behave like any other item.
+const attrText = (item: string, key: string) =>
+  register({
+    item,
+    provenance: "confirmed",
+    note: `stored animal attribute "${key}"`,
+    compute: (s) => {
+      const v = s.attrs?.[key];
+      return typeof v === "string" && v.trim() !== "" ? v : null;
+    },
+  });
+
+attrText("PEN", "pen");
+attrText("BREED", "breed");
+attrText("EID", "eid");
+attrText("DAM", "dam_id");
+attrText("SIRE", "sire_id");
+attrText("SSIRE", "service_sire");
+attrText("REG", "registration");
+attrText("RSN", "entry_reason");
+attrText("ENTRY", "entry_date");
 
 // --- public surface --------------------------------------------------
 export function deriveItem(

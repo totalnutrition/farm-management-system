@@ -93,6 +93,7 @@ export async function runQueryAction(
     subject: {
       events: eventsBySubject.get(s.id) ?? [],
       facts: factsFromAttrs(s.attrs),
+      attrs: (s.attrs ?? {}) as Record<string, unknown>,
     },
   }));
 

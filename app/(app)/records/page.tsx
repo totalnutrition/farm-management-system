@@ -59,9 +59,10 @@ export default async function RecordsPage() {
               ? a.base_lactation
               : undefined,
         },
+        attrs: a,
       },
       { today },
-      ["RPRO", "LACT", "DIM"],
+      ["RPRO", "LACT", "DIM", "PEN", "BREED", "EID", "DAM", "SIRE"],
     );
     return {
       id: s.id,
@@ -70,6 +71,11 @@ export default async function RecordsPage() {
       rpro: d.RPRO,
       lact: d.LACT,
       dim: d.DIM,
+      pen: d.PEN,
+      breed: d.BREED,
+      eid: d.EID,
+      dam: d.DAM,
+      sire: d.SIRE,
     };
   });
 
@@ -99,6 +105,11 @@ export default async function RecordsPage() {
                 <th className="px-2 text-left">Repro</th>
                 <th className="px-2 text-right">Lact</th>
                 <th className="px-2 text-right">DIM</th>
+                <th className="px-2 text-left">Pen</th>
+                <th className="px-2 text-left">Breed</th>
+                <th className="px-2 text-left">EID</th>
+                <th className="px-2 text-left">Dam</th>
+                <th className="px-2 text-left">Sire</th>
               </tr>
             </thead>
             <tbody>
@@ -119,6 +130,11 @@ export default async function RecordsPage() {
                   <td className="px-2">{r.rpro ?? "—"}</td>
                   <td className="px-2 text-right">{r.lact ?? "—"}</td>
                   <td className="px-2 text-right">{r.dim ?? "—"}</td>
+                  <td className="px-2">{r.pen ?? "—"}</td>
+                  <td className="px-2">{r.breed ?? "—"}</td>
+                  <td className="px-2">{r.eid ?? "—"}</td>
+                  <td className="px-2">{r.dam ?? "—"}</td>
+                  <td className="px-2">{r.sire ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
