@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { recordEvent, recordMilking } from "../actions";
 import { ITEMS, labelOf } from "@/components/condition-builder";
+import { EC } from "@/lib/derive/engine";
 
 type ItemValue = number | string | null;
 
@@ -32,18 +33,24 @@ export function RecordDetail({
   state,
   timeline,
   codes,
+  supplyItems,
 }: {
   subjectId: string;
   state: Record<string, ItemValue>;
   timeline: { date: string; label: string; remark: string | null }[];
   codes: { code: number; label: string }[];
+  supplyItems: string[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState<string>("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [remark, setRemark] = useState("");
+  const [material, setMaterial] = useState("");
+  const [materialQty, setMaterialQty] = useState("1");
   const [pending, start] = useTransition();
+
+  const isBreeding = code !== "" && Number(code) === EC.BRED;
 
   const submit = () =>
     start(async () => {
@@ -52,6 +59,11 @@ export function RecordDetail({
         eventCode: Number(code),
         eventDate: date,
         remark: remark || undefined,
+        material: isBreeding && material ? material : undefined,
+        materialQty:
+          isBreeding && material && materialQty
+            ? Number(materialQty)
+            : undefined,
       });
       if (res.error) {
         toast.error(res.error);
@@ -60,6 +72,8 @@ export function RecordDetail({
       toast.success("Event recorded.");
       setRemark("");
       setCode("");
+      setMaterial("");
+      setMaterialQty("1");
       setOpen(false);
       router.refresh();
     });
@@ -144,6 +158,45 @@ export function RecordDetail({
                     onChange={(e) => setDate(e.target.value)}
                   />
                 </div>
+                {isBreeding && (
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">
+                        Genetic material used
+                      </Label>
+                      <Select
+                        value={material}
+                        onValueChange={setMaterial}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="semen / embryo (Supply)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {supplyItems.length === 0 ? (
+                            <SelectItem value="__none" disabled>
+                              add stock in Supply Chain
+                            </SelectItem>
+                          ) : (
+                            supplyItems.map((s) => (
+                              <SelectItem key={s} value={s}>
+                                {s}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Qty used</Label>
+                      <Input
+                        type="number"
+                        value={materialQty}
+                        onChange={(e) => setMaterialQty(e.target.value)}
+                        placeholder="1"
+                      />
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-1">
                   <Label className="text-xs">Remark</Label>
                   <Input
@@ -151,6 +204,12 @@ export function RecordDetail({
                     onChange={(e) => setRemark(e.target.value)}
                   />
                 </div>
+                {isBreeding && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Recording a breeding deducts the chosen quantity
+                    of that material from Supply Chain stock.
+                  </p>
+                )}
               </div>
               <DialogFooter>
                 <Button

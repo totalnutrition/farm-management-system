@@ -41,6 +41,16 @@ export default async function RecordPage({
     .eq("organization_id", orgId)
     .order("code");
 
+  // Genetic-material picker for breeding events — every Supply Chain
+  // item (semen straws, embryos, etc.) is a candidate.
+  const { data: supplyRows } = await admin
+    .from("subjects")
+    .select("natural_key")
+    .eq("organization_id", orgId)
+    .eq("subject_type", "supply_item")
+    .order("natural_key");
+  const supplyItems = (supplyRows ?? []).map((s) => s.natural_key);
+
   const codeName = new Map(
     (codes ?? []).map((c) => [c.code, c.label || c.name]),
   );
@@ -95,6 +105,7 @@ export default async function RecordPage({
           code: c.code,
           label: c.label || c.name,
         }))}
+        supplyItems={supplyItems}
       />
     </div>
   );

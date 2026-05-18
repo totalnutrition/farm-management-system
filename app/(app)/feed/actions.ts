@@ -4,9 +4,10 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
-import { PathFeed } from "@/lib/misc";
+import { PathFeed, PathSupply } from "@/lib/misc";
 import { FEED_EC } from "@/lib/derive/feed";
 import { computeRation, type Material } from "@/lib/derive/ration";
+import { applySupplyMovement } from "@/lib/supply-usage";
 
 type Result = { error?: string; success?: boolean };
 
@@ -216,6 +217,48 @@ export async function recordFeeding(
     created_by: user.id,
   });
   if (error) return { error: error.message };
+
+  // Auto-deduct each ingredient from Supply Chain stock. The recipe
+  // is on a DM basis; convert to as-fed proportions to split the
+  // delivered kg across materials. Best-effort and name-matched —
+  // ingredients without a Supply item are simply not tracked.
+  const recipe = ((rn.attrs as Record<string, unknown>)?.recipe ??
+    []) as Array<{ material: string; dmKg: number }>;
+  if (recipe.length) {
+    const names = recipe.map((r) => r.material);
+    const { data: matRows } = await admin
+      .from("subjects")
+      .select("natural_key, attrs")
+      .eq("organization_id", orgId)
+      .eq("subject_type", "feed")
+      .in("natural_key", names);
+    const dmPctOf = new Map<string, number>();
+    for (const mm of matRows ?? []) {
+      const a = (mm.attrs ?? {}) as Record<string, unknown>;
+      dmPctOf.set(
+        mm.natural_key,
+        typeof a.dm_pct === "number" && a.dm_pct > 0 ? a.dm_pct : 100,
+      );
+    }
+    const asFed = recipe.map((r) => ({
+      material: r.material,
+      w: r.dmKg / ((dmPctOf.get(r.material) ?? 100) / 100),
+    }));
+    const total = asFed.reduce((s, x) => s + x.w, 0);
+    if (total > 0) {
+      for (const x of asFed) {
+        await applySupplyMovement(admin, orgId, {
+          itemName: x.material,
+          qty: (kg * x.w) / total,
+          date,
+          direction: "use",
+          ref: { feed_pen: penNo, ration },
+        });
+      }
+      revalidatePath(PathSupply);
+    }
+  }
+
   revalidatePath(PathFeed);
   return { success: true };
 }

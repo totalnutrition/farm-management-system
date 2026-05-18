@@ -4,9 +4,11 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
-import { PathRecords } from "@/lib/misc";
+import { PathRecords, PathSupply } from "@/lib/misc";
 import { planSeed } from "@/lib/derive/intake";
 import { MILK_EC } from "@/lib/derive/production";
+import { EC } from "@/lib/derive/engine";
+import { applySupplyMovement } from "@/lib/supply-usage";
 
 type Result = { error?: string; success?: boolean };
 
@@ -42,6 +44,11 @@ const eventSchema = z.object({
   eventCode: z.coerce.number().int(),
   eventDate: z.string().trim().min(1, "Event date is required."),
   remark: z.string().trim().optional(),
+  // Breeding only: the genetic material used (a Supply Chain item —
+  // a semen straw, an embryo, etc.) and how many units, so stock
+  // auto-deducts from one source of truth.
+  material: z.string().trim().optional(),
+  materialQty: z.coerce.number().positive().optional(),
 });
 
 export async function createAnimalIntake(
@@ -107,7 +114,9 @@ export async function recordEvent(
   const parsed = eventSchema.safeParse(input);
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
-  const { subjectId, eventCode, eventDate, remark } = parsed.data;
+  const { subjectId, eventCode, eventDate, remark, material, materialQty } =
+    parsed.data;
+  const isBreeding = eventCode === EC.BRED;
 
   const admin = createAdminClient();
 
@@ -127,10 +136,24 @@ export async function recordEvent(
     event_code: eventCode,
     event_date: eventDate,
     remark: remark || null,
+    payload:
+      isBreeding && material ? { sire: material, qty: materialQty ?? 1 } : {},
     source: "user",
     created_by: user.id,
   });
   if (error) return { error: error.message };
+
+  // Breeding consumes genetic material from Supply Chain stock.
+  if (isBreeding && material) {
+    await applySupplyMovement(admin, orgId, {
+      itemName: material,
+      qty: materialQty ?? 1,
+      date: eventDate,
+      direction: "use",
+      ref: { breeding_animal: subjectId },
+    });
+    revalidatePath(PathSupply);
+  }
 
   revalidatePath(`${PathRecords}/${subjectId}`);
   revalidatePath(PathRecords);
