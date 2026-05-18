@@ -7,11 +7,7 @@ import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { PathFeed, PathSupply } from "@/lib/misc";
 import { FEED_EC } from "@/lib/derive/feed";
 import { computeRation, type Material } from "@/lib/derive/ration";
-import {
-  applySupplyMovement,
-  checkSupplyShortages,
-  shortageMessage,
-} from "@/lib/supply-usage";
+import { consumeSupply } from "@/lib/supply-usage";
 
 type Result = { error?: string; success?: boolean };
 
@@ -242,41 +238,67 @@ export async function recordFeeding(
       }));
   }
 
+  // Resolve ingredients to Supply items by name. Feeding is NOT
+  // gated on inventory (DairyComp doesn't), so unresolved or
+  // ambiguous ingredients are skipped, not blocked — only resolved
+  // ones are consumed (atomically, with rollback on shortage).
+  const needs: Array<{ itemId: string; itemName: string; qty: number }> =
+    [];
   if (deductions.length) {
-    const short = await checkSupplyShortages(
-      admin,
-      orgId,
-      deductions.map((d) => ({ itemName: d.material, qty: d.qty })),
-    );
-    if (short.length) return { error: shortageMessage(short) };
+    const { data: items } = await admin
+      .from("subjects")
+      .select("id, natural_key")
+      .eq("organization_id", orgId)
+      .eq("subject_type", "supply_item")
+      .in(
+        "natural_key",
+        deductions.map((d) => d.material),
+      );
+    const byName = new Map<string, string | null>();
+    for (const it of items ?? []) {
+      byName.set(
+        it.natural_key,
+        byName.has(it.natural_key) ? null : it.id, // null = ambiguous
+      );
+    }
+    for (const d of deductions) {
+      const id = byName.get(d.material);
+      if (id) needs.push({ itemId: id, itemName: d.material, qty: d.qty });
+    }
   }
 
-  const { error } = await admin.from("events").insert({
-    organization_id: orgId,
-    subject_id: pen.id,
-    event_code: FEED_EC,
-    event_date: date,
-    payload: {
-      ration,
-      kg,
-      refused: refusedKg ?? 0,
-      cost: Math.round(kg * costPerKg * 100) / 100,
-    },
-    source: "user",
-    created_by: user.id,
-  });
+  const { data: ev, error } = await admin
+    .from("events")
+    .insert({
+      organization_id: orgId,
+      subject_id: pen.id,
+      event_code: FEED_EC,
+      event_date: date,
+      payload: {
+        ration,
+        kg,
+        refused: refusedKg ?? 0,
+        cost: Math.round(kg * costPerKg * 100) / 100,
+      },
+      source: "user",
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
   if (error) return { error: error.message };
 
-  for (const d of deductions) {
-    await applySupplyMovement(admin, orgId, {
-      itemName: d.material,
-      qty: d.qty,
-      date,
-      direction: "use",
-      ref: { feed_pen: penNo, ration },
+  if (needs.length) {
+    const consumed = await consumeSupply(admin, orgId, needs, date, {
+      feed_pen: penNo,
+      ration,
+      src_event: ev.id,
     });
+    if (!consumed.ok) {
+      await admin.from("events").delete().eq("id", ev.id);
+      return { error: consumed.message };
+    }
+    revalidatePath(PathSupply);
   }
-  if (deductions.length) revalidatePath(PathSupply);
 
   revalidatePath(PathFeed);
   return { success: true };

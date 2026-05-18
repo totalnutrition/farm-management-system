@@ -9,9 +9,7 @@ import { planSeed } from "@/lib/derive/intake";
 import { MILK_EC } from "@/lib/derive/production";
 import { EC } from "@/lib/derive/engine";
 import {
-  applySupplyMovement,
-  checkSupplyShortages,
-  shortageMessage,
+  consumeSupply,
   resolveSupplyItemId,
 } from "@/lib/supply-usage";
 
@@ -148,35 +146,39 @@ export async function recordEvent(
         error: `“${material}” is not a Supply Chain item. Add it under Supply Chain first.`,
       };
     materialId = r.id;
-    const short = await checkSupplyShortages(admin, orgId, [
-      { itemName: material, qty: matQty },
-    ]);
-    if (short.length) return { error: shortageMessage(short) };
   }
 
-  const { error } = await admin.from("events").insert({
-    organization_id: orgId,
-    subject_id: subjectId,
-    event_code: eventCode,
-    event_date: eventDate,
-    remark: remark || null,
-    payload:
-      isBreeding && material ? { sire: material, qty: matQty } : {},
-    source: "user",
-    created_by: user.id,
-  });
+  const { data: ev, error } = await admin
+    .from("events")
+    .insert({
+      organization_id: orgId,
+      subject_id: subjectId,
+      event_code: eventCode,
+      event_date: eventDate,
+      remark: remark || null,
+      payload:
+        isBreeding && material ? { sire: material, qty: matQty } : {},
+      source: "user",
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
   if (error) return { error: error.message };
 
-  // Breeding consumes genetic material from Supply Chain stock.
-  if (isBreeding && material) {
-    await applySupplyMovement(admin, orgId, {
-      itemName: material,
-      itemId: materialId ?? undefined,
-      qty: matQty,
-      date: eventDate,
-      direction: "use",
-      ref: { breeding_animal: subjectId },
-    });
+  // Breeding consumes genetic material — atomic deduction, and roll
+  // back the breeding event if stock is short.
+  if (isBreeding && material && materialId) {
+    const consumed = await consumeSupply(
+      admin,
+      orgId,
+      [{ itemId: materialId, itemName: material, qty: matQty }],
+      eventDate,
+      { breeding_animal: subjectId, src_event: ev.id },
+    );
+    if (!consumed.ok) {
+      await admin.from("events").delete().eq("id", ev.id);
+      return { error: consumed.message };
+    }
     revalidatePath(PathSupply);
   }
 

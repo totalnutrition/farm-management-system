@@ -6,11 +6,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { PathHealth, PathSupply } from "@/lib/misc";
 import { TREAT_EC } from "@/lib/derive/health";
-import {
-  applySupplyMovement,
-  checkSupplyShortages,
-  shortageMessage,
-} from "@/lib/supply-usage";
+import { consumeSupply } from "@/lib/supply-usage";
 
 type Result = { error?: string; success?: boolean };
 
@@ -120,37 +116,40 @@ export async function recordTreatment(
   const meatDays = typeof a.meat_days === "number" ? a.meat_days : 0;
 
   const need = qty ?? 1;
-  const short = await checkSupplyShortages(admin, orgId, [
-    { itemName: drug, qty: need },
-  ]);
-  if (short.length) return { error: shortageMessage(short) };
 
-  const { error } = await admin.from("events").insert({
-    organization_id: orgId,
-    subject_id: animal.id,
-    event_code: TREAT_EC,
-    event_date: date,
-    payload: {
-      drug,
-      dose: dose ?? null,
-      mwUntil: addDays(date, milkDays),
-      bwUntil: addDays(date, meatDays),
-    },
-    source: "user",
-    created_by: user.id,
-  });
+  const { data: ev, error } = await admin
+    .from("events")
+    .insert({
+      organization_id: orgId,
+      subject_id: animal.id,
+      event_code: TREAT_EC,
+      event_date: date,
+      payload: {
+        drug,
+        dose: dose ?? null,
+        mwUntil: addDays(date, milkDays),
+        bwUntil: addDays(date, meatDays),
+      },
+      source: "user",
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
   if (error) return { error: error.message };
 
-  // Auto-deduct the drug from Supply Chain stock so on-hand stays
-  // correct without a second manual entry. Defaults to 1 unit.
-  await applySupplyMovement(admin, orgId, {
-    itemName: drug,
-    itemId: dr.id,
-    qty: need,
+  // Atomic, race-safe deduction. On shortage, roll back the
+  // treatment we just wrote so nothing is half-recorded.
+  const consumed = await consumeSupply(
+    admin,
+    orgId,
+    [{ itemId: dr.id, itemName: drug, qty: need }],
     date,
-    direction: "use",
-    ref: { treatment_animal: animalId },
-  });
+    { treatment_animal: animalId, src_event: ev.id },
+  );
+  if (!consumed.ok) {
+    await admin.from("events").delete().eq("id", ev.id);
+    return { error: consumed.message };
+  }
 
   revalidatePath(PathHealth);
   revalidatePath(PathSupply);
