@@ -544,7 +544,13 @@ export function SupplyClient({
                       <td className={TD}>{i.brand ?? "—"}</td>
                       <td className={TD}>{i.category}</td>
                       <td className={TD}>{i.unit}</td>
-                      <td className={NUM}>{i.cost}</td>
+                      <td className={NUM}>
+                        {i.cost ?? (
+                          <span className="text-amber-600 dark:text-amber-500">
+                            set price
+                          </span>
+                        )}
+                      </td>
                       <td className={NUM}>{i.reorderPoint ?? "—"}</td>
                       <td className={TD}>{i.defaultSupplier ?? "—"}</td>
                       <td className={TD}>{i.autoDeduct}</td>

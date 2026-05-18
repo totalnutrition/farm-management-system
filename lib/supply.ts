@@ -114,7 +114,7 @@ export type SupplyItem = {
   brand: string | null;
   category: string;
   unit: string;
-  cost: number; // standard / reference unit price — mandatory
+  cost: number | null; // unit price; null = not set (migrated rows)
   reorderPoint: number | null;
   defaultSupplier: string | null; // party name
   trackLots: boolean;
@@ -170,9 +170,11 @@ export function computeStock(
       if (!lastReceipt || m.date > lastReceipt) lastReceipt = m.date;
     }
   }
-  const avgCost =
+  const avgCost: number | null =
     rcvQty > 0 && rcvCost > 0 ? rcvCost / rcvQty : item.cost;
-  const value = onHand * avgCost;
+  // null cost → unknown value (shown as "—"), never a silent 0.
+  const value: number | null =
+    avgCost != null ? onHand * avgCost : null;
   const low =
     item.reorderPoint != null && onHand <= item.reorderPoint;
   return {

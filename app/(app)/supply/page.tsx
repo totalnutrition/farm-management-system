@@ -64,7 +64,7 @@ export default async function SupplyPage() {
       brand: typeof a.brand === "string" ? a.brand : null,
       category: typeof a.category === "string" ? a.category : "Uncategorized",
       unit: typeof a.unit === "string" ? a.unit : "ea",
-      cost: typeof a.cost === "number" ? a.cost : 0,
+      cost: typeof a.cost === "number" ? a.cost : null,
       reorderPoint:
         typeof a.reorder_point === "number" ? a.reorder_point : null,
       defaultSupplier:
