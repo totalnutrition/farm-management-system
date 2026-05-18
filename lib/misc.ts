@@ -23,6 +23,7 @@ export const PathActivity = "/activity";
 export const PathNotifications = "/notifications";
 export const PathCommercial = "/commercial";
 export const PathProjection = "/projection";
+export const PathSupply = "/supply";
 
 export const RoleSuperAdmin = "super_admin";
 export const RoleAdmin = "admin";
