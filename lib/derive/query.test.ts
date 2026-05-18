@@ -280,7 +280,7 @@ test("SUM aggregate is selectable (median/min/max/total/stdev)", () => {
         { verb: "SUM", items: ["LACT"], agg },
         pop,
         { today: "2026-05-16" },
-      ) as { LACT: number | null }
+      ) as unknown as { LACT: number | null }
     ).LACT;
   assert.equal(q("mean"), 25);
   assert.equal(q("median"), 25);

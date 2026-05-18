@@ -1,11 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deriveItem } from "./engine.ts";
+import { deriveItem, type Event } from "./engine.ts";
 import { runQuery, type PopulationMember } from "./query.ts";
 import { FLAG_EC } from "./flags.ts";
 
 const CTX = { today: "2026-05-16" };
-const flag = (date: string, p: object) => ({
+const flag = (
+  date: string,
+  p: Record<string, unknown>,
+): Event => ({
   code: FLAG_EC,
   date,
   payload: p,
