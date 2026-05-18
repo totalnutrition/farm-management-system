@@ -113,6 +113,7 @@ export function HealthClient({
   const [tDrug, setTDrug] = useState("");
   const [tDate, setTDate] = useState(today());
   const [tDose, setTDose] = useState("");
+  const [tQty, setTQty] = useState("1");
 
   const saveClinical = (
     id: string,
@@ -139,10 +140,12 @@ export function HealthClient({
         drug: tDrug,
         date: tDate,
         dose: tDose || undefined,
+        qty: tQty ? Number(tQty) : undefined,
       });
       if (res.error) return void toast.error(res.error);
       toast.success(`Treated ${tAnimal} with ${tDrug}.`);
       setTDose("");
+      setTQty("1");
       router.refresh();
     });
 
@@ -188,6 +191,10 @@ export function HealthClient({
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium">Record treatment</h2>
+        <p className="text-[11px] text-muted-foreground">
+          Recording a treatment auto-deducts “Qty used” of the drug
+          from Supply Chain stock.
+        </p>
         <Card>
           <CardContent className="flex flex-wrap items-end gap-3 py-4">
             <div className="space-y-1">
@@ -247,6 +254,16 @@ export function HealthClient({
                 className="h-8 w-24 text-xs"
                 value={tDose}
                 onChange={(e) => setTDose(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Qty used</Label>
+              <Input
+                className="h-8 w-20 text-xs"
+                type="number"
+                value={tQty}
+                onChange={(e) => setTQty(e.target.value)}
+                placeholder="1"
               />
             </div>
             <Button

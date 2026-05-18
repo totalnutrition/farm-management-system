@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { PathHealth, PathSupply } from "@/lib/misc";
 import { TREAT_EC } from "@/lib/derive/health";
+import { applySupplyMovement } from "@/lib/supply-usage";
 
 type Result = { error?: string; success?: boolean };
 
@@ -72,6 +73,7 @@ const treatSchema = z.object({
   drug: z.string().trim().min(1),
   date: z.string().trim().min(1),
   dose: z.string().trim().optional(),
+  qty: z.coerce.number().positive().optional(),
 });
 
 export async function recordTreatment(
@@ -84,7 +86,7 @@ export async function recordTreatment(
   const parsed = treatSchema.safeParse(input);
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
-  const { animalId, drug, date, dose } = parsed.data;
+  const { animalId, drug, date, dose, qty } = parsed.data;
 
   const admin = createAdminClient();
   const { data: animal } = await admin
@@ -123,6 +125,18 @@ export async function recordTreatment(
     created_by: user.id,
   });
   if (error) return { error: error.message };
+
+  // Auto-deduct the drug from Supply Chain stock so on-hand stays
+  // correct without a second manual entry. Defaults to 1 unit.
+  await applySupplyMovement(admin, orgId, {
+    itemName: drug,
+    qty: qty ?? 1,
+    date,
+    direction: "use",
+    ref: { treatment_animal: animalId },
+  });
+
   revalidatePath(PathHealth);
+  revalidatePath(PathSupply);
   return { success: true };
 }
