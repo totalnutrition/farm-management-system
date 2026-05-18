@@ -5,9 +5,101 @@
 // primary action — stock simply isn't moved.
 
 import type { createAdminClient } from "@/lib/supabase-admin";
-import { SUBJECT_ITEM, EC_USAGE, EC_RECEIVE } from "@/lib/supply";
+import {
+  SUBJECT_ITEM,
+  EC_USAGE,
+  EC_RECEIVE,
+  MOVE_CODES,
+  CODE_KIND,
+  signedQty,
+} from "@/lib/supply";
 
 type Admin = ReturnType<typeof createAdminClient>;
+
+export type SupplyNeed = { itemName: string; qty: number };
+export type Shortage = {
+  itemName: string;
+  need: number;
+  onHand: number;
+};
+
+// Batch negative-stock guard. Aggregates needs by item, computes
+// each item's current on-hand from its movement ledger, and reports
+// any item that would go below zero. Items with no matching Supply
+// subject are ignored (not tracked) — only real shortages block.
+export async function checkSupplyShortages(
+  admin: Admin,
+  orgId: string,
+  needs: SupplyNeed[],
+): Promise<Shortage[]> {
+  const want = new Map<string, number>();
+  for (const n of needs) {
+    const q = Math.abs(n.qty);
+    if (!n.itemName || q <= 0) continue;
+    want.set(n.itemName, (want.get(n.itemName) ?? 0) + q);
+  }
+  if (want.size === 0) return [];
+
+  const names = [...want.keys()];
+  const { data: items } = await admin
+    .from("subjects")
+    .select("id, natural_key")
+    .eq("organization_id", orgId)
+    .eq("subject_type", SUBJECT_ITEM)
+    .in("natural_key", names);
+  if (!items || items.length === 0) return [];
+
+  const idToName = new Map(items.map((i) => [i.id, i.natural_key]));
+  const { data: evs } = await admin
+    .from("events")
+    .select("subject_id, event_code, payload")
+    .eq("organization_id", orgId)
+    .in("event_code", MOVE_CODES)
+    .in(
+      "subject_id",
+      items.map((i) => i.id),
+    );
+
+  const onHand = new Map<string, number>();
+  for (const e of evs ?? []) {
+    const name = idToName.get(e.subject_id);
+    if (!name) continue;
+    const kind = CODE_KIND[e.event_code];
+    if (!kind) continue;
+    const p = (e.payload ?? {}) as Record<string, unknown>;
+    const q = typeof p.qty === "number" ? p.qty : 0;
+    onHand.set(name, (onHand.get(name) ?? 0) + signedQty(kind, q));
+  }
+
+  const shortages: Shortage[] = [];
+  for (const [itemName, need] of want) {
+    if (!idToName.size) break;
+    const have = onHand.get(itemName);
+    // Only items that actually exist as Supply subjects are guarded.
+    if (!items.some((i) => i.natural_key === itemName)) continue;
+    const cur = have ?? 0;
+    if (cur < need)
+      shortages.push({
+        itemName,
+        need: Math.round(need * 100) / 100,
+        onHand: Math.round(cur * 100) / 100,
+      });
+  }
+  return shortages;
+}
+
+export function shortageMessage(shortages: Shortage[]): string {
+  return (
+    "Insufficient stock: " +
+    shortages
+      .map(
+        (s) =>
+          `${s.itemName} (need ${s.need}, have ${s.onHand})`,
+      )
+      .join("; ") +
+    ". Add a Supply Chain receipt first."
+  );
+}
 
 export async function applySupplyMovement(
   admin: Admin,

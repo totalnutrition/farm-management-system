@@ -8,7 +8,11 @@ import { PathRecords, PathSupply } from "@/lib/misc";
 import { planSeed } from "@/lib/derive/intake";
 import { MILK_EC } from "@/lib/derive/production";
 import { EC } from "@/lib/derive/engine";
-import { applySupplyMovement } from "@/lib/supply-usage";
+import {
+  applySupplyMovement,
+  checkSupplyShortages,
+  shortageMessage,
+} from "@/lib/supply-usage";
 
 type Result = { error?: string; success?: boolean };
 
@@ -130,6 +134,14 @@ export async function recordEvent(
   if (sErr) return { error: sErr.message };
   if (!subj) return { error: "Animal not found." };
 
+  const matQty = materialQty ?? 1;
+  if (isBreeding && material) {
+    const short = await checkSupplyShortages(admin, orgId, [
+      { itemName: material, qty: matQty },
+    ]);
+    if (short.length) return { error: shortageMessage(short) };
+  }
+
   const { error } = await admin.from("events").insert({
     organization_id: orgId,
     subject_id: subjectId,
@@ -137,7 +149,7 @@ export async function recordEvent(
     event_date: eventDate,
     remark: remark || null,
     payload:
-      isBreeding && material ? { sire: material, qty: materialQty ?? 1 } : {},
+      isBreeding && material ? { sire: material, qty: matQty } : {},
     source: "user",
     created_by: user.id,
   });
@@ -147,7 +159,7 @@ export async function recordEvent(
   if (isBreeding && material) {
     await applySupplyMovement(admin, orgId, {
       itemName: material,
-      qty: materialQty ?? 1,
+      qty: matQty,
       date: eventDate,
       direction: "use",
       ref: { breeding_animal: subjectId },

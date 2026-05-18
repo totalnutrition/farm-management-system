@@ -6,7 +6,11 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { PathHealth, PathSupply } from "@/lib/misc";
 import { TREAT_EC } from "@/lib/derive/health";
-import { applySupplyMovement } from "@/lib/supply-usage";
+import {
+  applySupplyMovement,
+  checkSupplyShortages,
+  shortageMessage,
+} from "@/lib/supply-usage";
 
 type Result = { error?: string; success?: boolean };
 
@@ -110,6 +114,12 @@ export async function recordTreatment(
   const milkDays = typeof a.milk_days === "number" ? a.milk_days : 0;
   const meatDays = typeof a.meat_days === "number" ? a.meat_days : 0;
 
+  const need = qty ?? 1;
+  const short = await checkSupplyShortages(admin, orgId, [
+    { itemName: drug, qty: need },
+  ]);
+  if (short.length) return { error: shortageMessage(short) };
+
   const { error } = await admin.from("events").insert({
     organization_id: orgId,
     subject_id: animal.id,
@@ -130,7 +140,7 @@ export async function recordTreatment(
   // correct without a second manual entry. Defaults to 1 unit.
   await applySupplyMovement(admin, orgId, {
     itemName: drug,
-    qty: qty ?? 1,
+    qty: need,
     date,
     direction: "use",
     ref: { treatment_animal: animalId },

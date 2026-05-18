@@ -7,7 +7,11 @@ import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { PathFeed, PathSupply } from "@/lib/misc";
 import { FEED_EC } from "@/lib/derive/feed";
 import { computeRation, type Material } from "@/lib/derive/ration";
-import { applySupplyMovement } from "@/lib/supply-usage";
+import {
+  applySupplyMovement,
+  checkSupplyShortages,
+  shortageMessage,
+} from "@/lib/supply-usage";
 
 type Result = { error?: string; success?: boolean };
 
@@ -202,28 +206,14 @@ export async function recordFeeding(
       ? ((rn.attrs as Record<string, unknown>).cost_per_kg as number)
       : 0;
 
-  const { error } = await admin.from("events").insert({
-    organization_id: orgId,
-    subject_id: pen.id,
-    event_code: FEED_EC,
-    event_date: date,
-    payload: {
-      ration,
-      kg,
-      refused: refusedKg ?? 0,
-      cost: Math.round(kg * costPerKg * 100) / 100,
-    },
-    source: "user",
-    created_by: user.id,
-  });
-  if (error) return { error: error.message };
-
-  // Auto-deduct each ingredient from Supply Chain stock. The recipe
-  // is on a DM basis; convert to as-fed proportions to split the
-  // delivered kg across materials. Best-effort and name-matched —
-  // ingredients without a Supply item are simply not tracked.
+  // Expand the ration to per-ingredient as-fed kg BEFORE writing
+  // anything, so a stock shortage blocks the whole feeding. The
+  // recipe is DM-basis; convert to as-fed proportions and split the
+  // delivered kg. Name-matched and best-effort — ingredients with
+  // no Supply item are untracked (and never block).
   const recipe = ((rn.attrs as Record<string, unknown>)?.recipe ??
     []) as Array<{ material: string; dmKg: number }>;
+  let deductions: Array<{ material: string; qty: number }> = [];
   if (recipe.length) {
     const names = recipe.map((r) => r.material);
     const { data: matRows } = await admin
@@ -245,19 +235,48 @@ export async function recordFeeding(
       w: r.dmKg / ((dmPctOf.get(r.material) ?? 100) / 100),
     }));
     const total = asFed.reduce((s, x) => s + x.w, 0);
-    if (total > 0) {
-      for (const x of asFed) {
-        await applySupplyMovement(admin, orgId, {
-          itemName: x.material,
-          qty: (kg * x.w) / total,
-          date,
-          direction: "use",
-          ref: { feed_pen: penNo, ration },
-        });
-      }
-      revalidatePath(PathSupply);
-    }
+    if (total > 0)
+      deductions = asFed.map((x) => ({
+        material: x.material,
+        qty: (kg * x.w) / total,
+      }));
   }
+
+  if (deductions.length) {
+    const short = await checkSupplyShortages(
+      admin,
+      orgId,
+      deductions.map((d) => ({ itemName: d.material, qty: d.qty })),
+    );
+    if (short.length) return { error: shortageMessage(short) };
+  }
+
+  const { error } = await admin.from("events").insert({
+    organization_id: orgId,
+    subject_id: pen.id,
+    event_code: FEED_EC,
+    event_date: date,
+    payload: {
+      ration,
+      kg,
+      refused: refusedKg ?? 0,
+      cost: Math.round(kg * costPerKg * 100) / 100,
+    },
+    source: "user",
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+
+  for (const d of deductions) {
+    await applySupplyMovement(admin, orgId, {
+      itemName: d.material,
+      qty: d.qty,
+      date,
+      direction: "use",
+      ref: { feed_pen: penNo, ration },
+    });
+  }
+  if (deductions.length) revalidatePath(PathSupply);
 
   revalidatePath(PathFeed);
   return { success: true };
