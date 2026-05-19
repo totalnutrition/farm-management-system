@@ -137,7 +137,9 @@ export function GroupingClient({
     start(async () => {
       const res = await installGroupingPresets();
       if (res.error) return void toast.error(res.error);
-      toast.success("Standard strategy installed — now map each group.");
+      toast.success(
+        "Standard strategy applied — rules refreshed (pen mappings kept).",
+      );
       router.refresh();
     });
 
@@ -161,7 +163,7 @@ export function GroupingClient({
             disabled={pending}
             onClick={installPresets}
           >
-            Install standard strategy
+            Install / reset standard strategy
           </Button>
         </div>
 

@@ -295,6 +295,12 @@ const STANDARD_GROUPS: { name: string; when: unknown[][] }[] = [
   },
 ];
 
+// Install OR refresh the standard strategy. Groups that already exist
+// by name have their rule + order corrected to the canonical
+// definition (their pen mapping is preserved); missing ones are
+// added. User-created non-standard groups are left untouched. This
+// is how corrections to the strategy actually reach an org that
+// installed an earlier version.
 export async function installGroupingPresets(): Promise<Result> {
   const user = await requireAnyRole(["super_admin", "admin"]);
   const orgId = getOrganizationIdFromUser(user);
@@ -303,26 +309,47 @@ export async function installGroupingPresets(): Promise<Result> {
   const admin = createAdminClient();
   const { data: existing } = await admin
     .from("grouping_rules")
-    .select("name, ordinal")
+    .select("id, name, ordinal")
     .eq("organization_id", orgId);
-  const have = new Set((existing ?? []).map((r) => r.name));
-  let ordinal = Math.max(0, ...(existing ?? []).map((r) => r.ordinal));
-
-  const rows = STANDARD_GROUPS.filter((r) => !have.has(r.name)).map(
-    (r) => ({
-      organization_id: orgId,
-      ordinal: ++ordinal,
-      name: r.name,
-      predicate: r.when,
-      target_pen: null,
-      split: null,
-      placement: { kind: "none" },
-      created_by: user.id,
-    }),
+  const byName = new Map(
+    (existing ?? []).map((r) => [r.name, r] as const),
   );
-  if (rows.length) {
-    const { error } = await admin.from("grouping_rules").insert(rows);
-    if (error) return { error: error.message };
+  const stdNames = new Set(STANDARD_GROUPS.map((r) => r.name));
+  // Non-standard user groups keep evaluating after the standard set.
+  let tail = STANDARD_GROUPS.length;
+  for (const r of existing ?? []) {
+    if (!stdNames.has(r.name)) {
+      await admin
+        .from("grouping_rules")
+        .update({ ordinal: ++tail })
+        .eq("id", r.id)
+        .eq("organization_id", orgId);
+    }
+  }
+
+  for (let i = 0; i < STANDARD_GROUPS.length; i++) {
+    const g = STANDARD_GROUPS[i];
+    const cur = byName.get(g.name);
+    if (cur) {
+      const { error } = await admin
+        .from("grouping_rules")
+        .update({ predicate: g.when, ordinal: i + 1 })
+        .eq("id", cur.id)
+        .eq("organization_id", orgId);
+      if (error) return { error: error.message };
+    } else {
+      const { error } = await admin.from("grouping_rules").insert({
+        organization_id: orgId,
+        ordinal: i + 1,
+        name: g.name,
+        predicate: g.when,
+        target_pen: null,
+        split: null,
+        placement: { kind: "none" },
+        created_by: user.id,
+      });
+      if (error) return { error: error.message };
+    }
   }
 
   revalidatePath(PathHousing);
