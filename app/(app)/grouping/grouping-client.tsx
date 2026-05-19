@@ -128,12 +128,13 @@ export function GroupingClient({
       router.refresh();
     });
 
+  const [preset, setPreset] = useState("3tier");
   const installPresets = () =>
     start(async () => {
-      const res = await installGroupingPresets();
+      const res = await installGroupingPresets(preset);
       if (res.error) return void toast.error(res.error);
       toast.success(
-        "Standard strategy applied — rules refreshed (pen mappings kept).",
+        "Strategy applied — rules set (pen mappings kept, custom groups untouched).",
       );
       router.refresh();
     });
@@ -152,14 +153,32 @@ export function GroupingClient({
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium">Groups</h2>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={pending}
-            onClick={installPresets}
-          >
-            Install / reset standard strategy
-          </Button>
+          <div className="flex items-center gap-2">
+            <Select value={preset} onValueChange={setPreset}>
+              <SelectTrigger className="h-8 w-[230px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="2tier">
+                  2-tier (High / Low)
+                </SelectItem>
+                <SelectItem value="3tier">
+                  3-tier (High / Mid / Low / Late)
+                </SelectItem>
+                <SelectItem value="4tier">
+                  4-tier (1st-lact × mature, High / Low)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={installPresets}
+            >
+              Apply strategy
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-xs">

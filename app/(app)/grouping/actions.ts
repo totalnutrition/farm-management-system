@@ -219,18 +219,27 @@ const cmp = (item: string, op: string, value: number | string) => ({
   value,
 });
 
-// Full-herd STRATEGY. Groups are listed MOST-SPECIFIC FIRST; priority
-// (#) resolves the intentional nesting (triage-style), so each animal
-// is assigned to exactly one group. Two genuine overrides lead (Sold/
-// dead, Hospital). Every tier ends in a broad catch so no animal is
-// lost for want of a secondary date — the catch groups also NAME the
-// data gap (no due date / no fresh date) so it's actionable instead
-// of "ungrouped". Derived items only; nothing moves until mapped.
-const STANDARD_GROUPS: { name: string; when: unknown[][] }[] = [
-  // — overrides —
+// Full-herd STRATEGY, composed from farm-standard segments and a
+// pickable milking-tier system. Groups are MOST-SPECIFIC FIRST;
+// priority (#) resolves the intentional nesting so each animal is
+// assigned to exactly one group. Overrides lead (Sold/dead,
+// Hospital); every tier ends in a broad catch that NAMES the data
+// gap (no due/fresh date) so nothing is silently dropped. Derived
+// items only; nothing moves until mapped. All editable after.
+type Grp = { name: string; when: unknown[][] };
+const LACT1 = cmp("LACT", ">=", 1);
+const DIM22 = cmp("DIM", ">=", 22);
+type Atom = ReturnType<typeof cmp>;
+const band = (name: string, extra: Atom[]): Grp => ({
+  name,
+  when: [[LACT1, DIM22, ...extra]],
+});
+
+const OVERRIDES: Grp[] = [
   { name: "Sold / dead", when: [[cmp("RPRO", "=", "SLD/DIE")]] },
   { name: "Hospital", when: [[cmp("FLAGGED", "=", "YES")]] },
-  // — youngstock (specific → catch) —
+];
+const YOUNGSTOCK: Grp[] = [
   { name: "Bull calf", when: [[cmp("RPRO", "=", "BULLCAF")]] },
   {
     name: "Calf (pre-breeding)",
@@ -240,7 +249,6 @@ const STANDARD_GROUPS: { name: string; when: unknown[][] }[] = [
     name: "Breeding heifer",
     when: [[cmp("RPRO", "=", "VIRGIN"), cmp("AGE", ">=", 13)]],
   },
-  // catches virgins with no birth date (AGE null)
   { name: "Heifer (maiden)", when: [[cmp("RPRO", "=", "VIRGIN")]] },
   {
     name: "Bred heifer",
@@ -250,81 +258,118 @@ const STANDARD_GROUPS: { name: string; when: unknown[][] }[] = [
     name: "Springing heifer",
     when: [[cmp("RPRO", "=", "PREG"), cmp("LACT", "=", 0)]],
   },
-  // — dry cows: close-up first, then ALL remaining dry —
+];
+const DRY: Grp[] = [
   {
     name: "Close-up",
     when: [[cmp("RPRO", "=", "DRY"), cmp("DUE", "<=", 21)]],
   },
   { name: "Far-off dry", when: [[cmp("RPRO", "=", "DRY")]] },
-  // — milking string: DIM band + non-overlapping MILK bands —
-  {
-    name: "Fresh",
-    when: [[cmp("LACT", ">=", 1), cmp("DIM", "<=", 21)]],
-  },
-  {
-    name: "High",
-    when: [[cmp("LACT", ">=", 1), cmp("DIM", ">=", 22), cmp("MILK", ">=", 35)]],
-  },
-  {
-    name: "Mid",
-    when: [
-      [
-        cmp("LACT", ">=", 1),
-        cmp("DIM", ">=", 22),
-        cmp("MILK", ">=", 25),
-        cmp("MILK", "<", 35),
-      ],
-    ],
-  },
-  {
-    name: "Low",
-    when: [
-      [
-        cmp("LACT", ">=", 1),
-        cmp("DIM", ">=", 22),
-        cmp("MILK", ">=", 15),
-        cmp("MILK", "<", 25),
-      ],
-    ],
-  },
-  {
-    name: "Late lactation",
-    when: [
-      [cmp("LACT", ">=", 1), cmp("DIM", ">=", 22), cmp("MILK", "<", 15)],
-    ],
-  },
-  // final catch: lactating but missing a fresh date / milk reading —
-  // grouped and NAMED so the data gap is actionable, not dropped.
-  {
-    name: "Lactating — needs fresh/milk date",
-    when: [[cmp("LACT", ">=", 1)]],
-  },
 ];
+const FRESH: Grp = { name: "Fresh", when: [[LACT1, cmp("DIM", "<=", 21)]] };
+const LACT_CATCH: Grp = {
+  name: "Lactating — needs fresh/milk date",
+  when: [[LACT1]],
+};
 
-// Install OR refresh the standard strategy. Groups that already exist
-// by name have their rule + order corrected to the canonical
-// definition (their pen mapping is preserved); missing ones are
-// added. User-created non-standard groups are left untouched. This
-// is how corrections to the strategy actually reach an org that
-// installed an earlier version.
-export async function installGroupingPresets(): Promise<Result> {
+// Milking-tier systems (extension-standard; DC/BoviSync treat pens as
+// farm-defined functions, not a fixed ladder — so these are starting
+// points, fully editable).
+const MILK_TIERS: Record<string, Grp[]> = {
+  "2tier": [
+    band("High", [cmp("MILK", ">=", 30)]),
+    band("Low", [cmp("MILK", "<", 30)]),
+  ],
+  "3tier": [
+    band("High", [cmp("MILK", ">=", 35)]),
+    band("Mid", [cmp("MILK", ">=", 25), cmp("MILK", "<", 35)]),
+    band("Low", [cmp("MILK", ">=", 15), cmp("MILK", "<", 25)]),
+    band("Late lactation", [cmp("MILK", "<", 15)]),
+  ],
+  "4tier": [
+    {
+      name: "1st-lact High",
+      when: [[cmp("LACT", "=", 1), DIM22, cmp("MILK", ">=", 30)]],
+    },
+    {
+      name: "1st-lact Low",
+      when: [[cmp("LACT", "=", 1), DIM22, cmp("MILK", "<", 30)]],
+    },
+    {
+      name: "Mature High",
+      when: [[cmp("LACT", ">=", 2), DIM22, cmp("MILK", ">=", 35)]],
+    },
+    {
+      name: "Mature Low",
+      when: [[cmp("LACT", ">=", 2), DIM22, cmp("MILK", "<", 35)]],
+    },
+  ],
+};
+
+const STRATEGY_KEYS = ["2tier", "3tier", "4tier"] as const;
+type StrategyKey = (typeof STRATEGY_KEYS)[number];
+
+function buildStrategy(preset: StrategyKey): Grp[] {
+  return [
+    ...OVERRIDES,
+    ...YOUNGSTOCK,
+    ...DRY,
+    FRESH,
+    ...MILK_TIERS[preset],
+    LACT_CATCH,
+  ];
+}
+
+// Every name any preset can emit — lets a preset switch clear the
+// previous preset's milking groups without touching the farm's own
+// custom groups.
+const ALL_PRESET_NAMES = new Set<string>(
+  STRATEGY_KEYS.flatMap((p) => buildStrategy(p).map((g) => g.name)),
+);
+
+// Install / switch the standard strategy to a chosen tier system.
+// Existing groups keep their pen mapping (predicate + order corrected
+// in place); switching presets removes the OTHER presets' milking
+// groups; the farm's own custom groups are never touched.
+export async function installGroupingPresets(
+  presetInput: string = "3tier",
+): Promise<Result> {
   const user = await requireAnyRole(["super_admin", "admin"]);
   const orgId = getOrganizationIdFromUser(user);
   if (!orgId) return { error: "No organization on this account." };
+
+  const parsed = z.enum(STRATEGY_KEYS).safeParse(presetInput);
+  if (!parsed.success) return { error: "Unknown strategy." };
+  const groups = buildStrategy(parsed.data);
+  const chosen = new Set(groups.map((g) => g.name));
 
   const admin = createAdminClient();
   const { data: existing } = await admin
     .from("grouping_rules")
     .select("id, name, ordinal")
     .eq("organization_id", orgId);
-  const byName = new Map(
-    (existing ?? []).map((r) => [r.name, r] as const),
-  );
-  const stdNames = new Set(STANDARD_GROUPS.map((r) => r.name));
-  // Non-standard user groups keep evaluating after the standard set.
-  let tail = STANDARD_GROUPS.length;
+
+  // Drop standard groups that belong to a different preset.
   for (const r of existing ?? []) {
-    if (!stdNames.has(r.name)) {
+    if (ALL_PRESET_NAMES.has(r.name) && !chosen.has(r.name)) {
+      const { error } = await admin
+        .from("grouping_rules")
+        .delete()
+        .eq("id", r.id)
+        .eq("organization_id", orgId);
+      if (error) return { error: error.message };
+    }
+  }
+
+  const byName = new Map(
+    (existing ?? [])
+      .filter((r) => chosen.has(r.name))
+      .map((r) => [r.name, r] as const),
+  );
+  // The farm's own groups keep evaluating after the standard set.
+  let tail = groups.length;
+  for (const r of existing ?? []) {
+    if (!ALL_PRESET_NAMES.has(r.name)) {
       await admin
         .from("grouping_rules")
         .update({ ordinal: ++tail })
@@ -333,8 +378,8 @@ export async function installGroupingPresets(): Promise<Result> {
     }
   }
 
-  for (let i = 0; i < STANDARD_GROUPS.length; i++) {
-    const g = STANDARD_GROUPS[i];
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i];
     const cur = byName.get(g.name);
     if (cur) {
       const { error } = await admin
