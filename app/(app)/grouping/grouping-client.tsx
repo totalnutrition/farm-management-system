@@ -37,6 +37,8 @@ import {
   installGroupingPresets,
   setGroupPlacement,
   savePenCapacities,
+  seedDemoData,
+  clearDemoData,
 } from "./actions";
 
 export type RuleRow = {
@@ -145,6 +147,27 @@ export function GroupingClient({
       router.refresh();
     });
 
+  const fillDemo = () =>
+    start(async () => {
+      const res = await seedDemoData();
+      if (res.error) return void toast.error(res.error);
+      toast.success(res.info ?? "Demo data added.");
+      router.refresh();
+    });
+  const wipeDemo = () =>
+    start(async () => {
+      if (
+        !window.confirm(
+          "Remove ALL demo-tagged calving/milk/due data? Real records are untouched.",
+        )
+      )
+        return;
+      const res = await clearDemoData();
+      if (res.error) return void toast.error(res.error);
+      toast.success("Demo data cleared.");
+      router.refresh();
+    });
+
   const target = rules.find((r) => r.id === mapId) ?? null;
   const editTarget = rules.find((r) => r.id === editId) ?? null;
 
@@ -183,6 +206,24 @@ export function GroupingClient({
               onClick={installPresets}
             >
               Apply strategy
+            </Button>
+            <span className="mx-1 text-muted-foreground">|</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={pending}
+              onClick={fillDemo}
+              title="Backfill synthetic calving/milk/due dates for test herds (tagged, reversible)"
+            >
+              Fill demo data
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={pending}
+              onClick={wipeDemo}
+            >
+              Clear demo
             </Button>
           </div>
         </div>

@@ -5,8 +5,9 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { PathHousing } from "@/lib/misc";
+import { MILK_EC } from "@/lib/derive/production";
 
-type Result = { error?: string; success?: boolean };
+type Result = { error?: string; success?: boolean; info?: string };
 type Admin = ReturnType<typeof createAdminClient>;
 
 // Pens are now the farm's REAL pens (any name). A pen referenced by a
@@ -238,19 +239,16 @@ const band = (name: string, extra: Atom[]): Grp => ({
 const OVERRIDES: Grp[] = [
   { name: "Hospital", when: [[cmp("FLAGGED", "=", "YES")]] },
 ];
-// Open / growing youngstock (not yet pregnant).
+// Open / growing youngstock (not yet pregnant). Calf is the specific
+// case; Breeding heifer = every other virgin (incl. no birth date) —
+// no separate "maiden" term needed since Calf is matched first.
 const YOUNGSTOCK: Grp[] = [
   { name: "Bull calf", when: [[cmp("RPRO", "=", "BULLCAF")]] },
   {
     name: "Calf (pre-breeding)",
     when: [[cmp("RPRO", "=", "VIRGIN"), cmp("AGE", "<=", 12)]],
   },
-  {
-    name: "Breeding heifer",
-    when: [[cmp("RPRO", "=", "VIRGIN"), cmp("AGE", ">=", 13)]],
-  },
-  // catches virgins with no birth date (AGE null)
-  { name: "Heifer (maiden)", when: [[cmp("RPRO", "=", "VIRGIN")]] },
+  { name: "Breeding heifer", when: [[cmp("RPRO", "=", "VIRGIN")]] },
 ];
 // Pre-calving, ONE vocabulary: Close-up (≤21d to due) split by parity,
 // then a Far-off catch for every other pregnant animal (heifer = BRED
@@ -516,6 +514,139 @@ export async function moveAnimal(
     .eq("id", subjectId)
     .eq("organization_id", orgId);
   if (error) return { error: error.message };
+
+  revalidatePath(PathHousing);
+  return { success: true };
+}
+
+// ── Demo / test data ────────────────────────────────────────────────
+// Backfill synthetic dates so a test herd actually populates the
+// strategy. EVERYTHING written here is tagged (event payload.demo or
+// attrs.demo_due) so clearDemoData removes it cleanly — never run on
+// a real herd. FRESH event_code = 1, MILK = 201.
+const DAY = 86_400_000;
+const isoShift = (days: number) =>
+  new Date(Date.now() + days * DAY).toISOString().slice(0, 10);
+const rnd = (a: number, b: number) =>
+  a + Math.floor(Math.random() * (b - a + 1));
+function milkForDim(dim: number): number {
+  const base = dim < 55 ? 16 + dim * 0.5 : 44 - (dim - 55) * 0.07;
+  return Math.max(6, Math.min(48, Math.round(base + rnd(-4, 4))));
+}
+
+export async function seedDemoData(): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+
+  const admin = createAdminClient();
+  const { data: subs } = await admin
+    .from("subjects")
+    .select("id, attrs")
+    .eq("organization_id", orgId)
+    .eq("subject_type", "animal");
+  if (!subs?.length) return { error: "No animals to seed." };
+
+  const ids = subs.map((s) => s.id);
+  const { data: evs } = await admin
+    .from("events")
+    .select("subject_id, event_code")
+    .eq("organization_id", orgId)
+    .in("subject_id", ids);
+  const codesBy = new Map<string, Set<number>>();
+  for (const e of evs ?? []) {
+    const set = codesBy.get(e.subject_id) ?? new Set<number>();
+    set.add(e.event_code);
+    codesBy.set(e.subject_id, set);
+  }
+
+  const today = isoShift(0);
+  const newEvents: Record<string, unknown>[] = [];
+  let freshed = 0;
+  let dued = 0;
+  for (const s of subs) {
+    const a = (s.attrs ?? {}) as Record<string, unknown>;
+    const codes = codesBy.get(s.id) ?? new Set<number>();
+    const baseLact =
+      typeof a.base_lactation === "number" ? a.base_lactation : 0;
+
+    if (baseLact >= 1 && !codes.has(1)) {
+      const dim = rnd(4, 400);
+      newEvents.push({
+        organization_id: orgId,
+        subject_id: s.id,
+        event_code: 1,
+        event_date: isoShift(-dim),
+        payload: { demo: true },
+        source: "system",
+        created_by: user.id,
+      });
+      newEvents.push({
+        organization_id: orgId,
+        subject_id: s.id,
+        event_code: MILK_EC,
+        event_date: today,
+        payload: { yield: milkForDim(dim), demo: true },
+        source: "system",
+        created_by: user.id,
+      });
+      freshed++;
+    }
+
+    const pregnant = codes.has(5) || codes.has(11);
+    if (pregnant && !a.due_date) {
+      await admin
+        .from("subjects")
+        .update({
+          attrs: { ...a, due_date: isoShift(rnd(3, 70)), demo_due: true },
+        })
+        .eq("id", s.id)
+        .eq("organization_id", orgId);
+      dued++;
+    }
+  }
+
+  if (newEvents.length) {
+    const { error } = await admin.from("events").insert(newEvents);
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath(PathHousing);
+  return {
+    success: true,
+    info: `${freshed} calving dates + milk, ${dued} due dates added.`,
+  };
+}
+
+export async function clearDemoData(): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+
+  const admin = createAdminClient();
+  const { error: eErr } = await admin
+    .from("events")
+    .delete()
+    .eq("organization_id", orgId)
+    .eq("payload->>demo", "true");
+  if (eErr) return { error: eErr.message };
+
+  const { data: subs } = await admin
+    .from("subjects")
+    .select("id, attrs")
+    .eq("organization_id", orgId)
+    .eq("subject_type", "animal")
+    .eq("attrs->>demo_due", "true");
+  for (const s of subs ?? []) {
+    const a = (s.attrs ?? {}) as Record<string, unknown>;
+    delete a.due_date;
+    delete a.demo_due;
+    await admin
+      .from("subjects")
+      .update({ attrs: a })
+      .eq("id", s.id)
+      .eq("organization_id", orgId);
+  }
 
   revalidatePath(PathHousing);
   return { success: true };
