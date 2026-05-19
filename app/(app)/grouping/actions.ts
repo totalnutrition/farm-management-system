@@ -219,17 +219,18 @@ const cmp = (item: string, op: string, value: number | string) => ({
   value,
 });
 
-// Full-herd STRATEGY. Designed so each group's rule is SELF-CONTAINED
-// (mutually exclusive bands) — an animal lands in exactly one group by
-// its own definition, so evaluation order is irrelevant for the herd
-// groups. Only two genuine "overrides" sit on top by design: Sold/dead
-// (exit) and Hospital (a flagged animal is pulled regardless of where
-// she'd otherwise sit). Derived items only; nothing moves until mapped.
+// Full-herd STRATEGY. Groups are listed MOST-SPECIFIC FIRST; priority
+// (#) resolves the intentional nesting (triage-style), so each animal
+// is assigned to exactly one group. Two genuine overrides lead (Sold/
+// dead, Hospital). Every tier ends in a broad catch so no animal is
+// lost for want of a secondary date — the catch groups also NAME the
+// data gap (no due date / no fresh date) so it's actionable instead
+// of "ungrouped". Derived items only; nothing moves until mapped.
 const STANDARD_GROUPS: { name: string; when: unknown[][] }[] = [
-  // — overrides (intentionally take precedence) —
+  // — overrides —
   { name: "Sold / dead", when: [[cmp("RPRO", "=", "SLD/DIE")]] },
   { name: "Hospital", when: [[cmp("FLAGGED", "=", "YES")]] },
-  // — youngstock (mutually exclusive) —
+  // — youngstock (specific → catch) —
   { name: "Bull calf", when: [[cmp("RPRO", "=", "BULLCAF")]] },
   {
     name: "Calf (pre-breeding)",
@@ -239,6 +240,8 @@ const STANDARD_GROUPS: { name: string; when: unknown[][] }[] = [
     name: "Breeding heifer",
     when: [[cmp("RPRO", "=", "VIRGIN"), cmp("AGE", ">=", 13)]],
   },
+  // catches virgins with no birth date (AGE null)
+  { name: "Heifer (maiden)", when: [[cmp("RPRO", "=", "VIRGIN")]] },
   {
     name: "Bred heifer",
     when: [[cmp("RPRO", "=", "BRED"), cmp("LACT", "=", 0)]],
@@ -247,15 +250,12 @@ const STANDARD_GROUPS: { name: string; when: unknown[][] }[] = [
     name: "Springing heifer",
     when: [[cmp("RPRO", "=", "PREG"), cmp("LACT", "=", 0)]],
   },
-  // — dry cows (split by days-to-due, no overlap) —
+  // — dry cows: close-up first, then ALL remaining dry —
   {
     name: "Close-up",
     when: [[cmp("RPRO", "=", "DRY"), cmp("DUE", "<=", 21)]],
   },
-  {
-    name: "Far-off dry",
-    when: [[cmp("RPRO", "=", "DRY"), cmp("DUE", ">", 21)]],
-  },
+  { name: "Far-off dry", when: [[cmp("RPRO", "=", "DRY")]] },
   // — milking string: DIM band + non-overlapping MILK bands —
   {
     name: "Fresh",
@@ -292,6 +292,12 @@ const STANDARD_GROUPS: { name: string; when: unknown[][] }[] = [
     when: [
       [cmp("LACT", ">=", 1), cmp("DIM", ">=", 22), cmp("MILK", "<", 15)],
     ],
+  },
+  // final catch: lactating but missing a fresh date / milk reading —
+  // grouped and NAMED so the data gap is actionable, not dropped.
+  {
+    name: "Lactating — needs fresh/milk date",
+    when: [[cmp("LACT", ">=", 1)]],
   },
 ];
 

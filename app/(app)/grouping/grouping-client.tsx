@@ -73,12 +73,7 @@ export function GroupingClient({
   worklist: Move[];
   pens: PenOption[];
   unmapped: string[];
-  recon: {
-    total: number;
-    grouped: number;
-    ungrouped: string[];
-    overlap: { id: string; groups: string[] }[];
-  };
+  recon: { total: number; grouped: number; ungrouped: string[] };
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -206,42 +201,14 @@ export function GroupingClient({
               )
             </span>
           )}
-          <span className="text-muted-foreground">·</span>
-          <span>
-            <span
-              className={
-                "font-semibold " +
-                (recon.overlap.length
-                  ? "text-destructive"
-                  : "text-muted-foreground")
-              }
-            >
-              {recon.overlap.length}
-            </span>{" "}
-            in more than one
-          </span>
-          {recon.overlap.length > 0 && (
-            <span
-              className="text-destructive"
-              title={recon.overlap
-                .map((o) => `${o.id}: ${o.groups.join(" / ")}`)
-                .join("\n")}
-            >
-              ({recon.overlap[0].id}: {recon.overlap[0].groups.join(" / ")}
-              {recon.overlap.length > 1
-                ? `, +${recon.overlap.length - 1} more`
-                : ""}
-              )
-            </span>
-          )}
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Each group’s rule is self-contained, so an animal lands in
-          exactly one group. Priority (the #) only decides the two
-          overrides — “Sold / dead” and “Hospital” — which pull an
-          animal out regardless of where she’d otherwise sit. If
-          “in more than one” is above zero, two rules overlap and need
-          tightening.
+          Groups are listed most-specific first; priority (the #)
+          assigns each animal to exactly one — the first it matches.
+          Each tier ends in a broad catch (e.g. “Far-off dry”,
+          “Lactating — needs fresh/milk date”) that also names a data
+          gap, so nothing is silently dropped. Anything still “not in
+          any group” is a genuine coverage gap worth a look.
         </p>
 
         {unmapped.length > 0 && (
