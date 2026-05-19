@@ -83,12 +83,20 @@ export default async function RecordsPage() {
     <div className="flex flex-col gap-4 py-4">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="font-heading text-lg font-medium">Animals</h1>
+          <h1 className="font-heading text-lg font-medium">Herd</h1>
           <p className="text-xs text-muted-foreground">
             Every animal — current state is derived from its event history.
           </p>
         </div>
-        <AddAnimal />
+        <div className="flex items-center gap-2">
+          <Link
+            href="/import"
+            className="rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+          >
+            Bulk import
+          </Link>
+          <AddAnimal />
+        </div>
       </header>
 
       {rows.length === 0 ? (

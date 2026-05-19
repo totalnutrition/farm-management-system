@@ -7,8 +7,8 @@ import { useTheme } from "next-themes"
 import { FarmInsightLogo } from "./farminsight-logo"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { logout } from "@/app/logout/actions"
-import { PathAdminOrganizations, PathAdminUsers, PathHome, PathQuery, PathRecords, PathEnter, PathViews, PathHousing, PathBreeding, PathFeed, PathSettings, PathAudit, PathSharing, PathExtended, PathImport, PathHealth, PathActivity, PathProjection, PathSupply, RolesAll, RolesAdmin } from "@/lib/misc"
-import { Building03Icon, ChartIncreaseIcon, ClipboardIcon, Dna01Icon, DeliveryBox01Icon, FileImportIcon, FirstAidKitIcon, Home03Icon, Layers01Icon, Moon02Icon, Search01Icon, Settings01Icon, Sun, Time01Icon, User, UserGroupIcon, ViewIcon, WheatIcon } from "@hugeicons/core-free-icons"
+import { PathAdminOrganizations, PathAdminUsers, PathHome, PathQuery, PathRecords, PathEnter, PathViews, PathHousing, PathBreeding, PathFeed, PathSettings, PathAudit, PathSharing, PathExtended, PathHealth, PathActivity, PathProjection, PathSupply, RolesAll, RolesAdmin } from "@/lib/misc"
+import { Building03Icon, ChartIncreaseIcon, ClipboardIcon, Dna01Icon, DeliveryBox01Icon, FirstAidKitIcon, Home03Icon, Layers01Icon, Moon02Icon, Search01Icon, Settings01Icon, Sun, Time01Icon, User, UserGroupIcon, ViewIcon, WheatIcon } from "@hugeicons/core-free-icons"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu"
 
@@ -23,7 +23,7 @@ const MENU = [
     label: "Herd",
     links: [
       { name: "Query", icon: Search01Icon, link: PathQuery, roles: RolesAll },
-      { name: "Animals", icon: ClipboardIcon, link: PathRecords, roles: RolesAll },
+      { name: "Herd", icon: ClipboardIcon, link: PathRecords, roles: RolesAll },
       { name: "Enter", icon: ClipboardIcon, link: PathEnter, roles: RolesAdmin },
       { name: "Housing", icon: Home03Icon, link: PathHousing, roles: RolesAll },
       { name: "Breeding", icon: Dna01Icon, link: PathBreeding, roles: RolesAll },
@@ -32,7 +32,6 @@ const MENU = [
       { name: "Feed", icon: WheatIcon, link: PathFeed, roles: RolesAll },
       { name: "Projection", icon: ChartIncreaseIcon, link: PathProjection, roles: RolesAll },
       { name: "Views", icon: ViewIcon, link: PathViews, roles: RolesAll },
-      { name: "Bulk Import", icon: FileImportIcon, link: PathImport, roles: RolesAdmin },
       { name: "Extended Services", icon: Layers01Icon, link: PathExtended, roles: RolesAll }
     ],
     roles: RolesAll

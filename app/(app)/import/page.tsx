@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireAnyRole } from "@/lib/supabase-auth";
 import { ImportClient } from "./import-client";
 
@@ -8,6 +9,12 @@ export default async function ImportPage() {
   await requireAnyRole(["super_admin", "admin"]);
   return (
     <div className="flex flex-col gap-4 py-4">
+      <Link
+        href="/records"
+        className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+      >
+        ← Herd
+      </Link>
       <header>
         <h1 className="font-heading text-lg font-medium">Bulk Import</h1>
         <p className="text-xs text-muted-foreground">
