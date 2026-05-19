@@ -73,7 +73,13 @@ export function GroupingClient({
   worklist: Move[];
   pens: PenOption[];
   unmapped: string[];
-  recon: { total: number; grouped: number; ungrouped: string[] };
+  recon: {
+    total: number;
+    grouped: number;
+    exited: string[];
+    needsFresh: string[];
+    other: string[];
+  };
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -181,53 +187,68 @@ export function GroupingClient({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-xs">
-          <span>
-            <span className="font-semibold">{recon.total}</span> animals
-            in data
-          </span>
-          <span className="text-muted-foreground">·</span>
-          <span>
-            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-              {recon.grouped}
-            </span>{" "}
-            grouped
-          </span>
-          <span className="text-muted-foreground">·</span>
-          <span>
-            <span
-              className={
-                "font-semibold " +
-                (recon.ungrouped.length
-                  ? "text-destructive"
-                  : "text-muted-foreground")
-              }
-            >
-              {recon.ungrouped.length}
-            </span>{" "}
-            not in any group
-          </span>
-          {recon.ungrouped.length > 0 && (
-            <span
-              className="text-muted-foreground"
-              title={recon.ungrouped.join(", ")}
-            >
-              (
-              {recon.ungrouped.slice(0, 12).join(", ")}
-              {recon.ungrouped.length > 12
-                ? `, +${recon.ungrouped.length - 12} more`
-                : ""}
-              )
+        <div className="space-y-1.5 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span>
+              <span className="font-semibold">{recon.total}</span>{" "}
+              animals
             </span>
-          )}
+            <span className="text-muted-foreground">·</span>
+            <span>
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                {recon.grouped}
+              </span>{" "}
+              in a pen group
+            </span>
+          </div>
+          {(() => {
+            const buckets: [string, string[], string][] = [
+              ["Need a calving date", recon.needsFresh, "text-amber-600 dark:text-amber-400"],
+              ["Exited (sold/dead)", recon.exited, "text-muted-foreground"],
+              ["Uncovered — review", recon.other, "text-destructive"],
+            ];
+            const active = buckets.filter(([, ids]) => ids.length);
+            if (!active.length)
+              return (
+                <p className="text-muted-foreground">
+                  Reconciled — every active animal is in exactly one
+                  pen group.
+                </p>
+              );
+            return (
+              <div className="space-y-1">
+                <p className="text-muted-foreground">
+                  Not penned (worklist, not groups):
+                </p>
+                {active.map(([label, ids, cls]) => (
+                  <div key={label} className="flex flex-wrap gap-x-2">
+                    <span className={"font-semibold " + cls}>
+                      {ids.length}
+                    </span>
+                    <span>{label}</span>
+                    <span
+                      className="text-muted-foreground"
+                      title={ids.join(", ")}
+                    >
+                      ({ids.slice(0, 10).join(", ")}
+                      {ids.length > 10
+                        ? `, +${ids.length - 10} more`
+                        : ""}
+                      )
+                    </span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Groups are listed most-specific first; priority (the #)
-          assigns each animal to exactly one — the first it matches.
-          Each tier ends in a broad catch (e.g. “Far-off dry”,
-          “Lactating — needs fresh/milk date”) that also names a data
-          gap, so nothing is silently dropped. Anything still “not in
-          any group” is a genuine coverage gap worth a look.
+          One vocabulary: every pregnant animal is Far-off → Close-up
+          (split by parity), not “bred/springing”. Groups are
+          most-specific first; priority (the #) assigns each animal to
+          exactly one. Sold/dead and animals missing a calving date
+          are a worklist here, not fake pens — enter the calving date
+          and they flow into the milking string automatically.
         </p>
 
         {unmapped.length > 0 && (

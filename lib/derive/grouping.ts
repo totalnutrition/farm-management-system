@@ -244,23 +244,41 @@ export function groupSizes(
   return out;
 }
 
-// Reconciliation: every animal is assigned to exactly one group (the
-// first / most-specific match). Surfaces total vs grouped vs
-// ungrouped (ids) so genuine coverage gaps are visible, not dropped.
+// Reconciliation: each animal is assigned to exactly one group (the
+// first / most-specific match). The rest are NOT a pen — they're a
+// worklist, classified so the gap is actionable:
+//   exited     — sold/dead, correctly in no pen
+//   needsFresh — has lactations but no fresh date → no DIM, can't be
+//                placed in the milking string until a calving date
+//                is entered
+//   other      — genuinely uncovered (look at these)
 export function reconcile(
   population: GroupingMember[],
   ruleset: Ruleset,
   ctx: DeriveContext,
-): { total: number; grouped: number; ungrouped: string[] } {
-  const ungrouped: string[] = [];
+): {
+  total: number;
+  grouped: number;
+  exited: string[];
+  needsFresh: string[];
+  other: string[];
+} {
+  const exited: string[] = [];
+  const needsFresh: string[] = [];
+  const other: string[] = [];
+  let grouped = 0;
   for (const m of population) {
-    if (!matchGroup(m.subject, m.pen, ruleset, ctx)) ungrouped.push(m.id);
+    if (matchGroup(m.subject, m.pen, ruleset, ctx)) {
+      grouped++;
+      continue;
+    }
+    const rpro = deriveItem("RPRO", m.subject, ctx);
+    const lact = Number(deriveItem("LACT", m.subject, ctx) ?? 0);
+    if (rpro === "SLD/DIE") exited.push(m.id);
+    else if (lact >= 1) needsFresh.push(m.id);
+    else other.push(m.id);
   }
-  return {
-    total: population.length,
-    grouped: population.length - ungrouped.length,
-    ungrouped,
-  };
+  return { total: population.length, grouped, exited, needsFresh, other };
 }
 
 // Names of groups still without a pen mapping (UI nudges the farmer).

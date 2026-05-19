@@ -219,13 +219,13 @@ const cmp = (item: string, op: string, value: number | string) => ({
   value,
 });
 
-// Full-herd STRATEGY, composed from farm-standard segments and a
-// pickable milking-tier system. Groups are MOST-SPECIFIC FIRST;
-// priority (#) resolves the intentional nesting so each animal is
-// assigned to exactly one group. Overrides lead (Sold/dead,
-// Hospital); every tier ends in a broad catch that NAMES the data
-// gap (no due/fresh date) so nothing is silently dropped. Derived
-// items only; nothing moves until mapped. All editable after.
+// Full-herd STRATEGY, composed from farm-standard segments + a
+// pickable milking-tier system. ONE vocabulary: every pre-calving
+// animal is Far-off → Close-up (no "springing"/"bred heifer" jargon),
+// qualified by parity. Most-specific first; priority (#) resolves the
+// nesting so each animal is assigned to exactly one group. Hospital
+// is the only override. Exited and data-gap animals are NOT pens —
+// they surface in Reconciliation. Derived items only; editable after.
 type Grp = { name: string; when: unknown[][] };
 const LACT1 = cmp("LACT", ">=", 1);
 const DIM22 = cmp("DIM", ">=", 22);
@@ -236,9 +236,9 @@ const band = (name: string, extra: Atom[]): Grp => ({
 });
 
 const OVERRIDES: Grp[] = [
-  { name: "Sold / dead", when: [[cmp("RPRO", "=", "SLD/DIE")]] },
   { name: "Hospital", when: [[cmp("FLAGGED", "=", "YES")]] },
 ];
+// Open / growing youngstock (not yet pregnant).
 const YOUNGSTOCK: Grp[] = [
   { name: "Bull calf", when: [[cmp("RPRO", "=", "BULLCAF")]] },
   {
@@ -249,28 +249,27 @@ const YOUNGSTOCK: Grp[] = [
     name: "Breeding heifer",
     when: [[cmp("RPRO", "=", "VIRGIN"), cmp("AGE", ">=", 13)]],
   },
+  // catches virgins with no birth date (AGE null)
   { name: "Heifer (maiden)", when: [[cmp("RPRO", "=", "VIRGIN")]] },
-  {
-    name: "Bred heifer",
-    when: [[cmp("RPRO", "=", "BRED"), cmp("LACT", "=", 0)]],
-  },
-  {
-    name: "Springing heifer",
-    when: [[cmp("RPRO", "=", "PREG"), cmp("LACT", "=", 0)]],
-  },
 ];
-const DRY: Grp[] = [
+// Pre-calving, ONE vocabulary: Close-up (≤21d to due) split by parity,
+// then a Far-off catch for every other pregnant animal (heifer = BRED
+// & LACT 0; cow = DRY). Same words for heifers and cows.
+const PRECALVING: Grp[] = [
   {
-    name: "Close-up",
+    name: "Close-up heifer",
+    when: [[cmp("RPRO", "=", "BRED"), cmp("LACT", "=", 0), cmp("DUE", "<=", 21)]],
+  },
+  {
+    name: "Close-up cow",
     when: [[cmp("RPRO", "=", "DRY"), cmp("DUE", "<=", 21)]],
   },
-  { name: "Far-off dry", when: [[cmp("RPRO", "=", "DRY")]] },
+  {
+    name: "Far-off (pregnant)",
+    when: [[cmp("RPRO", "=", "BRED"), cmp("LACT", "=", 0)], [cmp("RPRO", "=", "DRY")]],
+  },
 ];
 const FRESH: Grp = { name: "Fresh", when: [[LACT1, cmp("DIM", "<=", 21)]] };
-const LACT_CATCH: Grp = {
-  name: "Lactating — needs fresh/milk date",
-  when: [[LACT1]],
-};
 
 // Milking-tier systems (extension-standard; DC/BoviSync treat pens as
 // farm-defined functions, not a fixed ladder — so these are starting
@@ -313,10 +312,9 @@ function buildStrategy(preset: StrategyKey): Grp[] {
   return [
     ...OVERRIDES,
     ...YOUNGSTOCK,
-    ...DRY,
+    ...PRECALVING,
     FRESH,
     ...MILK_TIERS[preset],
-    LACT_CATCH,
   ];
 }
 
