@@ -24,6 +24,7 @@ export default async function RecordsPage() {
     .select("id, natural_key, name, attrs")
     .eq("organization_id", orgId)
     .eq("subject_type", "animal")
+    .neq("status", "archived")
     .order("natural_key");
 
   const ids = (subjects ?? []).map((s) => s.id);

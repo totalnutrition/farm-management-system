@@ -741,43 +741,33 @@ export async function clearDemoData(): Promise<Result> {
 
   const admin = createAdminClient();
 
-  // 1) Find demo subjects (mass-seeded animals) and remove their
-  //    events first (FK from events.subject_id), then the subjects.
-  const { data: demoSubs } = await admin
+  // Events are append-only (DB trigger) and subjects with events
+  // can't be deleted (FK). So "clear" = ARCHIVE the demo subjects;
+  // their history stays as immutable record. Active-only queries
+  // filter them out and the herd looks clean.
+  const { data: demoSubs, error: dErr } = await admin
     .from("subjects")
     .select("id")
     .eq("organization_id", orgId)
     .eq("subject_type", "animal")
     .eq("attrs->>demo", "true");
-  const demoIds = (demoSubs ?? []).map((s) => s.id);
-  if (demoIds.length) {
-    for (let off = 0; off < demoIds.length; off += 500) {
-      const chunk = demoIds.slice(off, off + 500);
-      const { error: eErr } = await admin
-        .from("events")
-        .delete()
-        .eq("organization_id", orgId)
-        .in("subject_id", chunk);
-      if (eErr) return { error: eErr.message };
-      const { error: sErr } = await admin
+  if (dErr) return { error: dErr.message };
+  const ids = (demoSubs ?? []).map((s) => s.id);
+  if (ids.length) {
+    for (let off = 0; off < ids.length; off += 500) {
+      const chunk = ids.slice(off, off + 500);
+      const { error } = await admin
         .from("subjects")
-        .delete()
+        .update({ status: "archived" })
         .eq("organization_id", orgId)
         .in("id", chunk);
-      if (sErr) return { error: sErr.message };
+      if (error) return { error: error.message };
     }
   }
 
-  // 2) Mop up any leftover demo-tagged events on REAL subjects
-  //    (from the older lightweight backfill).
-  const { error: e2 } = await admin
-    .from("events")
-    .delete()
-    .eq("organization_id", orgId)
-    .eq("payload->>demo", "true");
-  if (e2) return { error: e2.message };
-
-  // 3) Strip the demo_due attr that was written onto real subjects.
+  // Strip the demo_due attr that the older lightweight backfill
+  // wrote onto REAL subjects (subject attrs are mutable; events the
+  // backfill also wrote stay as history per append-only).
   const { data: dued } = await admin
     .from("subjects")
     .select("id, attrs")
@@ -799,46 +789,39 @@ export async function clearDemoData(): Promise<Result> {
   revalidatePath("/records");
   return {
     success: true,
-    info: `Removed ${demoIds.length} demo animals.`,
+    info: `Archived ${ids.length} demo animals (event history kept).`,
   };
 }
 
-// DESTRUCTIVE: deletes every animal (imported, demo, or hand-entered)
-// in this org, along with every event recorded against them. Org-
-// scoped and gated on a literal "DELETE" confirm string. Pens, supply
-// items, parties, strategy, settings, audit log are NOT touched —
-// just animals + their event history.
+// ARCHIVE every animal (imported, demo, or hand-entered) in this org.
+// Events are append-only (DB trigger) so we never delete history —
+// archived subjects are filtered out of active queries instead. Org-
+// scoped, gated on a literal "ARCHIVE" confirm string. Pens, supply,
+// strategy, settings, audit log are NOT touched.
 export async function wipeAllAnimals(confirm: string): Promise<Result> {
   const user = await requireAnyRole(["super_admin", "admin"]);
   const orgId = getOrganizationIdFromUser(user);
   if (!orgId) return { error: "No organization on this account." };
-  if (confirm !== "DELETE")
-    return { error: 'Type DELETE (exactly) to confirm.' };
+  if (confirm !== "ARCHIVE")
+    return { error: "Type ARCHIVE (exactly) to confirm." };
 
   const admin = createAdminClient();
-  const { data: subs } = await admin
+  const { data: subs, error: sErr } = await admin
     .from("subjects")
     .select("id")
     .eq("organization_id", orgId)
-    .eq("subject_type", "animal");
+    .eq("subject_type", "animal")
+    .neq("status", "archived");
+  if (sErr) return { error: sErr.message };
   const ids = (subs ?? []).map((s) => s.id);
   if (!ids.length)
-    return { success: true, info: "No animals to delete." };
+    return { success: true, info: "No active animals to archive." };
 
-  for (let off = 0; off < ids.length; off += 500) {
-    const chunk = ids.slice(off, off + 500);
-    const { error } = await admin
-      .from("events")
-      .delete()
-      .eq("organization_id", orgId)
-      .in("subject_id", chunk);
-    if (error) return { error: error.message };
-  }
   for (let off = 0; off < ids.length; off += 500) {
     const chunk = ids.slice(off, off + 500);
     const { error } = await admin
       .from("subjects")
-      .delete()
+      .update({ status: "archived" })
       .eq("organization_id", orgId)
       .in("id", chunk);
     if (error) return { error: error.message };
@@ -846,5 +829,5 @@ export async function wipeAllAnimals(confirm: string): Promise<Result> {
 
   revalidatePath(PathHousing);
   revalidatePath("/records");
-  return { success: true, info: `Deleted ${ids.length} animals.` };
+  return { success: true, info: `Archived ${ids.length} animals.` };
 }

@@ -65,7 +65,8 @@ export async function runQueryAction(
     .from("subjects")
     .select("id, natural_key, attrs")
     .eq("organization_id", orgId)
-    .eq("subject_type", "animal");
+    .eq("subject_type", "animal")
+    .neq("status", "archived");
   if (sErr) return { error: sErr.message };
 
   const ids = (subjects ?? []).map((s) => s.id);

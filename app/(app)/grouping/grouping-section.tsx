@@ -85,7 +85,8 @@ export async function GroupingSection() {
     .from("subjects")
     .select("id, natural_key, attrs")
     .eq("organization_id", orgId)
-    .eq("subject_type", "animal");
+    .eq("subject_type", "animal")
+    .neq("status", "archived");
 
   const ids = (subjects ?? []).map((s) => s.id);
   const byId = new Map<string, Event[]>();

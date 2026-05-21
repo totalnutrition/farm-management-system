@@ -177,12 +177,12 @@ export function GroupingClient({
   const wipeAll = () =>
     start(async () => {
       const typed = window.prompt(
-        "DESTRUCTIVE: deletes EVERY animal in this org (imported, demo and hand-entered) and ALL their events. Pens, supply, settings, audit log are untouched.\n\nType DELETE to confirm:",
+        "ARCHIVE every animal in this org (imported, demo and hand-entered). Events are append-only history and are kept; archived animals are hidden from active views but remain in the ledger. Pens, supply, settings, audit log are untouched.\n\nType ARCHIVE to confirm:",
       );
       if (typed == null) return;
       const res = await wipeAllAnimals(typed);
       if (res.error) return void toast.error(res.error);
-      toast.success(res.info ?? "Animals deleted.");
+      toast.success(res.info ?? "Animals archived.");
       router.refresh();
     });
 
@@ -249,9 +249,9 @@ export function GroupingClient({
               disabled={pending}
               onClick={wipeAll}
               className="text-destructive hover:text-destructive"
-              title="DESTRUCTIVE: deletes every animal (imported, demo, hand-entered) and their events"
+              title="Archive every animal (events are append-only and kept as history)"
             >
-              Delete all animals
+              Archive all animals
             </Button>
           </div>
         </div>
