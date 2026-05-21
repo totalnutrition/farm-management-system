@@ -7,6 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { FieldPicker } from "@/components/field-picker";
+import { ITEMS, ITEM_GROUPS } from "@/lib/derive/catalog";
+
+// Numeric items only — these are valid for "split by a number cut"
+// and the capacity "Order by" sort factor.
+const NUMERIC_ITEMS = ITEMS.filter((i) => i.kind === "num");
 import {
   Dialog,
   DialogContent,
@@ -723,11 +729,14 @@ function MapPensDialog({
               </button>
               <div className="flex items-center gap-2 pt-1">
                 <span className="text-muted-foreground">Order by</span>
-                <Input
-                  className="h-7 w-24 text-xs"
-                  placeholder="(optional)"
+                <FieldPicker
+                  items={NUMERIC_ITEMS}
+                  groups={ITEM_GROUPS}
                   value={orderItem}
-                  onChange={(e) => setOrderItem(e.target.value)}
+                  onChange={setOrderItem}
+                  placeholder="(optional)"
+                  clearLabel="(optional)"
+                  triggerClassName="h-7 w-[150px] text-xs"
                 />
                 <Select
                   value={orderDir}
@@ -751,11 +760,13 @@ function MapPensDialog({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">If</span>
-                <Input
-                  className="h-7 w-20 text-xs"
+                <FieldPicker
+                  items={NUMERIC_ITEMS}
+                  groups={ITEM_GROUPS}
                   value={item}
-                  onChange={(e) => setItem(e.target.value)}
-                  placeholder="MAVG"
+                  onChange={setItem}
+                  placeholder="field"
+                  triggerClassName="h-7 w-[150px] text-xs"
                 />
                 <span className="text-muted-foreground">{"<"}</span>
                 <Input
