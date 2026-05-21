@@ -6,6 +6,15 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { PathHousing } from "@/lib/misc";
 import { MILK_EC } from "@/lib/derive/production";
+import { derive } from "@/lib/derive/engine";
+import { ITEMS } from "@/lib/derive/catalog";
+import { applyCancellations } from "@/lib/derive/cancellations";
+import {
+  legacyPlacement,
+  matchGroup,
+  type Placement as EnginePlacement,
+} from "@/lib/derive/grouping";
+import type { Predicate } from "@/lib/derive/query";
 
 type Result = { error?: string; success?: boolean; info?: string };
 type Admin = ReturnType<typeof createAdminClient>;
@@ -896,4 +905,117 @@ export async function wipeAllAnimals(confirm: string): Promise<Result> {
   revalidatePath(PathHousing);
   revalidatePath("/records");
   return { success: true, info: `Archived ${ids.length} animals.` };
+}
+
+// Fetch the members of a specific rule + every numeric catalog value
+// per member, so the placement editor can preview HOW the split
+// lands across pens BEFORE the farmer saves. Uses the full ruleset
+// so members reflect the actual first-match assignment.
+export async function getGroupMembers(ruleId: string): Promise<
+  | { error: string }
+  | { members: { id: string; values: Record<string, number | null> }[] }
+> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+  void user;
+
+  const admin = createAdminClient();
+  const [{ data: rules }, { data: subjects }] = await Promise.all([
+    admin
+      .from("grouping_rules")
+      .select(
+        "id, ordinal, name, predicate, target_pen, split, placement, is_active",
+      )
+      .eq("organization_id", orgId)
+      .order("ordinal"),
+    admin
+      .from("subjects")
+      .select("id, natural_key, attrs")
+      .eq("organization_id", orgId)
+      .eq("subject_type", "animal")
+      .neq("status", "archived"),
+  ]);
+
+  const ids = (subjects ?? []).map((s) => s.id);
+  type Row = {
+    id: string;
+    subject_id: string;
+    event_code: number;
+    event_date: string;
+    payload: Record<string, unknown> | null;
+  };
+  const grouped = new Map<string, Row[]>();
+  if (ids.length) {
+    const { data: events } = await admin
+      .from("events")
+      .select("id, subject_id, event_code, event_date, payload")
+      .eq("organization_id", orgId)
+      .in("subject_id", ids);
+    for (const e of (events ?? []) as Row[]) {
+      const list = grouped.get(e.subject_id) ?? [];
+      list.push(e);
+      grouped.set(e.subject_id, list);
+    }
+  }
+
+  const placementOf = (r: {
+    placement: unknown;
+    target_pen: string | null;
+    split: unknown;
+  }): EnginePlacement =>
+    r.placement
+      ? (r.placement as EnginePlacement)
+      : legacyPlacement(
+          r.target_pen,
+          r.split as { firstLactation: string; mature: string } | null,
+        );
+
+  const ruleset = (rules ?? [])
+    .filter((r) => r.is_active)
+    .map((r) => ({
+      name: r.name,
+      when: r.predicate as Predicate,
+      placement: placementOf(r),
+    }));
+  const target = (rules ?? []).find((r) => r.id === ruleId);
+  if (!target) return { error: "Rule not found." };
+  const targetName = target.name;
+
+  const numericItems = ITEMS.filter((i) => i.kind === "num").map(
+    (i) => i.value,
+  );
+
+  const today = new Date().toISOString().slice(0, 10);
+  const members: { id: string; values: Record<string, number | null> }[] = [];
+  for (const s of subjects ?? []) {
+    const a = (s.attrs ?? {}) as Record<string, unknown>;
+    const events = applyCancellations(grouped.get(s.id) ?? []).map((e) => ({
+      code: e.event_code,
+      date: e.event_date,
+      payload: (e.payload ?? {}) as Record<string, unknown>,
+    }));
+    const subject = {
+      events,
+      facts: {
+        birthDate:
+          typeof a.birth_date === "string" ? a.birth_date : undefined,
+        baseLactation:
+          typeof a.base_lactation === "number" ? a.base_lactation : undefined,
+      },
+      attrs: a,
+    };
+    const pen = typeof a.pen === "string" ? (a.pen as string) : null;
+    const matched = matchGroup(subject, pen, ruleset, { today });
+    if (!matched || matched.name !== targetName) continue;
+    const d = derive(subject, { today }, numericItems);
+    const values: Record<string, number | null> = {};
+    for (const k of numericItems) {
+      const v = d[k];
+      values[k] = typeof v === "number" ? v : null;
+    }
+    members.push({ id: s.natural_key, values });
+  }
+
+  return { members };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ import {
   installGroupingPresets,
   setGroupPlacement,
   savePenCapacities,
+  getGroupMembers,
 } from "./actions";
 
 export type RuleRow = {
@@ -496,11 +497,10 @@ function MapPensDialog({
     pl.kind === "parity" ? (pl.buckets[1]?.pen ?? "") : "",
   );
   const [item, setItem] = useState(pl.kind === "item" ? pl.item : "MAVG");
-  const [cutLt, setCutLt] = useState(
-    pl.kind === "item" ? String(pl.cuts[0]?.lt ?? "") : "",
-  );
-  const [cutPen, setCutPen] = useState(
-    pl.kind === "item" ? (pl.cuts[0]?.pen ?? "") : "",
+  const [cuts, setCuts] = useState<{ lt: string; pen: string }[]>(
+    pl.kind === "item"
+      ? pl.cuts.map((c) => ({ lt: String(c.lt), pen: c.pen }))
+      : [{ lt: "", pen: "" }],
   );
   const [elsePen, setElsePen] = useState(
     pl.kind === "item" ? pl.elsePen : "",
@@ -523,6 +523,23 @@ function MapPensDialog({
     pl.kind === "capacity" ? (pl.orderBy?.dir ?? "desc") : "desc",
   );
   const [pending, start] = useTransition();
+
+  // Members of this group with every numeric item, so the editor
+  // can preview HOW the placement lands across pens before save.
+  const [members, setMembers] = useState<
+    { id: string; values: Record<string, number | null> }[]
+  >([]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const r = await getGroupMembers(group.id);
+      if (!alive) return;
+      if ("members" in r) setMembers(r.members);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [group.id]);
 
   const penInput = (
     value: string,
@@ -583,23 +600,151 @@ function MapPensDialog({
         })),
       };
     }
-    const lt = Number(cutLt);
-    if (
-      !item.trim() ||
-      !Number.isFinite(lt) ||
-      !cutPen.trim() ||
-      !elsePen.trim()
-    )
-      return "Fill the item, cut value and both pens.";
+    if (!item.trim()) return "Pick a field for the cut.";
+    if (!elsePen.trim()) return "Enter the 'otherwise' pen.";
+    const parsedCuts = cuts
+      .map((c) => ({ lt: Number(c.lt), pen: c.pen.trim() }))
+      .filter((c) => Number.isFinite(c.lt) && c.pen);
+    if (parsedCuts.length === 0)
+      return "Add at least one cut (value + pen).";
     return {
       placement: {
         kind: "item",
         item: item.trim().toUpperCase(),
-        cuts: [{ lt, pen: cutPen.trim() }],
+        cuts: parsedCuts,
         elsePen: elsePen.trim(),
       },
     };
   };
+
+  // Lenient preview placement — uses current state with "—" for any
+  // missing pen, so counts show even before everything is filled in.
+  const preview = (): Placement | null => {
+    if (mode === "none") return { kind: "none" };
+    if (mode === "single") return { kind: "single", pen: single.trim() || "—" };
+    if (mode === "parity")
+      return {
+        kind: "parity",
+        buckets: [
+          { lacts: [1], pen: pHeifer.trim() || "—" },
+          {
+            lacts: [2, 3, 4, 5, 6, 7, 8, 9, 10],
+            pen: pMature.trim() || "—",
+          },
+        ],
+      };
+    if (mode === "capacity") {
+      const rows = capRows.filter((r) => r.pen.trim() || r.cap.trim());
+      if (!rows.length) return null;
+      return {
+        kind: "capacity",
+        pens: rows.map((r) => r.pen.trim() || "—"),
+        ...(orderItem.trim()
+          ? {
+              orderBy: { item: orderItem.trim().toUpperCase(), dir: orderDir },
+            }
+          : {}),
+      };
+    }
+    const parsedCuts = cuts
+      .filter((c) => c.lt.trim() !== "" && Number.isFinite(Number(c.lt)))
+      .map((c) => ({ lt: Number(c.lt), pen: c.pen.trim() || "—" }));
+    if (!parsedCuts.length) return null;
+    return {
+      kind: "item",
+      item: item.trim().toUpperCase() || "MAVG",
+      cuts: parsedCuts,
+      elsePen: elsePen.trim() || "—",
+    };
+  };
+
+  // Pen → count given the current placement and the group's members.
+  // `preview` is recreated each render but reads exactly the listed
+  // deps, so manual dep list keeps re-computation tight.
+  const counts = useMemo(() => {
+    const pl2 = preview();
+    const out: Record<string, number> = {};
+    if (!pl2 || !members.length) return out;
+    const add = (p: string) => {
+      out[p] = (out[p] ?? 0) + 1;
+    };
+    if (pl2.kind === "none") return out;
+    if (pl2.kind === "single") {
+      for (let i = 0; i < members.length; i++) add(pl2.pen);
+      return out;
+    }
+    if (pl2.kind === "parity") {
+      for (const m of members) {
+        const l = m.values.LACT ?? 0;
+        const b =
+          pl2.buckets.find((x) => x.lacts.includes(l)) ??
+          pl2.buckets[pl2.buckets.length - 1];
+        add(b?.pen ?? "—");
+      }
+      return out;
+    }
+    if (pl2.kind === "item") {
+      for (const m of members) {
+        const v = m.values[pl2.item];
+        let p = pl2.elsePen;
+        if (v !== null && v !== undefined)
+          for (const c of pl2.cuts)
+            if (v < c.lt) {
+              p = c.pen;
+              break;
+            }
+        add(p);
+      }
+      return out;
+    }
+    // capacity
+    const ordered = [...members];
+    if (pl2.orderBy) {
+      const { item: k, dir } = pl2.orderBy;
+      ordered.sort((a, b) => {
+        const av = a.values[k];
+        const bv = b.values[k];
+        if (av === null && bv === null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        return dir === "desc" ? bv - av : av - bv;
+      });
+    }
+    const capMap = new Map<string, number>();
+    for (const r of capRows) {
+      const n = Number(r.cap);
+      if (r.pen.trim() && Number.isFinite(n)) capMap.set(r.pen.trim(), n);
+    }
+    const used = new Map<string, number>();
+    for (let i = 0; i < ordered.length; i++) {
+      let chosen = pl2.pens[pl2.pens.length - 1];
+      for (const p of pl2.pens) {
+        const cap = capMap.get(p) ?? Infinity;
+        if ((used.get(p) ?? 0) < cap) {
+          chosen = p;
+          break;
+        }
+      }
+      used.set(chosen, (used.get(chosen) ?? 0) + 1);
+      add(chosen);
+    }
+    return out;
+    // preview() is closed over the deps below — listing it would
+    // invalidate the memo every render with no benefit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    mode,
+    single,
+    pHeifer,
+    pMature,
+    item,
+    cuts,
+    elsePen,
+    capRows,
+    orderItem,
+    orderDir,
+    members,
+  ]);
 
   const save = () =>
     start(async () => {
@@ -759,31 +904,109 @@ function MapPensDialog({
           {mode === "item" && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">If</span>
+                <span className="text-muted-foreground">Field</span>
                 <FieldPicker
                   items={NUMERIC_ITEMS}
                   groups={ITEM_GROUPS}
                   value={item}
                   onChange={setItem}
                   placeholder="field"
-                  triggerClassName="h-7 w-[150px] text-xs"
+                  triggerClassName="h-7 w-[180px] text-xs"
                 />
-                <span className="text-muted-foreground">{"<"}</span>
-                <Input
-                  className="h-7 w-16 text-xs"
-                  value={cutLt}
-                  onChange={(e) => setCutLt(e.target.value)}
-                  placeholder="40"
-                />
-                <span className="text-muted-foreground">→</span>
-                {penInput(cutPen, setCutPen, "pen")}
               </div>
+              <p className="text-[11px] text-muted-foreground">
+                Add cuts in ascending order — the first matching cut
+                wins; everything else lands in the otherwise pen.
+              </p>
+              {cuts.map((c, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-muted-foreground w-8">
+                    {i === 0 ? "if <" : "else <"}
+                  </span>
+                  <Input
+                    className="h-7 w-16 text-xs"
+                    value={c.lt}
+                    onChange={(e) =>
+                      setCuts((rs) =>
+                        rs.map((r, j) =>
+                          j === i ? { ...r, lt: e.target.value } : r,
+                        ),
+                      )
+                    }
+                    placeholder="value"
+                  />
+                  <span className="text-muted-foreground">→</span>
+                  {penInput(
+                    c.pen,
+                    (v) =>
+                      setCuts((rs) =>
+                        rs.map((r, j) => (j === i ? { ...r, pen: v } : r)),
+                      ),
+                    "pen",
+                  )}
+                  {counts[c.pen.trim() || "—"] !== undefined && (
+                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                      {counts[c.pen.trim() || "—"]} animals
+                    </span>
+                  )}
+                  {cuts.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCuts((rs) => rs.filter((_, j) => j !== i))
+                      }
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() =>
+                  setCuts((rs) => [...rs, { lt: "", pen: "" }])
+                }
+                className="rounded border border-dashed px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
+              >
+                + cut
+              </button>
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">otherwise →</span>
                 {penInput(elsePen, setElsePen, "pen")}
+                {counts[elsePen.trim() || "—"] !== undefined && (
+                  <span className="text-[11px] text-muted-foreground tabular-nums">
+                    {counts[elsePen.trim() || "—"]} animals
+                  </span>
+                )}
               </div>
             </div>
           )}
+
+          <div className="rounded-md border bg-muted/30 px-3 py-2 text-[11px]">
+            <div className="text-muted-foreground">
+              Preview · {members.length} animals in this group →
+            </div>
+            {Object.keys(counts).length === 0 ? (
+              <div className="italic text-muted-foreground">
+                Fill in the pens to see the split.
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-x-3 gap-y-1 tabular-nums">
+                {Object.entries(counts)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([pen, n]) => (
+                    <span key={pen}>
+                      <span className="font-semibold">{n}</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        → {pen}
+                      </span>
+                    </span>
+                  ))}
+              </div>
+            )}
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={pending}>
