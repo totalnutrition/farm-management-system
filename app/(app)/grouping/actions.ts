@@ -802,3 +802,49 @@ export async function clearDemoData(): Promise<Result> {
     info: `Removed ${demoIds.length} demo animals.`,
   };
 }
+
+// DESTRUCTIVE: deletes every animal (imported, demo, or hand-entered)
+// in this org, along with every event recorded against them. Org-
+// scoped and gated on a literal "DELETE" confirm string. Pens, supply
+// items, parties, strategy, settings, audit log are NOT touched —
+// just animals + their event history.
+export async function wipeAllAnimals(confirm: string): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+  if (confirm !== "DELETE")
+    return { error: 'Type DELETE (exactly) to confirm.' };
+
+  const admin = createAdminClient();
+  const { data: subs } = await admin
+    .from("subjects")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("subject_type", "animal");
+  const ids = (subs ?? []).map((s) => s.id);
+  if (!ids.length)
+    return { success: true, info: "No animals to delete." };
+
+  for (let off = 0; off < ids.length; off += 500) {
+    const chunk = ids.slice(off, off + 500);
+    const { error } = await admin
+      .from("events")
+      .delete()
+      .eq("organization_id", orgId)
+      .in("subject_id", chunk);
+    if (error) return { error: error.message };
+  }
+  for (let off = 0; off < ids.length; off += 500) {
+    const chunk = ids.slice(off, off + 500);
+    const { error } = await admin
+      .from("subjects")
+      .delete()
+      .eq("organization_id", orgId)
+      .in("id", chunk);
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath(PathHousing);
+  revalidatePath("/records");
+  return { success: true, info: `Deleted ${ids.length} animals.` };
+}

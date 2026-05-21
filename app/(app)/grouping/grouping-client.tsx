@@ -39,6 +39,7 @@ import {
   savePenCapacities,
   seedDemoData,
   clearDemoData,
+  wipeAllAnimals,
 } from "./actions";
 
 export type RuleRow = {
@@ -173,6 +174,17 @@ export function GroupingClient({
       toast.success(res.info ?? "Demo data cleared.");
       router.refresh();
     });
+  const wipeAll = () =>
+    start(async () => {
+      const typed = window.prompt(
+        "DESTRUCTIVE: deletes EVERY animal in this org (imported, demo and hand-entered) and ALL their events. Pens, supply, settings, audit log are untouched.\n\nType DELETE to confirm:",
+      );
+      if (typed == null) return;
+      const res = await wipeAllAnimals(typed);
+      if (res.error) return void toast.error(res.error);
+      toast.success(res.info ?? "Animals deleted.");
+      router.refresh();
+    });
 
   const target = rules.find((r) => r.id === mapId) ?? null;
   const editTarget = rules.find((r) => r.id === editId) ?? null;
@@ -230,6 +242,16 @@ export function GroupingClient({
               onClick={wipeDemo}
             >
               Clear demo
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={pending}
+              onClick={wipeAll}
+              className="text-destructive hover:text-destructive"
+              title="DESTRUCTIVE: deletes every animal (imported, demo, hand-entered) and their events"
+            >
+              Delete all animals
             </Button>
           </div>
         </div>
