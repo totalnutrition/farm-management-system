@@ -25,6 +25,8 @@ import {
 import {
   recordEvent,
   recordMilking,
+  recordWeighing,
+  recordPregCheck,
   deleteAnimalEvent,
   updateAnimalAttrs,
 } from "../actions";
@@ -148,6 +150,48 @@ export function RecordDetail({
       router.refresh();
     });
   };
+
+  // Weighing dialog
+  const [wOpen, setWOpen] = useState(false);
+  const [wDate, setWDate] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [wKg, setWKg] = useState("");
+  const submitWeigh = () =>
+    start(async () => {
+      const res = await recordWeighing({
+        subjectId,
+        date: wDate,
+        weight: Number(wKg),
+      });
+      if (res.error) return void toast.error(res.error);
+      toast.success("Weighing recorded.");
+      setWKg("");
+      setWOpen(false);
+      router.refresh();
+    });
+
+  // Pregnancy check dialog
+  const [pOpen, setPOpen] = useState(false);
+  const [pDate, setPDate] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [pResult, setPResult] = useState<"pos" | "neg">("pos");
+  const [pDue, setPDue] = useState("");
+  const submitPreg = () =>
+    start(async () => {
+      const res = await recordPregCheck({
+        subjectId,
+        date: pDate,
+        result: pResult,
+        dueDate: pResult === "pos" && pDue ? pDue : undefined,
+      });
+      if (res.error) return void toast.error(res.error);
+      toast.success("Preg check recorded.");
+      setPDue("");
+      setPOpen(false);
+      router.refresh();
+    });
 
   const [mOpen, setMOpen] = useState(false);
   const [mDate, setMDate] = useState(
@@ -302,7 +346,7 @@ export function RecordDetail({
           <Dialog open={mOpen} onOpenChange={setMOpen}>
             <DialogTrigger asChild>
               <Button size="sm" variant="outline" className="ml-2">
-                Record milking
+                Milking
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -385,6 +429,119 @@ export function RecordDetail({
                   onClick={submitMilk}
                   disabled={pending || !mKg || !mDate}
                 >
+                  {pending ? "Saving…" : "Record"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={wOpen} onOpenChange={setWOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline" className="ml-2">
+                Weighing
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Record weighing</DialogTitle>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Date *</Label>
+                  <Input
+                    type="date"
+                    value={wDate}
+                    onChange={(e) => setWDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Weight (kg) *</Label>
+                  <Input
+                    type="number"
+                    value={wKg}
+                    onChange={(e) => setWKg(e.target.value)}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setWOpen(false)}
+                  disabled={pending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={submitWeigh}
+                  disabled={pending || !wKg || !wDate}
+                >
+                  {pending ? "Saving…" : "Record"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={pOpen} onOpenChange={setPOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline" className="ml-2">
+                Preg check
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Record pregnancy check</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Date *</Label>
+                  <Input
+                    type="date"
+                    value={pDate}
+                    onChange={(e) => setPDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Result *</Label>
+                  <Select
+                    value={pResult}
+                    onValueChange={(v) => setPResult(v as "pos" | "neg")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pos">
+                        Positive (confirmed pregnant)
+                      </SelectItem>
+                      <SelectItem value="neg">
+                        Negative (open)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {pResult === "pos" && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">
+                      Expected calving date
+                    </Label>
+                    <Input
+                      type="date"
+                      value={pDue}
+                      onChange={(e) => setPDue(e.target.value)}
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Feeds DUE / Close-up vs Far-off classification.
+                    </p>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setPOpen(false)}
+                  disabled={pending}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={submitPreg} disabled={pending || !pDate}>
                   {pending ? "Saving…" : "Record"}
                 </Button>
               </DialogFooter>

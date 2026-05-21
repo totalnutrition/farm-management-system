@@ -355,3 +355,97 @@ export async function updateAnimalAttrs(
   revalidatePath(`${PathRecords}/${subjectId}`);
   return { success: true };
 }
+
+// ── Weighing (WEIGH, code 205) ──────────────────────────────────────
+const weighSchema = z.object({
+  subjectId: z.uuid(),
+  date: z.string().trim().min(1, "Date is required."),
+  weight: z.coerce.number().positive("Weight must be > 0."),
+});
+
+export async function recordWeighing(
+  input: z.infer<typeof weighSchema>,
+): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+
+  const parsed = weighSchema.safeParse(input);
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  const { subjectId, date, weight } = parsed.data;
+
+  const admin = createAdminClient();
+  const { data: subj, error: sErr } = await admin
+    .from("subjects")
+    .select("id")
+    .eq("id", subjectId)
+    .eq("organization_id", orgId)
+    .eq("subject_type", "animal")
+    .maybeSingle();
+  if (sErr) return { error: sErr.message };
+  if (!subj) return { error: "Animal not found." };
+
+  const { error } = await admin.from("events").insert({
+    organization_id: orgId,
+    subject_id: subjectId,
+    event_code: 205,
+    event_date: date,
+    payload: { weight },
+    source: "user",
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath(`${PathRecords}/${subjectId}`);
+  return { success: true };
+}
+
+// ── Pregnancy check (PRCK, code 4) ──────────────────────────────────
+const prckSchema = z.object({
+  subjectId: z.uuid(),
+  date: z.string().trim().min(1, "Date is required."),
+  result: z.enum(["pos", "neg"]),
+  dueDate: z.string().trim().optional(),
+});
+
+export async function recordPregCheck(
+  input: z.infer<typeof prckSchema>,
+): Promise<Result> {
+  const user = await requireAnyRole(["super_admin", "admin"]);
+  const orgId = getOrganizationIdFromUser(user);
+  if (!orgId) return { error: "No organization on this account." };
+
+  const parsed = prckSchema.safeParse(input);
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  const { subjectId, date, result, dueDate } = parsed.data;
+
+  const admin = createAdminClient();
+  const { data: subj, error: sErr } = await admin
+    .from("subjects")
+    .select("id")
+    .eq("id", subjectId)
+    .eq("organization_id", orgId)
+    .eq("subject_type", "animal")
+    .maybeSingle();
+  if (sErr) return { error: sErr.message };
+  if (!subj) return { error: "Animal not found." };
+
+  const payload: Record<string, unknown> = { result };
+  if (result === "pos" && dueDate) payload.due_date = dueDate;
+
+  const { error } = await admin.from("events").insert({
+    organization_id: orgId,
+    subject_id: subjectId,
+    event_code: 4,
+    event_date: date,
+    payload,
+    source: "user",
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath(`${PathRecords}/${subjectId}`);
+  return { success: true };
+}
