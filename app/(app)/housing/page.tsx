@@ -9,7 +9,11 @@ export default async function HousingPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const { tab } = await searchParams;
-  const allowed = new Set(["barns", "pens", "groups"]);
-  const target = allowed.has(tab ?? "") ? `/records?tab=${tab}` : "/records";
-  redirect(target);
+  // Barns folded into the Pens tab; old "?tab=barns" links land there.
+  const map: Record<string, string> = {
+    groups: "/records?tab=groups",
+    pens: "/records?tab=pens",
+    barns: "/records?tab=pens",
+  };
+  redirect(map[tab ?? ""] ?? "/records");
 }

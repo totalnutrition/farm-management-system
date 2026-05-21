@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { derive, type Event } from "@/lib/derive/engine";
 import { AddAnimal } from "./records-table";
+import { AnimalsAdmin } from "./animals-admin";
 import { BarnsSection } from "../barns/barns-section";
 import { PensSection } from "../pens/pens-section";
 import { GroupingSection } from "../grouping/grouping-section";
@@ -11,15 +12,14 @@ import { GroupingSection } from "../grouping/grouping-section";
 export const metadata = { title: "Herd" };
 export const dynamic = "force-dynamic";
 
-// Herd hub — Animals · Groups · Pens · Barns in one place. Housing
-// was previously a separate nav entry; merged here so the herd, the
-// rules that group it, the pens it lives in and the barns those pens
-// sit in are all one screen.
+// Herd hub — Animals · Groups · Pens in one place. Barns are folded
+// into the Pens tab (barns contain pens; not a separate concern).
+// Groups is just the rules; the herd-level admin (seed/archive)
+// lives with the animals, not with the rules.
 const TABS = [
   { key: "animals", label: "Animals" },
   { key: "groups", label: "Groups" },
-  { key: "pens", label: "Pens" },
-  { key: "barns", label: "Barns" },
+  { key: "pens", label: "Pens & barns" },
 ] as const;
 
 export default async function RecordsPage({
@@ -40,8 +40,7 @@ export default async function RecordsPage({
   const active = (TABS.find((t) => t.key === tab)?.key ?? "animals") as
     | "animals"
     | "groups"
-    | "pens"
-    | "barns";
+    | "pens";
 
   return (
     <div className="flex flex-col gap-3 py-4">
@@ -54,7 +53,9 @@ export default async function RecordsPage({
           </p>
         </div>
         {active === "animals" && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <AnimalsAdmin />
+            <span className="mx-1 text-muted-foreground">|</span>
             <Link
               href="/import"
               className="rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted"
@@ -85,8 +86,12 @@ export default async function RecordsPage({
 
       {active === "animals" && <AnimalsTab orgId={orgId} />}
       {active === "groups" && <GroupingSection />}
-      {active === "pens" && <PensSection />}
-      {active === "barns" && <BarnsSection />}
+      {active === "pens" && (
+        <>
+          <BarnsSection />
+          <PensSection />
+        </>
+      )}
     </div>
   );
 }

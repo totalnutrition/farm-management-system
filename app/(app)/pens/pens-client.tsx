@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ export type PenRow = {
   label: string | null;
   barn: string | null;
   count: number;
+  groups: string[];
 };
 
 export function PensClient({
@@ -87,6 +89,7 @@ export function PensClient({
                 <th className="px-2 text-left">Label</th>
                 <th className="px-2 text-left">Barn</th>
                 <th className="px-2 text-left">Types</th>
+                <th className="px-2 text-left">Group(s)</th>
                 <th className="px-2 text-right">Cap</th>
                 <th className="px-2 text-right">In</th>
                 <th className="px-2" />
@@ -116,6 +119,23 @@ export function PensClient({
                             </span>
                           ))}
                     </span>
+                  </td>
+                  <td className="px-2">
+                    {r.groups.length === 0 ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <span className="flex flex-wrap gap-1">
+                        {r.groups.map((g) => (
+                          <Link
+                            key={g}
+                            href="/records?tab=groups"
+                            className="rounded bg-muted px-1 text-[10px] hover:underline"
+                          >
+                            {g}
+                          </Link>
+                        ))}
+                      </span>
+                    )}
                   </td>
                   <td className="px-2 text-right">
                     {r.capacity ?? "∞"}

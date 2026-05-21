@@ -1,6 +1,18 @@
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
+import { legacyPlacement, type Placement } from "@/lib/derive/grouping";
 import { PensClient, type PenRow } from "./pens-client";
+
+// Pens the given placement targets — same shape as grouping/actions
+// uses, inlined here to avoid pulling a "use server" module client-
+// side. (single|parity|item|capacity.)
+function pensOf(p: Placement): string[] {
+  if (p.kind === "single") return [p.pen];
+  if (p.kind === "parity") return p.buckets.map((b) => b.pen);
+  if (p.kind === "item") return [...p.cuts.map((c) => c.pen), p.elsePen];
+  if (p.kind === "capacity") return p.pens;
+  return [];
+}
 
 export async function PensSection() {
   const user = await requireAnyRole(["super_admin", "admin"]);
@@ -24,6 +36,28 @@ export async function PensSection() {
     .select("attrs")
     .eq("organization_id", orgId)
     .eq("subject_type", "animal");
+
+  const { data: rules } = await admin
+    .from("grouping_rules")
+    .select("name, target_pen, split, placement, is_active, ordinal")
+    .eq("organization_id", orgId)
+    .order("ordinal");
+  // pen natural_key -> [group names that target it]
+  const groupsByPen = new Map<string, string[]>();
+  for (const r of rules ?? []) {
+    if (!r.is_active) continue;
+    const pl: Placement = r.placement
+      ? (r.placement as Placement)
+      : legacyPlacement(
+          r.target_pen,
+          r.split as { firstLactation: string; mature: string } | null,
+        );
+    for (const pen of pensOf(pl)) {
+      const list = groupsByPen.get(pen) ?? [];
+      if (!list.includes(r.name)) list.push(r.name);
+      groupsByPen.set(pen, list);
+    }
+  }
 
   const { data: barnSubs } = await admin
     .from("subjects")
@@ -51,6 +85,7 @@ export async function PensSection() {
         label: (p.name as string | null) ?? null,
         barn: typeof a.barn === "string" ? a.barn : null,
         count: headcount.get(p.natural_key) ?? 0,
+        groups: groupsByPen.get(p.natural_key) ?? [],
       };
     })
     .sort((x, y) => x.penNo - y.penNo);

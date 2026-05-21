@@ -37,9 +37,6 @@ import {
   installGroupingPresets,
   setGroupPlacement,
   savePenCapacities,
-  seedDemoData,
-  clearDemoData,
-  wipeAllAnimals,
 } from "./actions";
 
 export type RuleRow = {
@@ -148,44 +145,6 @@ export function GroupingClient({
       router.refresh();
     });
 
-  const fillDemo = () =>
-    start(async () => {
-      if (
-        !window.confirm(
-          "Seed a 500-animal demo herd that populates every group? All demo subjects/events are tagged and removable with 'Clear demo'.",
-        )
-      )
-        return;
-      const res = await seedDemoData();
-      if (res.error) return void toast.error(res.error);
-      toast.success(res.info ?? "Demo herd seeded.");
-      router.refresh();
-    });
-  const wipeDemo = () =>
-    start(async () => {
-      if (
-        !window.confirm(
-          "Remove ALL demo animals and demo-tagged events? Real records are untouched.",
-        )
-      )
-        return;
-      const res = await clearDemoData();
-      if (res.error) return void toast.error(res.error);
-      toast.success(res.info ?? "Demo data cleared.");
-      router.refresh();
-    });
-  const wipeAll = () =>
-    start(async () => {
-      const typed = window.prompt(
-        "ARCHIVE every animal in this org (imported, demo and hand-entered). Events are append-only history and are kept; archived animals are hidden from active views but remain in the ledger. Pens, supply, settings, audit log are untouched.\n\nType ARCHIVE to confirm:",
-      );
-      if (typed == null) return;
-      const res = await wipeAllAnimals(typed);
-      if (res.error) return void toast.error(res.error);
-      toast.success(res.info ?? "Animals archived.");
-      router.refresh();
-    });
-
   const target = rules.find((r) => r.id === mapId) ?? null;
   const editTarget = rules.find((r) => r.id === editId) ?? null;
 
@@ -224,34 +183,6 @@ export function GroupingClient({
               onClick={installPresets}
             >
               Apply strategy
-            </Button>
-            <span className="mx-1 text-muted-foreground">|</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={pending}
-              onClick={fillDemo}
-              title="Seed a 500-animal demo herd populating every group (tagged, reversible)"
-            >
-              Seed demo herd
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={pending}
-              onClick={wipeDemo}
-            >
-              Clear demo
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={pending}
-              onClick={wipeAll}
-              className="text-destructive hover:text-destructive"
-              title="Archive every animal (events are append-only and kept as history)"
-            >
-              Archive all animals
             </Button>
           </div>
         </div>
