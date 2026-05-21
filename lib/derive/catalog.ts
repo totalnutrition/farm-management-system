@@ -107,6 +107,8 @@ const RAW: { value: string; label: string; group: ItemGroup }[] = [
   { value: "RSN", label: "Entry reason", group: "Identity & location" },
   { value: "ENTRY", label: "Entry date", group: "Identity & location" },
   { value: "AGE", label: "Age (months)", group: "Identity & location" },
+  { value: "AGED", label: "Age (days)", group: "Identity & location" },
+  { value: "WT", label: "Weight (kg)", group: "Identity & location" },
   { value: "RPRO", label: "Repro status", group: "Reproduction" },
   { value: "SSIRE", label: "Service sire", group: "Reproduction" },
   { value: "ABT", label: "Abortion vet flag", group: "Reproduction" },

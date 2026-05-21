@@ -293,6 +293,38 @@ register({
   },
 });
 
+// --- growth: age-in-days and weight ---------------------------------
+// AGE (months) is too coarse for calves (they move in weeks). Latest
+// recorded weight comes from a WEIGH event (code 205) carrying
+// payload.weight (kg). Together with AGE they enable youngstock
+// grouping by age × weight, and they're catalogued so the query bar
+// can filter by them like any other item.
+const WEIGHT_EC = 205;
+register({
+  item: "AGED",
+  provenance: "confirmed",
+  note: "days since birthDate (BDAT)",
+  compute: (s, ctx) => {
+    const b = s.facts?.birthDate;
+    return b ? daysBetween(ctx.today, b) : null;
+  },
+});
+register({
+  item: "WT",
+  provenance: "confirmed",
+  note: "most recent recorded weight in kg (WEIGH events, code 205)",
+  compute: (s) => {
+    let latest: { date: string; w: number } | null = null;
+    for (const e of s.events) {
+      if (e.code !== WEIGHT_EC) continue;
+      const w = (e.payload as { weight?: unknown } | undefined)?.weight;
+      if (typeof w !== "number") continue;
+      if (!latest || e.date > latest.date) latest = { date: e.date, w };
+    }
+    return latest ? latest.w : null;
+  },
+});
+
 // --- stored attributes (subjects.attrs) -----------------------------
 // User-entered identity/metadata. Without these resolvers the fields
 // are written at intake but invisible everywhere (list, query, detail)

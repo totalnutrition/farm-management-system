@@ -704,6 +704,61 @@ export async function seedDemoData(): Promise<Result> {
   }
   const idOf = new Map(inserted.map((r) => [r.natural_key, r.id] as const));
 
+  // Ensure the WEIGH event_code (205) exists for this org so the
+  // demo weight events FK-validate. Idempotent.
+  await admin
+    .from("event_codes")
+    .upsert(
+      {
+        organization_id: orgId,
+        code: 205,
+        name: "WEIGH",
+        label: "Weighing",
+        is_system: false,
+        provenance: "app-defined: growth",
+      },
+      { onConflict: "organization_id,code", ignoreDuplicates: true },
+    );
+
+  // Plausible weight (kg) for a youngstock or mature animal.
+  const weightFor = (days: number | null, baseLact: number): number => {
+    if (baseLact >= 1) return 580 + rnd(-40, 70); // mature cow
+    if (days == null) return 350 + rnd(-50, 100); // heifer w/o birth date
+    if (days <= 30) return 40 + rnd(-5, 8);
+    if (days <= 60) return 55 + rnd(-5, 10);
+    if (days <= 180)
+      return Math.round(75 + ((days - 60) * (180 - 75)) / 120) + rnd(-10, 10);
+    if (days <= 365)
+      return (
+        Math.round(180 + ((days - 180) * (300 - 180)) / 185) + rnd(-15, 15)
+      );
+    if (days <= 730)
+      return (
+        Math.round(300 + ((days - 365) * (550 - 300)) / 365) + rnd(-25, 20)
+      );
+    return 550 + rnd(-30, 60);
+  };
+  for (const a of animals) {
+    const bd = typeof a.attrs.birth_date === "string"
+      ? (a.attrs.birth_date as string)
+      : null;
+    const days = bd
+      ? Math.max(
+          0,
+          Math.round((Date.now() - new Date(bd + "T00:00:00Z").getTime()) / DAY),
+        )
+      : null;
+    const baseLact =
+      typeof a.attrs.base_lactation === "number"
+        ? (a.attrs.base_lactation as number)
+        : 0;
+    a.events.push({
+      code: 205,
+      date: today,
+      payload: { weight: weightFor(days, baseLact) },
+    });
+  }
+
   const eventRows: Record<string, unknown>[] = [];
   for (const a of animals) {
     const sid = idOf.get(a.natural_key);
