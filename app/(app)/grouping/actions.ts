@@ -242,8 +242,9 @@ const OVERRIDES: Grp[] = [
 // Open / growing youngstock (not yet pregnant). Calf is the specific
 // case; Breeding heifer = every other virgin (incl. no birth date) —
 // no separate "maiden" term needed since Calf is matched first.
+// (Bull calf intentionally omitted — the engine has no path to set
+// RPRO=BULLCAF until a sex/identification event exists.)
 const YOUNGSTOCK: Grp[] = [
-  { name: "Bull calf", when: [[cmp("RPRO", "=", "BULLCAF")]] },
   {
     name: "Calf (pre-breeding)",
     when: [[cmp("RPRO", "=", "VIRGIN"), cmp("AGE", "<=", 12)]],
@@ -520,18 +521,144 @@ export async function moveAnimal(
 }
 
 // ── Demo / test data ────────────────────────────────────────────────
-// Backfill synthetic dates so a test herd actually populates the
-// strategy. EVERYTHING written here is tagged (event payload.demo or
-// attrs.demo_due) so clearDemoData removes it cleanly — never run on
-// a real herd. FRESH event_code = 1, MILK = 201.
+// Generate a full synthetic herd that populates EVERY group in the
+// default strategy (Hospital, Calf, Breeding heifer, Close-up
+// heifer/cow, Far-off, Fresh, High/Mid/Low/Late). All demo subjects
+// are tagged attrs.demo=true and all demo events payload.demo=true,
+// so clearDemoData removes them cleanly. Never run on a real herd.
+// FRESH=1, BRED=5, DRY=11, MILK=201, FLAG=203.
 const DAY = 86_400_000;
 const isoShift = (days: number) =>
   new Date(Date.now() + days * DAY).toISOString().slice(0, 10);
 const rnd = (a: number, b: number) =>
   a + Math.floor(Math.random() * (b - a + 1));
-function milkForDim(dim: number): number {
-  const base = dim < 55 ? 16 + dim * 0.5 : 44 - (dim - 55) * 0.07;
-  return Math.max(6, Math.min(48, Math.round(base + rnd(-4, 4))));
+type DemoAnimal = {
+  natural_key: string;
+  attrs: Record<string, unknown>;
+  events: { code: number; date: string; payload?: Record<string, unknown> }[];
+};
+
+// Group → count for a 500-animal herd. Hits every default-strategy
+// group. Adjust counts; total = sum.
+const DEFAULT_MIX: Record<string, number> = {
+  hospital: 10,
+  calf: 60, // VIRGIN, AGE<=12mo
+  breedingHeifer: 60, // VIRGIN, older
+  closeupHeifer: 10, // BRED, LACT=0, DUE<=21
+  farOffHeifer: 30, // BRED, LACT=0, DUE>21
+  closeupCow: 15, // DRY, DUE<=21
+  farOffCow: 30, // DRY, DUE>21
+  fresh: 25, // LACT>=1, DIM<=21
+  high: 60, // MILK >= 35
+  mid: 80, // MILK 25-34
+  low: 70, // MILK 15-24
+  late: 50, // MILK < 15
+};
+
+function gen(
+  kind: keyof typeof DEFAULT_MIX,
+  key: string,
+  today: string,
+): DemoAnimal {
+  const a: Record<string, unknown> = { demo: true, entry_date: today };
+  const events: DemoAnimal["events"] = [];
+  switch (kind) {
+    case "calf": {
+      a.cohort = "calf";
+      a.base_lactation = 0;
+      a.birth_date = isoShift(-rnd(60, 360));
+      break;
+    }
+    case "breedingHeifer": {
+      a.cohort = "open_heifer";
+      a.base_lactation = 0;
+      a.birth_date = isoShift(-rnd(395, 730));
+      break;
+    }
+    case "closeupHeifer": {
+      a.cohort = "bred_heifer";
+      a.base_lactation = 0;
+      a.birth_date = isoShift(-rnd(750, 900));
+      a.due_date = isoShift(rnd(2, 21));
+      events.push({ code: 5, date: isoShift(-rnd(259, 278)) });
+      break;
+    }
+    case "farOffHeifer": {
+      a.cohort = "bred_heifer";
+      a.base_lactation = 0;
+      a.birth_date = isoShift(-rnd(700, 900));
+      a.due_date = isoShift(rnd(60, 240));
+      events.push({ code: 5, date: isoShift(-rnd(40, 220)) });
+      break;
+    }
+    case "closeupCow": {
+      a.cohort = "dry";
+      a.base_lactation = rnd(1, 5);
+      a.birth_date = isoShift(-rnd(900, 2200));
+      a.due_date = isoShift(rnd(2, 21));
+      events.push({ code: 1, date: isoShift(-rnd(310, 420)) });
+      events.push({ code: 11, date: isoShift(-rnd(40, 60)) });
+      break;
+    }
+    case "farOffCow": {
+      a.cohort = "dry";
+      a.base_lactation = rnd(1, 5);
+      a.birth_date = isoShift(-rnd(900, 2200));
+      a.due_date = isoShift(rnd(30, 60));
+      events.push({ code: 1, date: isoShift(-rnd(280, 380)) });
+      events.push({ code: 11, date: isoShift(-rnd(20, 40)) });
+      break;
+    }
+    case "fresh": {
+      a.cohort = "lactating";
+      a.base_lactation = rnd(1, 5);
+      a.birth_date = isoShift(-rnd(750, 2200));
+      events.push({ code: 1, date: isoShift(-rnd(1, 21)) });
+      break;
+    }
+    case "high":
+    case "mid":
+    case "low":
+    case "late":
+    case "hospital": {
+      a.cohort = "lactating";
+      a.base_lactation = rnd(1, 5);
+      a.birth_date = isoShift(-rnd(750, 2200));
+      const dimRange: Record<string, [number, number]> = {
+        high: [40, 120],
+        mid: [120, 220],
+        low: [220, 320],
+        late: [320, 450],
+        hospital: [30, 250],
+      };
+      const [lo, hi] = dimRange[kind];
+      const dim = rnd(lo, hi);
+      events.push({ code: 1, date: isoShift(-dim) });
+      // Force MILK into the right band for the chosen kind.
+      const milkRange: Record<string, [number, number]> = {
+        high: [35, 48],
+        mid: [25, 34],
+        low: [15, 24],
+        late: [6, 14],
+        hospital: [20, 38],
+      };
+      const [my, mY] = milkRange[kind];
+      events.push({
+        code: MILK_EC,
+        date: today,
+        payload: { yield: rnd(my, mY) },
+      });
+      if (kind === "hospital") {
+        events.push({
+          code: 203,
+          date: today,
+          payload: { kind: "HEAT", note: "demo" },
+        });
+      }
+      break;
+    }
+  }
+  return { natural_key: key, attrs: a, events };
 }
 
 export async function seedDemoData(): Promise<Result> {
@@ -540,81 +667,70 @@ export async function seedDemoData(): Promise<Result> {
   if (!orgId) return { error: "No organization on this account." };
 
   const admin = createAdminClient();
-  const { data: subs } = await admin
-    .from("subjects")
-    .select("id, attrs")
-    .eq("organization_id", orgId)
-    .eq("subject_type", "animal");
-  if (!subs?.length) return { error: "No animals to seed." };
-
-  const ids = subs.map((s) => s.id);
-  const { data: evs } = await admin
-    .from("events")
-    .select("subject_id, event_code")
-    .eq("organization_id", orgId)
-    .in("subject_id", ids);
-  const codesBy = new Map<string, Set<number>>();
-  for (const e of evs ?? []) {
-    const set = codesBy.get(e.subject_id) ?? new Set<number>();
-    set.add(e.event_code);
-    codesBy.set(e.subject_id, set);
-  }
-
   const today = isoShift(0);
-  const newEvents: Record<string, unknown>[] = [];
-  let freshed = 0;
-  let dued = 0;
-  for (const s of subs) {
-    const a = (s.attrs ?? {}) as Record<string, unknown>;
-    const codes = codesBy.get(s.id) ?? new Set<number>();
-    const baseLact =
-      typeof a.base_lactation === "number" ? a.base_lactation : 0;
+  // Per-run prefix so re-seeding never collides with a previous run.
+  const runId = Date.now().toString(36).slice(-5).toUpperCase();
+  const pad = (n: number) => String(n).padStart(4, "0");
 
-    if (baseLact >= 1 && !codes.has(1)) {
-      const dim = rnd(4, 400);
-      newEvents.push({
-        organization_id: orgId,
-        subject_id: s.id,
-        event_code: 1,
-        event_date: isoShift(-dim),
-        payload: { demo: true },
-        source: "system",
-        created_by: user.id,
-      });
-      newEvents.push({
-        organization_id: orgId,
-        subject_id: s.id,
-        event_code: MILK_EC,
-        event_date: today,
-        payload: { yield: milkForDim(dim), demo: true },
-        source: "system",
-        created_by: user.id,
-      });
-      freshed++;
-    }
-
-    const pregnant = codes.has(5) || codes.has(11);
-    if (pregnant && !a.due_date) {
-      await admin
-        .from("subjects")
-        .update({
-          attrs: { ...a, due_date: isoShift(rnd(3, 70)), demo_due: true },
-        })
-        .eq("id", s.id)
-        .eq("organization_id", orgId);
-      dued++;
+  const animals: DemoAnimal[] = [];
+  let i = 0;
+  for (const [kind, count] of Object.entries(DEFAULT_MIX)) {
+    for (let k = 0; k < count; k++) {
+      i++;
+      animals.push(
+        gen(kind as keyof typeof DEFAULT_MIX, `DEMO-${runId}-${pad(i)}`, today),
+      );
     }
   }
 
-  if (newEvents.length) {
-    const { error } = await admin.from("events").insert(newEvents);
+  // Insert subjects, then events, in chunks.
+  const subjectRows = animals.map((a) => ({
+    organization_id: orgId,
+    subject_type: "animal",
+    natural_key: a.natural_key,
+    name: null,
+    attrs: a.attrs,
+    created_by: user.id,
+  }));
+  const inserted: { id: string; natural_key: string }[] = [];
+  for (let off = 0; off < subjectRows.length; off += 500) {
+    const chunk = subjectRows.slice(off, off + 500);
+    const { data, error } = await admin
+      .from("subjects")
+      .insert(chunk)
+      .select("id, natural_key");
+    if (error) return { error: error.message };
+    inserted.push(...((data ?? []) as { id: string; natural_key: string }[]));
+  }
+  const idOf = new Map(inserted.map((r) => [r.natural_key, r.id] as const));
+
+  const eventRows: Record<string, unknown>[] = [];
+  for (const a of animals) {
+    const sid = idOf.get(a.natural_key);
+    if (!sid) continue;
+    for (const e of a.events) {
+      eventRows.push({
+        organization_id: orgId,
+        subject_id: sid,
+        event_code: e.code,
+        event_date: e.date,
+        payload: { ...(e.payload ?? {}), demo: true },
+        source: "system",
+        created_by: user.id,
+      });
+    }
+  }
+  for (let off = 0; off < eventRows.length; off += 1000) {
+    const chunk = eventRows.slice(off, off + 1000);
+    const { error } = await admin.from("events").insert(chunk);
     if (error) return { error: error.message };
   }
 
   revalidatePath(PathHousing);
+  revalidatePath("/records");
   return {
     success: true,
-    info: `${freshed} calving dates + milk, ${dued} due dates added.`,
+    info: `${animals.length} demo animals + ${eventRows.length} events seeded.`,
   };
 }
 
@@ -624,20 +740,51 @@ export async function clearDemoData(): Promise<Result> {
   if (!orgId) return { error: "No organization on this account." };
 
   const admin = createAdminClient();
-  const { error: eErr } = await admin
+
+  // 1) Find demo subjects (mass-seeded animals) and remove their
+  //    events first (FK from events.subject_id), then the subjects.
+  const { data: demoSubs } = await admin
+    .from("subjects")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("subject_type", "animal")
+    .eq("attrs->>demo", "true");
+  const demoIds = (demoSubs ?? []).map((s) => s.id);
+  if (demoIds.length) {
+    for (let off = 0; off < demoIds.length; off += 500) {
+      const chunk = demoIds.slice(off, off + 500);
+      const { error: eErr } = await admin
+        .from("events")
+        .delete()
+        .eq("organization_id", orgId)
+        .in("subject_id", chunk);
+      if (eErr) return { error: eErr.message };
+      const { error: sErr } = await admin
+        .from("subjects")
+        .delete()
+        .eq("organization_id", orgId)
+        .in("id", chunk);
+      if (sErr) return { error: sErr.message };
+    }
+  }
+
+  // 2) Mop up any leftover demo-tagged events on REAL subjects
+  //    (from the older lightweight backfill).
+  const { error: e2 } = await admin
     .from("events")
     .delete()
     .eq("organization_id", orgId)
     .eq("payload->>demo", "true");
-  if (eErr) return { error: eErr.message };
+  if (e2) return { error: e2.message };
 
-  const { data: subs } = await admin
+  // 3) Strip the demo_due attr that was written onto real subjects.
+  const { data: dued } = await admin
     .from("subjects")
     .select("id, attrs")
     .eq("organization_id", orgId)
     .eq("subject_type", "animal")
     .eq("attrs->>demo_due", "true");
-  for (const s of subs ?? []) {
+  for (const s of dued ?? []) {
     const a = (s.attrs ?? {}) as Record<string, unknown>;
     delete a.due_date;
     delete a.demo_due;
@@ -649,5 +796,9 @@ export async function clearDemoData(): Promise<Result> {
   }
 
   revalidatePath(PathHousing);
-  return { success: true };
+  revalidatePath("/records");
+  return {
+    success: true,
+    info: `Removed ${demoIds.length} demo animals.`,
+  };
 }

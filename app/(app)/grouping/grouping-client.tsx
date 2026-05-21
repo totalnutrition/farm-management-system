@@ -149,22 +149,28 @@ export function GroupingClient({
 
   const fillDemo = () =>
     start(async () => {
+      if (
+        !window.confirm(
+          "Seed a 500-animal demo herd that populates every group? All demo subjects/events are tagged and removable with 'Clear demo'.",
+        )
+      )
+        return;
       const res = await seedDemoData();
       if (res.error) return void toast.error(res.error);
-      toast.success(res.info ?? "Demo data added.");
+      toast.success(res.info ?? "Demo herd seeded.");
       router.refresh();
     });
   const wipeDemo = () =>
     start(async () => {
       if (
         !window.confirm(
-          "Remove ALL demo-tagged calving/milk/due data? Real records are untouched.",
+          "Remove ALL demo animals and demo-tagged events? Real records are untouched.",
         )
       )
         return;
       const res = await clearDemoData();
       if (res.error) return void toast.error(res.error);
-      toast.success("Demo data cleared.");
+      toast.success(res.info ?? "Demo data cleared.");
       router.refresh();
     });
 
@@ -213,9 +219,9 @@ export function GroupingClient({
               variant="ghost"
               disabled={pending}
               onClick={fillDemo}
-              title="Backfill synthetic calving/milk/due dates for test herds (tagged, reversible)"
+              title="Seed a 500-animal demo herd populating every group (tagged, reversible)"
             >
-              Fill demo data
+              Seed demo herd
             </Button>
             <Button
               size="sm"
