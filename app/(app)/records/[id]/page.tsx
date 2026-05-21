@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { derive, type Event } from "@/lib/derive/engine";
+import { applyCancellations } from "@/lib/derive/cancellations";
 import { RecordDetail } from "./record-detail";
 
 export const metadata = { title: "Animal record" };
@@ -30,10 +31,20 @@ export default async function RecordPage({
 
   const { data: rawEvents } = await admin
     .from("events")
-    .select("id, event_code, event_date, remark, recorded_at")
+    .select("id, event_code, event_date, remark, payload, recorded_at")
     .eq("organization_id", orgId)
     .eq("subject_id", id)
     .order("event_date", { ascending: false });
+  type ER = {
+    id: string;
+    event_code: number;
+    event_date: string;
+    remark: string | null;
+    payload: Record<string, unknown> | null;
+  };
+  const liveEvents = applyCancellations(
+    (rawEvents ?? []) as ER[],
+  );
 
   const { data: codes } = await admin
     .from("event_codes")
@@ -56,9 +67,10 @@ export default async function RecordPage({
   );
 
   const a = (subject.attrs ?? {}) as Record<string, unknown>;
-  const events: Event[] = (rawEvents ?? []).map((e) => ({
+  const events: Event[] = liveEvents.map((e) => ({
     code: e.event_code,
     date: e.event_date,
+    payload: (e.payload ?? {}) as Record<string, unknown>,
   }));
   const today = new Date().toISOString().slice(0, 10);
   const state = derive(
@@ -75,11 +87,11 @@ export default async function RecordPage({
     { today },
   );
 
-  const timeline = (rawEvents ?? []).map((e) => ({
-    id: e.id as string,
+  const timeline = liveEvents.map((e) => ({
+    id: e.id,
     date: e.event_date,
     label: codeName.get(e.event_code) ?? `EC ${e.event_code}`,
-    remark: e.remark as string | null,
+    remark: e.remark,
   }));
 
   return (

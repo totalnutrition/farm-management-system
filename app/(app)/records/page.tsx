@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { requireAnyRole, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { derive, type Event } from "@/lib/derive/engine";
+import { applyCancellations } from "@/lib/derive/cancellations";
 import { AddAnimal } from "./records-table";
 import { AnimalsAdmin } from "./animals-admin";
 import { BarnsSection } from "../barns/barns-section";
@@ -107,21 +108,38 @@ async function AnimalsTab({ orgId }: { orgId: string }) {
     .order("natural_key");
 
   const ids = (subjects ?? []).map((s) => s.id);
+  type Row = {
+    id: string;
+    subject_id: string;
+    event_code: number;
+    event_date: string;
+    payload: Record<string, unknown> | null;
+  };
   const byId = new Map<string, Event[]>();
   if (ids.length) {
     const { data: events } = await admin
       .from("events")
-      .select("subject_id, event_code, event_date, payload")
+      .select("id, subject_id, event_code, event_date, payload")
       .eq("organization_id", orgId)
       .in("subject_id", ids);
-    for (const e of events ?? []) {
-      const l = byId.get(e.subject_id) ?? [];
-      l.push({
-        code: e.event_code,
-        date: e.event_date,
-        payload: (e.payload ?? {}) as Record<string, unknown>,
-      });
-      byId.set(e.subject_id, l);
+    // Group by subject so cancellations apply per-animal, then drop
+    // CNCL markers + their targets before deriving.
+    const grouped = new Map<string, Row[]>();
+    for (const e of (events ?? []) as Row[]) {
+      const list = grouped.get(e.subject_id) ?? [];
+      list.push(e);
+      grouped.set(e.subject_id, list);
+    }
+    for (const [sid, list] of grouped) {
+      const live = applyCancellations(list);
+      const l: Event[] = [];
+      for (const e of live)
+        l.push({
+          code: e.event_code,
+          date: e.event_date,
+          payload: (e.payload ?? {}) as Record<string, unknown>,
+        });
+      byId.set(sid, l);
     }
   }
 

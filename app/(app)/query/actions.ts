@@ -6,6 +6,7 @@ import { requireUser, getOrganizationIdFromUser } from "@/lib/supabase-auth";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { runQuery, type Query, type PopulationMember } from "@/lib/derive/query";
 import { validateQuery } from "@/lib/derive/validate-query";
+import { applyCancellations } from "@/lib/derive/cancellations";
 import { loadCalcFields } from "@/lib/calc-fields";
 import type { Event, IntakeFacts } from "@/lib/derive/engine";
 
@@ -70,22 +71,37 @@ export async function runQueryAction(
   if (sErr) return { error: sErr.message };
 
   const ids = (subjects ?? []).map((s) => s.id);
+  type Row = {
+    id: string;
+    subject_id: string;
+    event_code: number;
+    event_date: string;
+    payload: Record<string, unknown> | null;
+  };
   const eventsBySubject = new Map<string, Event[]>();
   if (ids.length) {
     const { data: events, error: eErr } = await db
       .from("events")
-      .select("subject_id, event_code, event_date, payload")
+      .select("id, subject_id, event_code, event_date, payload")
       .eq("organization_id", orgId)
       .in("subject_id", ids);
     if (eErr) return { error: eErr.message };
-    for (const ev of events ?? []) {
-      const list = eventsBySubject.get(ev.subject_id) ?? [];
-      list.push({
-        code: ev.event_code,
-        date: ev.event_date,
-        payload: (ev.payload ?? {}) as Record<string, unknown>,
-      });
-      eventsBySubject.set(ev.subject_id, list);
+    const grouped = new Map<string, Row[]>();
+    for (const e of (events ?? []) as Row[]) {
+      const list = grouped.get(e.subject_id) ?? [];
+      list.push(e);
+      grouped.set(e.subject_id, list);
+    }
+    for (const [sid, list] of grouped) {
+      const live = applyCancellations(list);
+      eventsBySubject.set(
+        sid,
+        live.map((e) => ({
+          code: e.event_code,
+          date: e.event_date,
+          payload: (e.payload ?? {}) as Record<string, unknown>,
+        })),
+      );
     }
   }
 

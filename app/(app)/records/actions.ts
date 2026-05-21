@@ -211,10 +211,14 @@ export async function deleteAnimalEvent(
   if (stype !== "animal")
     return { error: "Only animal events can be deleted here." };
 
-  const { data, error } = await admin.rpc(
-    "delete_event_with_reversal",
-    { p_org: orgId, p_event_id: eventId },
-  );
+  // Events are append-only — corrections happen as new events. The
+  // reverse_event RPC appends a CNCL marker on the primary event and
+  // a compensating SRCV for every linked auto-stock-usage event, so
+  // the ledger rebalances and active views hide the original.
+  const { data, error } = await admin.rpc("reverse_event", {
+    p_org: orgId,
+    p_event_id: eventId,
+  });
   if (error) return { error: error.message };
   const res = (data ?? {}) as { ok?: boolean };
   if (!res.ok) return { error: "Event no longer exists." };

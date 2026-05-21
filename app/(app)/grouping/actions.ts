@@ -257,7 +257,12 @@ const YOUNGSTOCK: Grp[] = [
 const PRECALVING: Grp[] = [
   {
     name: "Close-up heifer",
-    when: [[cmp("RPRO", "=", "BRED"), cmp("LACT", "=", 0), cmp("DUE", "<=", 21)]],
+    // Heifer (LACT=0) within 21d of calving — confirmed pregnant
+    // (PREG) or just bred (BRED) with a due date set.
+    when: [
+      [cmp("RPRO", "=", "PREG"), cmp("LACT", "=", 0), cmp("DUE", "<=", 21)],
+      [cmp("RPRO", "=", "BRED"), cmp("LACT", "=", 0), cmp("DUE", "<=", 21)],
+    ],
   },
   {
     name: "Close-up cow",
@@ -265,7 +270,13 @@ const PRECALVING: Grp[] = [
   },
   {
     name: "Far-off (pregnant)",
-    when: [[cmp("RPRO", "=", "BRED"), cmp("LACT", "=", 0)], [cmp("RPRO", "=", "DRY")]],
+    // Every other pregnant animal: heifer (BRED or PREG, LACT=0) or
+    // dry cow.
+    when: [
+      [cmp("RPRO", "=", "BRED"), cmp("LACT", "=", 0)],
+      [cmp("RPRO", "=", "PREG"), cmp("LACT", "=", 0)],
+      [cmp("RPRO", "=", "DRY")],
+    ],
   },
 ];
 const FRESH: Grp = { name: "Fresh", when: [[LACT1, cmp("DIM", "<=", 21)]] };

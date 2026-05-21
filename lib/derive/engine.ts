@@ -52,6 +52,7 @@ export type FormulaSpec = {
 // --- confirmed event codes (source-confirmed numeric map subset) -----
 export const EC = {
   FRESH: 1,
+  PRCK: 4,
   BRED: 5,
   DRY: 11,
   ABORT: 12,
@@ -153,6 +154,16 @@ export function runMachine(s: Subject): MachineState {
       }
       st.rc = 3; // → OPEN
       st.abt = false;
+    } else if (e.code === EC.PRCK) {
+      // Pregnancy check. Positive confirms PREG; negative drops to
+      // OPEN. (No-op if she's already DRY/DIED — terminal states.)
+      const r = (e.payload as { result?: unknown } | undefined)?.result;
+      if (r === "pos" && st.rc !== 7 && st.rc !== 6) {
+        st.rc = 5; // PREG
+        st.abt = false;
+      } else if (r === "neg" && (st.rc === 4 || st.rc === 5)) {
+        st.rc = 3; // OPEN
+      }
     } else if (e.code === EC.DNB) {
       st.rc = 1; // DNB
     } else if (e.code === EC.DIED) {
@@ -265,9 +276,23 @@ register({
 register({
   item: "DUE",
   provenance: "confirmed",
-  note: "expected calving date − today",
+  note: "expected calving date − today; prefers latest positive PRCK payload.due_date, falls back to intake fact",
   compute: (s, ctx) => {
-    const due = s.facts?.dueDate;
+    let due: string | null = null;
+    let when = "";
+    for (const e of s.events) {
+      if (e.code !== EC.PRCK) continue;
+      const p = e.payload as
+        | { result?: unknown; due_date?: unknown }
+        | undefined;
+      if (p?.result !== "pos") continue;
+      if (typeof p.due_date !== "string") continue;
+      if (e.date >= when) {
+        when = e.date;
+        due = p.due_date;
+      }
+    }
+    if (!due) due = s.facts?.dueDate ?? null;
     return due ? daysBetween(due, ctx.today) : null;
   },
 });

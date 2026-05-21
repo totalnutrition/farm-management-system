@@ -328,10 +328,12 @@ export async function deleteFeedingEvent(
   if (ev.event_code !== FEED_EC || stype !== "pen")
     return { error: "Not a pen feeding event." };
 
-  const { data, error } = await admin.rpc(
-    "delete_event_with_reversal",
-    { p_org: orgId, p_event_id: eventId },
-  );
+  // Append-only ledger: reverse_event writes a CNCL marker + a
+  // compensating SRCV for each linked auto-usage event.
+  const { data, error } = await admin.rpc("reverse_event", {
+    p_org: orgId,
+    p_event_id: eventId,
+  });
   if (error) return { error: error.message };
   const res = (data ?? {}) as { ok?: boolean };
   if (!res.ok) return { error: "Feeding no longer exists." };
